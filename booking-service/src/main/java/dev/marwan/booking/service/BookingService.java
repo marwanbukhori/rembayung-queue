@@ -32,6 +32,12 @@ public class BookingService {
 
     @Transactional
     public BookingResult book(BookingRequest request) {
+        var existing = bookingRepository.findByIdempotencyKey(request.idempotencyKey());
+        if (existing.isPresent()) {
+            Booking prior = existing.get();
+            return new BookingResult(prior.getId(), prior.getStatus(), true);
+        }
+
         Slot slot = slotRepository.findByIdForUpdate(request.slotId())
                 .orElseThrow(() -> new SlotNotFoundException(request.slotId()));
 
