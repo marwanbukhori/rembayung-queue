@@ -1,6 +1,8 @@
 package dev.marwan.booking.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 
 @Entity
@@ -30,9 +32,11 @@ public class Booking {
     @Column(name = "idempotency_key", nullable = false, length = 64)
     private String idempotencyKey;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
