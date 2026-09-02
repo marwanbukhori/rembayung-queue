@@ -9,8 +9,6 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.oracle.OracleContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
@@ -19,12 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@Testcontainers
 public abstract class OracleTestBase {
 
     private static final int ORA_TABLE_OR_VIEW_DOES_NOT_EXIST = 942;
 
-    @Container
     @ServiceConnection
     static final OracleContainer ORACLE = new OracleContainer(
             DockerImageName.parse("gvenzl/oracle-free:23-slim-faststart"))
@@ -33,6 +29,10 @@ public abstract class OracleTestBase {
             .withPassword("booking")
             .withStartupTimeout(Duration.ofMinutes(5))
             .withReuse(true);
+
+    static {
+        ORACLE.start();
+    }
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
