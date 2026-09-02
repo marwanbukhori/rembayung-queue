@@ -40,17 +40,23 @@ public class ExpirySweeper {
      *
      * Acquires the SAME pessimistic lock on the slot row that BookingService.book
      * uses. Without that, a release and a claim can interleave and oversell the slot.
+     *
+     * Claims each booking atomically: only one sweeper wins each booking's claim
+     * via markExpiredIfPending, preventing double-release under concurrency.
      */
     @Transactional
     public int sweepExpired(Instant now) {
         List<Booking> stale = bookingRepository
                 .findByStatusAndExpiresAtBefore(BookingStatus.PENDING_DEPOSIT, now);
 
+        int expired = 0;
         for (Booking booking : stale) {
             Slot slot = slotRepository.findByIdForUpdate(booking.getSlotId()).orElseThrow();
-            slot.releaseSeats(booking.getPartySize());
-            booking.setStatus(BookingStatus.EXPIRED);
+            if (bookingRepository.markExpiredIfPending(booking.getId()) == 1) {
+                slot.releaseSeats(booking.getPartySize());
+                expired++;
+            }
         }
-        return stale.size();
+        return expired;
     }
 }
