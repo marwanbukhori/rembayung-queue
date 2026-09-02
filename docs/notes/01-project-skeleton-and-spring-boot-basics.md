@@ -12,29 +12,7 @@ in service of that.
 
 ---
 
-## The 30-second map
-
-| Java / Spring | JS equivalent |
-|---|---|
-| Maven (`mvn`) | npm |
-| `pom.xml` | `package.json` + `tsconfig.json` + build config, in one file |
-| `mvn test` | `npm test` |
-| `~/.m2/repository` | `node_modules`, but global to the machine, not per-project |
-| `spring-boot-starter-*` | meta-packages / presets (like `react-scripts`) |
-| Annotations (`@Service`) | decorators (`@Injectable()`) |
-| Spring's DI container | **NestJS** — Nest was explicitly modelled on Spring |
-| JPA / Hibernate | Prisma or TypeORM |
-| Flyway | Prisma Migrate / Knex migrations |
-| `ojdbc11` | the `pg` or `mysql2` driver package |
-| JUnit + AssertJ | Jest / Vitest + `expect()` |
-| Testcontainers | `testcontainers` (same project, has a Node port) |
-
-The single idea with no good JS analogue is **dependency injection**, covered
-below.
-
----
-
-## `pom.xml` — the package.json
+## `pom.xml` — build config and dependency manifest in one
 
 XML is just syntax. Read the structure and ignore how it looks.
 
@@ -46,10 +24,10 @@ XML is just syntax. Read the structure and ignore how it looks.
 <version>0.1.0-SNAPSHOT</version>
 ```
 
-One coordinate, equivalent to `@marwan/booking-service@0.1.0`. `groupId` is the
-namespace — reverse domain name by convention. `SNAPSHOT` means "in
-development, not a fixed release"; the closest JS equivalent is a `-dev`
-prerelease tag.
+Together these three form one coordinate that uniquely identifies the artifact
+in any repository. `groupId` is the namespace — a reverse domain name by
+convention. `SNAPSHOT` marks the version as in-development rather than a fixed
+release: Maven will re-resolve it rather than trusting a cached copy.
 
 ### The parent
 
@@ -61,15 +39,14 @@ prerelease tag.
 </parent>
 ```
 
-This has no clean JS equivalent and it does a lot. Primarily it is a **version
+Inheriting from a parent POM does a great deal. Primarily it is a **version
 catalogue**: a POM published by the Spring team declaring known-compatible
-versions for several hundred libraries.
+versions for several hundred libraries, transitive dependencies included.
 
-That is why most `<dependency>` blocks in this file carry no `<version>` —
-Spring Boot already decided. Imagine `npm install express` resolving to the
-exact Express version your framework integration-tested against, transitive
-dependencies included. That is the parent's job, and it is why Java dependency
-conflicts are milder than they could be.
+That is why most `<dependency>` blocks in this file carry no `<version>` — Spring
+Boot has already chosen one, tested the combination, and published the result.
+Delegating version selection to a curated catalogue rather than resolving it
+per-dependency is what keeps version conflicts rare in practice.
 
 It also sets build defaults: UTF-8 encoding, the Java release level from
 `<java.version>25</java.version>`, and plugin configuration.
@@ -84,13 +61,13 @@ It also sets build defaults: UTF-8 encoding, the Java release level from
 
 ### Dependency scopes
 
-Same idea as `package.json` dependencies, with an extra dimension:
+A dependency declares not just *what* is needed but *when*:
 
-| scope | meaning | JS |
-|---|---|---|
-| *(none)* | needed to compile **and** run | `dependencies` |
-| `runtime` | needed to run, not to compile | no real equivalent |
-| `test` | test-only | `devDependencies` |
+| scope | available at compile time | shipped at runtime | in tests |
+|---|---|---|---|
+| *(none)* | yes | yes | yes |
+| `runtime` | **no** | yes | yes |
+| `test` | no | no | yes |
 
 `ojdbc11` is `runtime` because our code never imports an Oracle class. We write
 against the `java.sql` interfaces and the driver is discovered at startup.
@@ -138,9 +115,9 @@ src/test/java/       ← test source
 src/test/resources/  ← test non-code
 ```
 
-Maven **requires** this layout. Nothing in `pom.xml` points at these paths —
-that is "convention over configuration", the opposite of the JS world where
-every project invents its own structure.
+Maven **requires** this layout. Nothing in `pom.xml` points at these paths, and
+nothing needs to: the structure is the configuration. Any Maven project on any
+team is navigable without reading its build file first.
 
 Files under `resources/` are copied onto the *classpath*, which is how
 `application.yml` is found at runtime without any path appearing in code.
@@ -163,8 +140,8 @@ Thirteen lines that do a great deal.
 
 ### Dependency injection
 
-In Express you would write `const svc = new BookingService(db)` and wire the
-graph yourself. In Spring you never call `new` on your own components.
+In Spring you never call `new` on your own components, and never assemble the
+object graph by hand.
 
 You annotate a class `@Service`. At startup Spring scans the codebase, finds it,
 inspects its constructor, recursively constructs whatever that constructor
@@ -227,9 +204,9 @@ The reason is specific: if Hibernate generated the tables, the
 database-level constraint is the backstop the entire phase is built around. It
 is what makes overselling impossible even if the application logic is wrong.
 
-Framed in JS terms: Prisma's auto-generated schema versus hand-written
-migrations. Here, hand-written wins because the schema carries a correctness
-guarantee the ORM cannot express.
+The general principle: an ORM can generate a schema that stores your objects,
+but it cannot generate a schema that enforces your invariants. Where the schema
+carries a correctness guarantee, it has to be written by hand.
 
 ### `open-in-view: false`
 
@@ -247,8 +224,9 @@ automatically. Task 4 injects these with
 ### Profiles
 
 `application-test.yml` is a **profile**. A test class annotated
-`@ActiveProfiles("test")` gets that file layered over the base one — similar to
-`NODE_ENV=test`, except the files are merged rather than replaced.
+`@ActiveProfiles("test")` gets that file layered over the base one. Profiles are
+merged rather than replaced, so `application-test.yml` only needs to state what
+differs from `application.yml`.
 
 ---
 

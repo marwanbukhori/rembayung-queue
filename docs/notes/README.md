@@ -4,9 +4,8 @@ Working notes on how this project is wired, written as it was built. One file
 per implementation task, numbered to match
 `docs/superpowers/plans/2026-09-03-booking-domain-core.md`.
 
-These are oriented toward developers arriving from a JavaScript/Node
-background, so Java and Spring concepts are mapped onto their closest JS
-equivalents where a useful one exists.
+Each note records not just what a component does, but why it was configured the
+way it was — particularly where a default was rejected on correctness grounds.
 
 | Note | Covers | Commit |
 |---|---|---|
