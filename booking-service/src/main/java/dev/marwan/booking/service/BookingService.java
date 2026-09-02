@@ -2,6 +2,7 @@ package dev.marwan.booking.service;
 
 import dev.marwan.booking.api.*;
 import dev.marwan.booking.domain.Booking;
+import dev.marwan.booking.domain.BookingStatus;
 import dev.marwan.booking.domain.Slot;
 import dev.marwan.booking.repository.BookingRepository;
 import dev.marwan.booking.repository.SlotRepository;
@@ -58,6 +59,21 @@ public class BookingService {
                 now,
                 now.plus(holdTtl)));
 
+        return new BookingResult(booking.getId(), booking.getStatus(), false);
+    }
+
+    @Transactional
+    public BookingResult confirmDeposit(Long bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+
+        if (booking.getStatus() != BookingStatus.PENDING_DEPOSIT) {
+            throw new IllegalStateException(
+                    "Booking " + bookingId + " is " + booking.getStatus()
+                            + ", expected PENDING_DEPOSIT");
+        }
+
+        booking.setStatus(BookingStatus.CONFIRMED);
         return new BookingResult(booking.getId(), booking.getStatus(), false);
     }
 }

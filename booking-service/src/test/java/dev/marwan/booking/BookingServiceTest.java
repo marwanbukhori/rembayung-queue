@@ -54,4 +54,32 @@ class BookingServiceTest extends OracleTestBase {
                 new BookingRequest(999_999L, "+60123456789", 2, "key-4")))
                 .isInstanceOf(SlotNotFoundException.class);
     }
+
+    @Test
+    void confirmingADepositMovesTheBookingToConfirmed() {
+        Long slotId = seedSlot(250);
+        BookingResult booked = bookingService.book(
+                new BookingRequest(slotId, "+60123456789", 2, "key-deposit-1"));
+
+        BookingResult confirmed = bookingService.confirmDeposit(booked.bookingId());
+
+        assertThat(confirmed.status()).isEqualTo(BookingStatus.CONFIRMED);
+    }
+
+    @Test
+    void confirmingAnAlreadyConfirmedBookingIsRejected() {
+        Long slotId = seedSlot(250);
+        BookingResult booked = bookingService.book(
+                new BookingRequest(slotId, "+60123456789", 2, "key-deposit-2"));
+        bookingService.confirmDeposit(booked.bookingId());
+
+        assertThatThrownBy(() -> bookingService.confirmDeposit(booked.bookingId()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void confirmingAnUnknownBookingIsRejected() {
+        assertThatThrownBy(() -> bookingService.confirmDeposit(999_999L))
+                .isInstanceOf(BookingNotFoundException.class);
+    }
 }
