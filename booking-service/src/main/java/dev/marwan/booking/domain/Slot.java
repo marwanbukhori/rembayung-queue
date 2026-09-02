@@ -45,6 +45,9 @@ public class Slot {
     }
 
     public void takeSeats(int partySize) {
+        if (partySize <= 0) {
+            throw new IllegalArgumentException("partySize must be positive but was " + partySize);
+        }
         if (!canAccommodate(partySize)) {
             throw new IllegalStateException(
                     "Cannot take " + partySize + " seats; only " + remainingSeats() + " remain");
@@ -53,6 +56,9 @@ public class Slot {
     }
 
     public void releaseSeats(int partySize) {
+        if (partySize <= 0) {
+            throw new IllegalArgumentException("partySize must be positive but was " + partySize);
+        }
         if (partySize > seatsTaken) {
             throw new IllegalStateException("Cannot release more seats than are taken");
         }
