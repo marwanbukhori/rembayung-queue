@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: booking-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+booking:
+  deposit-cents-per-head: 2000
+  hold-ttl: PT10M
