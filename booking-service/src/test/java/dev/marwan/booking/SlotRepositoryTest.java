@@ -29,7 +29,6 @@ class SlotRepositoryTest extends OracleTestBase {
     }
 
     @Test
-    @Transactional
     void takeSeatsIncrementsAndReleaseSeatsDecrements() {
         Slot slot = new Slot(LocalDate.of(2026, 11, 2), "19:00", 250);
         slot.takeSeats(4);
