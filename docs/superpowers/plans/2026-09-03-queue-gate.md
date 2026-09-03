@@ -983,16 +983,16 @@ class QueueServiceTest extends RedisTestBase {
 
     @Test
     void positionAndEtaReflectHowFarAdmissionHasAdvanced() {
-        for (int i = 0; i < 399; i++) {
+        for (int i = 0; i < 149; i++) {
             queueService.join();
         }
-        clock().advance(Duration.ofSeconds(1));   // 200 admitted
+        clock().advance(Duration.ofMillis(500));  // 100 admitted at 200/s
 
-        JoinResult result = queueService.join();  // ticket 400
+        JoinResult result = queueService.join();  // ticket 150
 
-        assertThat(result.ticket()).isEqualTo(400);
-        assertThat(result.position()).isEqualTo(200);
-        assertThat(result.etaSeconds()).isEqualTo(1.0);
+        assertThat(result.ticket()).isEqualTo(150);
+        assertThat(result.position()).isEqualTo(50);
+        assertThat(result.etaSeconds()).isEqualTo(0.25);
         assertThat(result.admitted()).isFalse();
     }
 
@@ -1202,20 +1202,20 @@ class AdmissionServiceTest extends RedisTestBase {
 
     @Test
     void positionShrinksAsAdmissionAdvances() {
-        for (int i = 0; i < 399; i++) {
+        for (int i = 0; i < 149; i++) {
             queueService.join();
         }
-        JoinResult mine = queueService.join();   // ticket 400
+        JoinResult mine = queueService.join();   // ticket 150
 
         Optional<PositionView> before = admissionService.position(mine.token());
         assertThat(before).isPresent();
-        assertThat(before.get().position()).isEqualTo(400);
+        assertThat(before.get().position()).isEqualTo(150);
         assertThat(before.get().admitted()).isFalse();
 
-        clock().advance(Duration.ofSeconds(1));  // 200 admitted
+        clock().advance(Duration.ofMillis(500));  // 100 admitted at 200/s
 
         PositionView after = admissionService.position(mine.token()).orElseThrow();
-        assertThat(after.position()).isEqualTo(200);
+        assertThat(after.position()).isEqualTo(50);
         assertThat(after.admitted()).isFalse();
     }
 
@@ -1246,10 +1246,10 @@ class AdmissionServiceTest extends RedisTestBase {
 
     @Test
     void aTokenWhoseTurnHasNotComeIsRejected() {
-        for (int i = 0; i < 399; i++) {
+        for (int i = 0; i < 149; i++) {
             queueService.join();
         }
-        JoinResult mine = queueService.join();   // ticket 400, not yet admitted
+        JoinResult mine = queueService.join();   // ticket 150, not yet admitted
 
         assertThatThrownBy(() -> admissionService.consume(mine.token()))
                 .isInstanceOf(TokenRejectedException.class)
