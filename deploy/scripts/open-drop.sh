@@ -7,8 +7,14 @@
 # the demo shows nothing.
 set -euo pipefail
 
-OPENS_AT="$(date -u -d '30 seconds ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-            || date -u -v-30S +%Y-%m-%dT%H:%M:%SZ)"
+# Open the drop at NOW, not in the past.
+#
+# Backdating over-admits: admittedBy(now) = rate x elapsed, so opening 30s ago
+# at 8/s admits 240 of the 250 tickets instantly and the admit rate throttles
+# nothing. Everyone then books at once and exhausts the connection pool. That
+# offset was harmless at 200/s, where everyone is admitted within a second
+# regardless; at a calibrated rate it defeats the entire mechanism.
+OPENS_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 echo "opening the drop at ${OPENS_AT}"
 oc patch configmap queue-gate-config --type merge \
