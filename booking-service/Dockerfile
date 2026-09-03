@@ -8,6 +8,11 @@
 #
 # Run `mvn -DskipTests package` before building this image; deploy/scripts/build-push.sh does both.
 FROM eclipse-temurin:25-jre
+
+# Associates the published package with this repository, which is how GHCR
+# links a container package to its source and grants the repository's Actions
+# workflows write access to it.
+LABEL org.opencontainers.image.source=https://github.com/marwanbukhori/rembayung-queue
 WORKDIR /app
 COPY target/*.jar app.jar
 EXPOSE 8081
