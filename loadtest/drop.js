@@ -7,13 +7,24 @@ const bookingsRejected = new Counter('bookings_rejected');
 
 // Models the 21:00 drop: every virtual user arrives in the same instant,
 // rather than ramping. A ramp would be testing a spike that does not exist.
+//
+// VU count is tunable and defaults to 1500 rather than the spec's aspirational
+// 50,000. Only DROP_TICKET_CAP users can ever win a ticket (250), so VUs beyond
+// that contribute contention rather than contenders — and on a shared free-tier
+// ingress that contention lands on the RETURN path, dropping responses for
+// bookings the server already committed. A run at 5000 booked 73 seats but
+// reported only 28, because k6 counts responses and the database counts commits.
+//
+// Treat the SQL reconciliation as authoritative:
+//   SELECT capacity, seats_taken FROM booking.slots;
+//   SELECT COUNT(*) FROM booking.slots WHERE seats_taken > capacity;  -- must be 0
 export const options = {
   scenarios: {
     drop: {
       executor: 'per-vu-iterations',
-      vus: 5000,
+      vus: Number(__ENV.VUS || 1500),
       iterations: 1,
-      maxDuration: '2m',
+      maxDuration: __ENV.MAX_DURATION || '3m',
     },
   },
   thresholds: {
