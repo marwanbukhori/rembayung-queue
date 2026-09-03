@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -44,7 +45,8 @@ public abstract class RedisTestBase {
     @TestConfiguration
     static class FixedClockConfig {
         @Bean
-        Clock clock() {
+        @Primary
+        Clock testClock() {
             return new TestClock(OPENS_AT);
         }
     }
