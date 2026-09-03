@@ -344,11 +344,30 @@ be exercised by hand.
 
 Stated so they are acknowledged rather than discovered.
 
-- **`POST /bookings/{id}/deposit` is unauthenticated and takes a sequential id.**
-  Anyone can confirm anyone's booking by guessing. The admission token was
-  consumed by the booking itself, so it cannot guard this call. A real system
-  would return a secret from the booking that the deposit call must present.
-  Payment is mocked, so this is a demo-scoped weakness — but a real one.
+- **There is no authentication anywhere, and three findings chain into
+  account takeover of a booking.** A background security scan surfaced these on
+  the Phase 2 REST layer; all three are real and all are accepted for the demo:
+
+  1. **Broken access control.** `POST /bookings/{id}/deposit` is unauthenticated
+     and takes a sequential integer id, so anyone can confirm anyone's booking
+     by guessing. The admission token was consumed by the booking itself, so it
+     cannot guard this call.
+  2. **Information disclosure via the idempotency replay path.**
+     `idempotencyKey` is client-supplied, and `book()` returns the prior
+     booking's id and status whenever a key already exists. Submitting a
+     guessed key therefore reveals another user's `bookingId` and
+     `BookingStatus`.
+  3. **Existence oracle in the error codes.** `BOOKING_NOT_FOUND` (404) versus
+     `BOOKING_NOT_PENDING` (409) tells an unauthenticated caller whether a
+     booking id exists and whether it is still unpaid.
+
+  **Chained:** guess an idempotency key → learn a real `bookingId` and its
+  status → call the unauthenticated deposit endpoint on it. The fix is
+  authentication plus a server-generated secret returned by the booking and
+  required by the deposit call, with idempotency keys scoped per authenticated
+  user rather than global. That is deferred with the rest of security hardening,
+  which the parent spec lists as an explicit non-goal, and payment is mocked so
+  nothing of value moves. Documented here rather than discovered later.
 - **Changing the admit rate mid-drop is unsafe.** Lowering it makes
   `admitted(now)` jump backwards and un-admit people. Rate changes apply from
   the next drop.
