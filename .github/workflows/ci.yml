@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Two pushes in quick succession would otherwise race. Cancel superseded runs
+# on branches, but never cancel a main build midway — it may be publishing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Real Oracle and real Redis, via Testcontainers. Not mocked, and not
+      # H2: SELECT ... FOR UPDATE semantics are the thing under test, and
+      # ConcurrencyInvariantTest — 400 threads against one slot row — is the
+      # claim this whole project exists to make.
+      #
+      # Testcontainers reuse is a no-op here. It needs
+      # testcontainers.reuse.enable=true in ~/.testcontainers.properties, which
+      # a fresh runner does not have, so every run starts clean. That is why CI
+      # is minutes where a laptop is seconds.
+      - name: Test booking-service
+        working-directory: booking-service
+        run: ./mvnw --batch-mode verify
+
+      - name: Test queue-gate
+        working-directory: queue-gate
+        run: ./mvnw --batch-mode verify
