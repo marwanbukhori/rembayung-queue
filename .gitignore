@@ -23,3 +23,6 @@ ojdbc.properties
 
 # Local run output
 loadtest-output.txt
+
+# Local scratch — commands to hand-run
+RUN-THESE.md
