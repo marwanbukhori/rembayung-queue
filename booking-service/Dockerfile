@@ -1,10 +1,14 @@
-FROM eclipse-temurin:25-jdk AS build
-WORKDIR /src
-COPY . .
-RUN ./mvnw -q -DskipTests package
-
+# The JAR is built on the host, not in this image.
+#
+# Java bytecode is architecture-independent, so only the JRE base image needs
+# to be linux/amd64. Building the JAR inside an emulated amd64 container would
+# mean running an x86 JVM under QEMU on an arm64 Mac, where the Maven wrapper's
+# tar extraction fails with ENOSYS. Copying a pre-built JAR needs no emulation
+# at all, and is also considerably faster.
+#
+# Run `mvn -DskipTests package` before building this image; deploy/scripts/build-push.sh does both.
 FROM eclipse-temurin:25-jre
 WORKDIR /app
-COPY --from=build /src/target/*.jar app.jar
+COPY target/*.jar app.jar
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
