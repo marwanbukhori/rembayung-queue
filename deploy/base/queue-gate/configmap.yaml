@@ -19,6 +19,10 @@ data:
   # admission to what the database can actually sustain is what this gate is FOR.
   # Co-locating the database with the cluster would raise this by two orders of
   # magnitude; the OCI home region is immutable, so 8 is the honest number here.
-  DROP_ADMIT_RATE: "8"
+  # 5, not 8. Sustainable is 20 connections / 2.7s = 7.4/s, but admission is
+  # bursty: clients poll once a second, so a second's worth of admissions books
+  # together. 8/s x 2.7s needs 21.6 connections against 20 and tips over; 5/s
+  # needs 13.5 and leaves headroom for the burst.
+  DROP_ADMIT_RATE: "5"
   DROP_ADMISSION_WINDOW: "PT30M"
   DROP_TICKET_TTL: "PT30M"

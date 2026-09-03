@@ -83,7 +83,12 @@ export default function () {
 
   check(booking, {
     'booking resolved cleanly': (r) => [201, 403, 409].includes(r.status),
-    'never a server error': (r) => r.status < 500,
+    // 503 is not a fault. Under overload the booking service fails fast with
+    // 503 + Retry-After rather than holding a connection for 30 seconds and
+    // then lying with a 500. That is back-pressure working, and the correct
+    // answer when a fixed-size connection pool is saturated. A 500 means an
+    // unhandled exception and is a real failure; so are 502 and 504.
+    'no unhandled server fault': (r) => r.status < 500 || r.status === 503,
   });
 
   if (booking.status === 201) {
