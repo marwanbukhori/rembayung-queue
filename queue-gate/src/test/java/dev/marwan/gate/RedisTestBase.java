@@ -3,10 +3,7 @@ package dev.marwan.gate;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Bean;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,7 +16,7 @@ import java.time.Instant;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@Import(RedisTestBase.FixedClockConfig.class)
+@Import(FixedClockConfig.class)
 public abstract class RedisTestBase {
 
     /** Drop opens at a fixed instant in every test, so arithmetic is predictable. */
@@ -40,15 +37,6 @@ public abstract class RedisTestBase {
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("drop.opens-at", () -> OPENS_AT.toString());
         registry.add("drop.closes-at", () -> OPENS_AT.plusSeconds(1800).toString());
-    }
-
-    @TestConfiguration
-    static class FixedClockConfig {
-        @Bean
-        @Primary
-        Clock testClock() {
-            return new TestClock(OPENS_AT);
-        }
     }
 
     @Autowired protected StringRedisTemplate redis;
