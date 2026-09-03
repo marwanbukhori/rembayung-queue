@@ -148,6 +148,18 @@ the design tells.
 `rollback_tag` is **read from the live Deployment, not from git**. What is
 running is the truth; what the repository last recorded may not be.
 
+**And it is one value per Deployment, not one per cluster.** Checked while
+writing this: `booking-service` is on `66393c1` and `queue-gate` on `270288f` —
+they drifted apart because Phase 3 deployed them separately by hand. A playbook
+that captured a single `rollback_tag` would roll one service back to the other's
+tag, which is a worse outcome than the failure it was reverting. So the discovery
+step reads both, and the rollback restores each to its own.
+
+CI publishes both services at the same commit SHA, so after the first CD run the
+two converge and stay converged. The per-Deployment shape still matters, because
+the first rollback the playbook ever performs is the one that happens from
+today's drifted state.
+
 ### Idempotency, and where it stops
 
 `kubernetes.core.k8s` is declarative, so re-running with the same tag is a
