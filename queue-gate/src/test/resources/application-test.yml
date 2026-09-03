@@ -1,0 +1,8 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+logging:
+  level:
+    org.testcontainers: INFO
+booking-service:
+  base-url: http://localhost:0
