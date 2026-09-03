@@ -46,7 +46,7 @@ synthetic one.
 ## 2. Goals
 
 1. Demonstrate breadth across the target stack: **Spring Boot, Oracle,
-   OpenShift, Dynatrace, Splunk, Jenkins, GitHub Actions**.
+   OpenShift, Dynatrace, Splunk, Ansible, GitHub Actions**.
 2. Survive a realistic demand spike without overselling capacity.
 3. Be **explainable end to end** by its author under questioning. An
    unexplainable demo is worse than no demo.
@@ -219,14 +219,20 @@ Split deliberately, mirroring common enterprise practice: CI in the cloud, CD
 from a server with network reach into the cluster.
 
 ```
-GitHub Actions = CI               Jenkins = CD
+GitHub Actions = CI               Ansible = CD
 ──────────────────────            ──────────────────────
 git push                          triggered on CI success
-  ├── mvn verify (unit + IT)        ├── oc apply -k overlays/sandbox
-  ├── build image (x86_64)          ├── wait for rollout
-  ├── push to Quay.io               ├── smoke test against Route
-  └── notify Jenkins                └── promote, or roll back on failure
+  ├── mvn verify (unit + IT)        ├── kubernetes.core.k8s: apply overlay
+  ├── build image (x86_64)          ├── set the image tag
+  ├── push to ghcr.io               ├── wait for rollout
+  └── trigger the deploy workflow   ├── smoke test against the Route
+                                    └── roll back to the previous tag on failure
 ```
+
+**Revised 2026-09-03: Ansible replaces Jenkins for CD.** The original split put
+Jenkins on a server with network reach into the cluster. That rationale
+disappears once the deploy runs from a GitHub Actions runner authenticated with
+an `oc` token — and the sandbox cannot host Jenkins anyway. See the decision log.
 
 **Architecture gotcha:** the dev machine is arm64, the Sandbox is x86_64.
 Images built locally with Docker will fail on the cluster with an exec-format
@@ -236,11 +242,11 @@ CI solves this for free**. Local builds must pass `--platform linux/amd64`.
 **Registry:** Quay.io (free public repositories, Red Hat ecosystem).
 `ghcr.io` is an acceptable alternative.
 
-**Jenkins placement is deferred.** The Jenkinsfile and deploy scripts must take
-the cluster URL and credentials **from environment/credentials bindings, never
-hardcoded**, so Jenkins can run either locally in Docker or in-cluster without
-modification. Decide during implementation, after observing whether in-cluster
-Jenkins (~500m CPU) meaningfully constrains the autoscaling demonstration.
+**The deploy playbook takes the cluster URL and credentials from environment
+bindings, never hardcoded.** That keeps it runnable from a GitHub Actions
+runner, from a laptop, or as an Ansible Automation Platform Job Template
+without modification — which is the point: the same playbook is the unit of
+work in all three.
 
 ---
 
@@ -292,7 +298,7 @@ Approximately eight minutes, ending on correctness rather than on a graph.
 | # | Step | Shows | Time |
 |---|---|---|---|
 | 1 | Book a seat normally | Baseline: what "working" looks like | 30s |
-| 2 | Push a commit | GH Actions builds → Quay → Jenkins deploys → rollout | 2m |
+| 2 | Push a commit | GH Actions builds → ghcr → Ansible deploys → rollout | 2m |
 | 3 | k6 fires 50,000 virtual users | Splunk queue climbing, OpenShift pods 2→10, Dynatrace latency **flat** | 3m |
 | 4 | `SELECT seats_taken FROM slots` | Exactly 250, never 251. Zero double-bookings. | 1m |
 | 5 | `oc delete pod` mid-load | In-flight requests fail; **no confirmed booking lost or duplicated** | 1m |
@@ -315,7 +321,7 @@ Each phase should be independently demonstrable.
 3. **OpenShift deployment.** Manifests/Kustomize, Secrets, ConfigMaps, Routes,
    HPA. Oracle switched to OCI Autonomous.
 4. **CI.** GitHub Actions: test, build x86_64 image, push to Quay.
-5. **CD.** Jenkins: deploy, smoke test, rollback.
+5. **CD.** Ansible playbook: deploy, smoke test, rollback.
 6. **Observability.** OpenTelemetry → local backend first, then Dynatrace.
    Logback → Splunk. Trace correlation verified.
 7. **Rehearse and record.** Run the full demo script end to end; record video.
@@ -333,8 +339,9 @@ Each phase should be independently demonstrable.
 | Local Oracle | 23ai Free ARM64 container | Native on Apple Silicon, no emulation |
 | Services | Two deployments, not one | Independent scaling is the entire point of the gate |
 | Redis durability | No PVC | Queue state disposable; bookings durable in Oracle |
-| CI/CD split | GH Actions = CI, Jenkins = CD | Defensible enterprise pattern, not tool-collecting |
-| Jenkins placement | Deferred; design for both | Depends on whether ~500m CPU constrains the scaling demo |
+| CI/CD split | GH Actions = CI, Ansible = CD | Separates "is it good?" from "is it live?" while keeping one runner |
+| CD tool | **Ansible, replacing Jenkins** (revised 2026-09-03) | Red Hat's own tooling, natural against OpenShift via `kubernetes.core.k8s`; needs no server, so it costs none of the 3-core quota the autoscaling demo requires |
+| AAP | Named as the production home, not run here | The sandbox arrived with AAP consuming 1950m of 3000m — it and the 2→10 scale demo cannot coexist. The playbook is the artefact; AAP is where it would run |
 | Instrumentation | OpenTelemetry, vendor-neutral | No cluster-admin for OneAgent; backend becomes config |
 
 ---
