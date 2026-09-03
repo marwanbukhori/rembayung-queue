@@ -28,7 +28,9 @@ So a branch push runs tests, fails safely if they fail, but never touches the re
 cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 ```
 
-A publish cannot be aborted midway. If you push a commit and then immediately push another, the first run's tests cancel, but its publish completes before the second run's tests start. This is deliberate — pushing to `main` twice should give you two published images, not one that raced itself.
+A publish cannot be aborted midway. Push a commit to `main` and then immediately push another, and the second run does not cancel the first — it **queues** behind it in the same concurrency group and starts only once the first has finished entirely. Both commits get published, in order.
+
+On a branch the opposite is what you want: the older run is cancelled the moment a newer one arrives, because nobody cares whether a superseded commit passed. The distinction is the whole point of the expression — a cancelled test run costs nothing, a cancelled publish can leave a half-pushed image.
 
 ---
 
@@ -39,6 +41,13 @@ A publish cannot be aborted midway. If you push a commit and then immediately pu
 A pipeline that skipped this — substituting H2 or Mockito — would run fast and report green on a project that does not work. That is the wrong trade here. The cost is:
 
 - **Slower:** Oracle pulls take 37s, start 17.8s. Tests follow. Whole suite is 1m41s on `booking-service`, 18.1s on `queue-gate`. Total job time is **2m23s** wall clock.
+
+  **The spec predicted 8–12 minutes. That was wrong — pessimistic by about 4×.**
+  It reasoned from a cold laptop run and did not account for `actions/setup-java`
+  caching the Maven repository, or for GitHub's runners pulling from a registry
+  mirror on the same network. The estimate is recorded here as wrong rather than
+  quietly replaced, because the reasoning that produced it is the kind that will
+  produce another one.
 - **More fragile:** a network hiccup, a registry rate limit, or an Oracle license check can fail a build that has nothing to do with the code.
 
 But they make the build meaningful. This is worth the cost.
@@ -106,12 +115,18 @@ Phase 4 (this phase) is CI only: prove the code is good, and publish evidence of
 Both `OracleTestBase` and `RedisTestBase` call `.withReuse(true)`:
 
 ```java
-// OracleTestBase.java
-static { ORACLE.start().withReuse(true); }
+// OracleTestBase.java:31
+            .withReuse(true);
 
-// RedisTestBase.java
-static { REDIS.start().withReuse(true); }
+    static {
+        ORACLE.start();
+    }
 ```
+
+`RedisTestBase.java:28` does the same. Note the shape: `.withReuse(true)` is set
+on the *builder*, and the container is started once in a `static` block — the
+singleton pattern that makes the suite share one container across every
+`@SpringBootTest` context instead of starting a fresh one per class.
 
 Reuse is opt-in on both sides. The container framework will reuse a container only if:
 
