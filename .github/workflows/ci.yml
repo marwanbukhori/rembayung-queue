@@ -11,6 +11,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# ghcr.io accepts the workflow's built-in GITHUB_TOKEN. There is no registry
+# secret to store, rotate or leak — the reason ghcr.io was chosen over Quay.io.
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,3 +48,78 @@ jobs:
       - name: Test queue-gate
         working-directory: queue-gate
         run: ./mvnw --batch-mode verify
+
+      # The Dockerfiles are single-stage and copy target/*.jar, so the jars must
+      # exist before the image build. Locally this exists because building inside
+      # an emulated amd64 container fails on Apple Silicon; here it is simply
+      # faster, and it keeps the Dockerfiles identical in both places.
+      - name: Package jars
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          booking-service/mvnw --batch-mode -f booking-service -DskipTests package
+          queue-gate/mvnw     --batch-mode -f queue-gate     -DskipTests package
+
+      - name: Log in to ghcr.io
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push booking-service
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./booking-service
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/marwanbukhori/booking-service:${{ github.sha }}
+
+      - name: Build and push queue-gate
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./queue-gate
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}
+
+      # Native on an x86_64 runner, unlike the arm64 development machine — but
+      # asserted anyway. A wrong architecture surfaces on the cluster as a
+      # CrashLoopBackOff whose logs say only "exec format error".
+      - name: Verify images are linux/amd64
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          for svc in booking-service queue-gate; do
+            image="ghcr.io/marwanbukhori/${svc}:${{ github.sha }}"
+            echo "== ${image}"
+            docker buildx imagetools inspect "${image}" | tee /tmp/inspect.txt
+            grep -q 'linux/amd64' /tmp/inspect.txt \
+              || { echo "::error::${image} is not linux/amd64"; exit 1; }
+          done
+
+      - name: Summary
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          {
+            echo "### Images published"
+            echo
+            echo '```'
+            echo "ghcr.io/marwanbukhori/booking-service:${{ github.sha }}"
+            echo "ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}"
+            echo '```'
+            echo
+            echo "Deploy with:"
+            echo '```bash'
+            echo "cd deploy/overlays/sandbox"
+            echo "kustomize edit set image \\"
+            echo "  ghcr.io/marwanbukhori/booking-service=ghcr.io/marwanbukhori/booking-service:${{ github.sha }} \\"
+            echo "  ghcr.io/marwanbukhori/queue-gate=ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}"
+            echo "oc apply -k deploy/overlays/sandbox"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
