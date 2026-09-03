@@ -26,7 +26,8 @@ services:
       SPRING_DATASOURCE_USERNAME: booking
       SPRING_DATASOURCE_PASSWORD: booking
       SERVER_PORT: 8081
-    ports: ["8081:8081"]
+    # Only expose to compose network, not to host. Bookings must go through queue-gate.
+    expose: ["8081"]
 
   queue-gate:
     build: ./queue-gate
@@ -34,8 +35,8 @@ services:
     environment:
       SPRING_DATA_REDIS_HOST: redis
       BOOKING_SERVICE_BASE_URL: http://booking-service:8081
-      DROP_OPENS_AT: "2026-09-03T06:40:00Z"
       DROP_CLOSES_AT: "2026-09-03T23:59:59Z"
       DROP_ADMIT_RATE: "200"
       DROP_TICKET_CAP: "250"
+      DROP_ADMISSION_WINDOW: PT30M
     ports: ["8080:8080"]
