@@ -37,4 +37,12 @@ public class GateExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new GateApiError(e.getReason(), Map.of()));
     }
+
+    @ExceptionHandler(org.springframework.web.client.ResourceAccessException.class)
+    public ResponseEntity<GateApiError> downstreamUnavailable(
+            org.springframework.web.client.ResourceAccessException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "5")
+                .body(new GateApiError("BOOKING_SERVICE_UNAVAILABLE", Map.of()));
+    }
 }
