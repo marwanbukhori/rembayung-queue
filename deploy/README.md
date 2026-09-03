@@ -145,6 +145,14 @@ Starting in Phase 4, images are built automatically by GitHub Actions on every p
 2. Builds JARs and container images for both services
 3. Pushes images to ghcr.io tagged with the commit SHA
 
+**Mind the tag form.** CI tags with the **full 40-character** SHA; the local
+`build-push.sh` uses the **7-character short** form. Both are valid and immutable,
+but they are different tags — asking for a short SHA of a CI-built image gives
+`manifest unknown`, and vice versa. Do not retype either: copy the exact tag from
+the Actions run summary (for a CI build) or from the script's own output (for a
+local one). Phase 5's playbook takes the tag as an explicit argument for this
+reason and never derives it.
+
 **Publishing is currently blocked.** The push fails with `permission_denied: write_package` because the packages were created as user-owned by hand in Phase 3 and are not linked to the repository. The fix (pending with the repository owner) is one browser step:
 
 - Visit https://github.com/marwanbukhori/rembayung-queue/settings/packages
@@ -533,7 +541,7 @@ To handle renewal:
 - **The deployment is stateful:** the Oracle database and Redis are outside the cluster and carry state across restarts. Flushing Redis or changing the database requires manual steps.
 - **Secrets are imperative:** the wallet and credentials are not in git and cannot be recreated from the repository alone. Back up the wallet file separately.
 - **Pre-scaling is manual:** a real production setup would use a CronJob to adjust `minReplicas` before known traffic spikes. This phase uses manual scaling for simplicity.
-- **No CI/CD yet:** code changes require a manual build and tag. Phase 4 adds GitHub Actions and Jenkins.
+- **CD is not automated yet:** CI (above) builds and publishes images, but getting them onto the cluster is still a manual `oc set image`. Phase 5 adds an Ansible playbook that deploys, smoke-tests and rolls back.
 
 ---
 

@@ -133,7 +133,7 @@ is domain correctness only.
 | **1 — done** | Domain core: slots, bookings, locking, idempotency, expiry | `mvn test` |
 | **2** | Redis queue gate, admission tokens, **REST controllers** | `curl`, Postman, browser |
 | **3** | OpenShift deployment | a public URL (an OpenShift `Route`) |
-| **4–5** | GitHub Actions CI, Jenkins CD | `git push` builds and deploys |
+| **4–5** | GitHub Actions CI, Ansible CD | `git push` builds and deploys |
 | **6** | OpenTelemetry → Dynatrace, Logback → Splunk | dashboards |
 
 Phase 2 is where `POST /bookings` appears and this stops being a library.

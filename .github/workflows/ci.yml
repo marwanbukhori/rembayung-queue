@@ -95,6 +95,9 @@ jobs:
       - name: Verify images are linux/amd64
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         run: |
+          # Without pipefail, a failing imagetools inspect is masked by tee's
+          # exit code; the grep below then fails for the wrong reason.
+          set -o pipefail
           for svc in booking-service queue-gate; do
             image="ghcr.io/marwanbukhori/${svc}:${{ github.sha }}"
             echo "== ${image}"

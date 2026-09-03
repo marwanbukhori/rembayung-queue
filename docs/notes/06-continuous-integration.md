@@ -30,6 +30,12 @@ cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 A publish cannot be aborted midway. Push a commit to `main` and then immediately push another, and the second run does not cancel the first — it **queues** behind it in the same concurrency group and starts only once the first has finished entirely. Both commits get published, in order.
 
+That holds for two. It does not generalise: GitHub keeps at most **one** pending
+run per concurrency group, so a third push cancels the still-waiting second, and
+that middle commit is never published. Rapid-fire pushes to `main` publish the
+first and the last, not everything in between. Not worth engineering around —
+worth knowing before you conclude an image went missing.
+
 On a branch the opposite is what you want: the older run is cancelled the moment a newer one arrives, because nobody cares whether a superseded commit passed. The distinction is the whole point of the expression — a cancelled test run costs nothing, a cancelled publish can leave a half-pushed image.
 
 ---
@@ -104,7 +110,7 @@ The workflow builds and publishes images. It does not apply the Kustomize overla
 
 A deployment job that deploys **cannot roll back without rebuilding.** If a job pushes an image and then patches the cluster, and the patch goes wrong, you cannot simply point back to the previous manifest — the old image tag is gone and rebuilt into something else.
 
-Phase 5 adds Jenkins for CD. It will run after CI and will do the deployment, so rollback is separable from build.
+Phase 5 adds **Ansible** for CD — a playbook run from a workflow, not Jenkins. It runs after CI and does the deployment, so rollback is separable from build. (The parent spec originally said Jenkins; it was revised, because an in-cluster Jenkins would consume CPU quota the autoscaling demonstration needs, and its rationale — a host with network reach into the cluster — is already satisfied by a runner.)
 
 Phase 4 (this phase) is CI only: prove the code is good, and publish evidence of it. Phase 5 uses that evidence.
 
