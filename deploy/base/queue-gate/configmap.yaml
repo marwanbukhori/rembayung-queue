@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queue-gate-config
+data:
+  DROP_OPENS_AT: "2026-09-03T12:00:00Z"
+  DROP_CLOSES_AT: "2030-01-01T00:00:00Z"
+  DROP_SEATS: "250"
+  DROP_TICKET_CAP: "250"
+  DROP_ADMIT_RATE: "200"
+  DROP_ADMISSION_WINDOW: "PT30M"
+  DROP_TICKET_TTL: "PT30M"

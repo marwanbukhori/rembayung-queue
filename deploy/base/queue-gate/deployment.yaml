@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-gate
+  labels: { app: queue-gate }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: queue-gate }
+  template:
+    metadata:
+      labels: { app: queue-gate }
+    spec:
+      containers:
+        - name: queue-gate
+          image: ghcr.io/marwanbukhori/queue-gate
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9090
+          envFrom:
+            - configMapRef: { name: queue-gate-config }
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis
+            - name: BOOKING_SERVICE_BASE_URL
+              value: http://booking-service:8081
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: management }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: management }
+            initialDelaySeconds: 10
+            periodSeconds: 5

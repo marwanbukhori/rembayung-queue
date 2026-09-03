@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: queue-gate
+spec:
+  selector: { app: queue-gate }
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

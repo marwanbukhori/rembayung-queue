@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: marwanbukhori-dev
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/marwanbukhori/queue-gate
+    newTag: 4dbb543
