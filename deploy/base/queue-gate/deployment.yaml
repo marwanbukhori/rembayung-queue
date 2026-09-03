@@ -2,14 +2,24 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: queue-gate
-  labels: { app: queue-gate }
+  labels:
+    app: queue-gate
+    app.kubernetes.io/name: queue-gate
+    app.kubernetes.io/component: gateway
+    app.openshift.io/runtime: spring-boot
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"redis"},{"apiVersion":"apps/v1","kind":"Deployment","name":"booking-service"}]'
 spec:
   replicas: 2
   selector:
     matchLabels: { app: queue-gate }
   template:
     metadata:
-      labels: { app: queue-gate }
+      labels:
+        app: queue-gate
+        app.kubernetes.io/name: queue-gate
+        app.kubernetes.io/component: gateway
+        app.openshift.io/runtime: spring-boot
     spec:
       containers:
         - name: queue-gate

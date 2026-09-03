@@ -2,14 +2,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: booking-service
-  labels: { app: booking-service }
+  labels:
+    app: booking-service
+    app.kubernetes.io/name: booking-service
+    app.kubernetes.io/component: backend
+    app.openshift.io/runtime: spring-boot
 spec:
   replicas: 2
   selector:
     matchLabels: { app: booking-service }
   template:
     metadata:
-      labels: { app: booking-service }
+      labels:
+        app: booking-service
+        app.kubernetes.io/name: booking-service
+        app.kubernetes.io/component: backend
+        app.openshift.io/runtime: spring-boot
     spec:
       containers:
         - name: booking-service

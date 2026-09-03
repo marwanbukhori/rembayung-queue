@@ -2,14 +2,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  labels: { app: redis }
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.openshift.io/runtime: redis
 spec:
   replicas: 1
   selector:
     matchLabels: { app: redis }
   template:
     metadata:
-      labels: { app: redis }
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+        app.openshift.io/runtime: redis
     spec:
       containers:
         - name: redis

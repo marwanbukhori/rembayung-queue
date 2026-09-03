@@ -2,6 +2,10 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: queue-gate
+  labels:
+    app.kubernetes.io/name: queue-gate
+    app.kubernetes.io/component: gateway
+    app.openshift.io/runtime: spring-boot
 spec:
   to:
     kind: Service
