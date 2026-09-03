@@ -24,9 +24,12 @@ public final class Admission {
         return Math.floorDiv(elapsedMillis * rate, 1000L);
     }
 
-    /** The instant at which {@code ticket} becomes admitted. */
+    /**
+     * The instant at which {@code ticket} becomes admitted.
+     * Rounded up so that {@code admittedBy(turnAt(N)) >= N} holds for every rate.
+     */
     public static Instant turnAt(long ticket, Instant opensAt, int rate) {
-        long millis = Math.floorDiv(ticket * 1000L, (long) rate);
+        long millis = Math.ceilDiv(ticket * 1000L, (long) rate);
         return opensAt.plusMillis(millis);
     }
 

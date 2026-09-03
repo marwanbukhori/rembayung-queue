@@ -62,4 +62,18 @@ class AdmissionTest {
         long second = Admission.admittedBy(now, OPENS, RATE);
         assertThat(first).isEqualTo(second).isEqualTo(246);
     }
+
+    @Test
+    void aTicketIsAdmittedAtItsOwnTurnForRatesThatDoNotDivideAThousand() {
+        // Floor division silently broke this: at rate 300, turnAt(1) was 3ms
+        // but admittedBy(3ms) was 0, so ticket 1 was never admitted at its turn.
+        for (int rate : new int[] { 150, 200, 250, 300, 333 }) {
+            for (long ticket : new long[] { 1, 7, 199, 200, 201, 400 }) {
+                Instant turn = Admission.turnAt(ticket, OPENS, rate);
+                assertThat(Admission.admittedBy(turn, OPENS, rate))
+                        .as("rate=%d ticket=%d", rate, ticket)
+                        .isGreaterThanOrEqualTo(ticket);
+            }
+        }
+    }
 }
