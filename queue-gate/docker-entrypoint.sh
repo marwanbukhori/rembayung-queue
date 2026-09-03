@@ -5,6 +5,10 @@
 # startup so tickets are admitted immediately with a full window ahead of them.
 if [ -z "$DROP_OPENS_AT" ]; then
   DROP_OPENS_AT="$(date -u -d '30 seconds ago' +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$DROP_OPENS_AT" ]; then
+    echo "queue-gate: could not compute DROP_OPENS_AT; set it explicitly" >&2
+    exit 1
+  fi
   export DROP_OPENS_AT
   echo "queue-gate: drop window opened at $DROP_OPENS_AT"
 fi
