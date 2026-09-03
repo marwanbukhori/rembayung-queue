@@ -13,7 +13,7 @@ drop:
   opens-at: 2026-09-03T13:00:00Z
   closes-at: 2026-09-03T13:30:00Z
   seats: 250
-  ticket-cap: 250
+  ticket-cap: 400
   admit-rate: 200
   admission-window: PT5M
   ticket-ttl: PT30M
