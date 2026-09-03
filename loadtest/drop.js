@@ -20,9 +20,17 @@ export const options = {
     // A run in which nothing was ever booked means admission is broken,
     // even if every response was a well-formed rejection.
     bookings_created: ['count>50'],
+    // Only server errors count as failures. A 250-seat slot can satisfy about
+    // 125 of 5000 contenders, so ~97% of responses are 403 (not admitted) or
+    // 409 (sold out) — those are the system working, not failing. Counting
+    // them would make a healthy run report ~89% failure.
     http_req_failed: ['rate<0.01'],
   },
 };
+
+// Treat everything below 500 as an expected outcome, so http_req_failed
+// tracks server errors rather than legitimate rejections.
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }));
 
 const GATE = __ENV.GATE || 'http://localhost:8080';
 const SLOT_ID = __ENV.SLOT_ID || 1;
