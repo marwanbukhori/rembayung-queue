@@ -22,6 +22,17 @@ spec:
       containers:
         - name: redis
           image: redis:7-alpine
+          # Persistence is off, not merely unbacked. The design treats queue
+          # state as disposable — positions can be lost, confirmed bookings live
+          # only in Oracle — so there is no volume. Leaving Redis's default save
+          # points active means it tries to snapshot to /data, is denied by the
+          # restricted SCC, and then refuses ALL writes, taking the queue down.
+          command:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
           ports:
             - containerPort: 6379
           resources:
