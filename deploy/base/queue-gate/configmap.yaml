@@ -7,6 +7,18 @@ data:
   DROP_CLOSES_AT: "2030-01-01T00:00:00Z"
   DROP_SEATS: "250"
   DROP_TICKET_CAP: "250"
-  DROP_ADMIT_RATE: "200"
+  # Calibrated against measured capacity, not chosen on paper.
+  #
+  # A single booking takes ~2.7s end to end because the cluster is ~250ms from
+  # the database in ap-kulai-2, and one booking is SELECT ... FOR UPDATE, INSERT
+  # and COMMIT — three sequential round trips. Two pods x Hikari's default 10
+  # connections gives 20, and ADB Always Free caps sessions near 20 so the pool
+  # cannot grow. 20 / 2.7s is about 7.4 bookings per second.
+  #
+  # Admitting 200/s into that exhausted the pool and returned 500s. Metering
+  # admission to what the database can actually sustain is what this gate is FOR.
+  # Co-locating the database with the cluster would raise this by two orders of
+  # magnitude; the OCI home region is immutable, so 8 is the honest number here.
+  DROP_ADMIT_RATE: "8"
   DROP_ADMISSION_WINDOW: "PT30M"
   DROP_TICKET_TTL: "PT30M"
