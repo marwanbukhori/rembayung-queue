@@ -137,30 +137,66 @@ curl -I https://queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com/
 
 ---
 
+## Continuous Integration: Automated Builds
+
+Starting in Phase 4, images are built automatically by GitHub Actions on every push to `main` and on manual dispatch. The workflow:
+
+1. Runs all tests (36 in `booking-service`, 38 in `queue-gate`)
+2. Builds JARs and container images for both services
+3. Pushes images to ghcr.io tagged with the commit SHA
+
+**Publishing is currently blocked.** The push fails with `permission_denied: write_package` because the packages were created as user-owned by hand in Phase 3 and are not linked to the repository. The fix (pending with the repository owner) is one browser step:
+
+- Visit https://github.com/marwanbukhori/rembayung-queue/settings/packages
+- Select each package → Manage Actions access
+- Add `marwanbukhori/rembayung-queue` with the **Write** role
+
+Once granted, the next push to `main` will publish images and print the exact deploy command in the Actions run summary.
+
+**`deploy/scripts/build-push.sh` remains useful for:**
+
+- Local development (when you need a fresh image without pushing to GitHub)
+- Emergency rebuilds (if CI is broken or you need a one-off image)
+- Testing Dockerfile changes before committing
+
+For routine deployments from `main`, pull the tag from the Actions run summary instead of rebuilding.
+
+---
+
 ## Routine Redeploy
 
 After the initial setup, code changes flow through this pipeline:
 
-1. **Push code to GitHub** → triggers a test run
-2. **Build and push new images**
+1. **Push code to GitHub** → GitHub Actions automatically runs tests and (if publishing is enabled) builds and publishes images to ghcr.io with the commit SHA as the tag. Check the Actions run summary for the exact image tag and deploy command.
+
+2. **Update the overlay with the tag from the Actions run summary**
 
    ```bash
-   export JAVA_HOME=/opt/homebrew/opt/openjdk@25
-   deploy/scripts/build-push.sh
+   cd deploy/overlays/sandbox
+   kustomize edit set image \
+     ghcr.io/marwanbukhori/booking-service=ghcr.io/marwanbukhori/booking-service:SHA \
+     ghcr.io/marwanbukhori/queue-gate=ghcr.io/marwanbukhori/queue-gate:SHA
    ```
 
-3. **Update the overlay with the new tag** (see Step 3 above)
+   Replace `SHA` with the commit SHA printed in the Actions run summary (e.g., `a1b2c3d4e5f6...`).
 
-4. **Apply the updated deployment**
+3. **Apply the updated deployment**
 
    ```bash
    oc apply -k deploy/overlays/sandbox
    ```
 
-5. **Monitor the rollout**
+4. **Monitor the rollout**
 
    ```bash
    oc rollout status deploy/queue-gate --timeout=180s
+   ```
+
+**If publishing is not yet enabled**, or you need to rebuild images locally without pushing to GitHub:
+
+   ```bash
+   export JAVA_HOME=/opt/homebrew/opt/openjdk@25
+   deploy/scripts/build-push.sh
    ```
 
 The deployment uses `RollingUpdate` strategy by default, so old pods drain gracefully before new ones start. If you want faster feedback, tail the logs:
