@@ -3,3 +3,7 @@ logging:
     org.testcontainers: INFO
 booking-service:
   base-url: http://localhost:0
+
+management:
+  server:
+    port: ~

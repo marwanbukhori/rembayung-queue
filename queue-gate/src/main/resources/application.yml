@@ -20,3 +20,20 @@ drop:
 
 booking-service:
   base-url: http://localhost:8081
+
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,redis
+          show-details: always
