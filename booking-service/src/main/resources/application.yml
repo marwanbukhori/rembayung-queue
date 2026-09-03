@@ -1,6 +1,14 @@
 spring:
   application:
     name: booking-service
+  datasource:
+    hikari:
+      # The database is ~250ms away and a booking holds a connection for ~2.7s,
+      # so 20 connections cap throughput near 7/sec. Under overload, waiting
+      # 30 seconds (the default) for a connection is useless — the caller has
+      # long since given up, and the thread is held the whole time. Fail in two
+      # seconds instead and tell the client to retry.
+      connection-timeout: 2000
   jpa:
     hibernate:
       ddl-auto: validate
