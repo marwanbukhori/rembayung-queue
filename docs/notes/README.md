@@ -11,3 +11,4 @@ way it was — particularly where a default was rejected on correctness grounds.
 |---|---|---|
 | [01 — Project skeleton and Spring Boot basics](01-project-skeleton-and-spring-boot-basics.md) | Maven, `pom.xml`, dependency injection, auto-configuration, profiles, Testcontainers wiring | `4c1b8aa` |
 | [02 — Database schema and Flyway](02-database-schema-and-flyway.md) | Versioned migrations, the anti-oversell CHECK constraint, idempotency at the database, Oracle type notes | `a553c86`, `e140dcf` |
+| [03 — How this runs](03-how-this-runs.md) | What triggers the code, why there is no HTTP layer or UI yet, and how to run the concurrency proof by hand | — |
