@@ -42,16 +42,16 @@ class QueueServiceTest extends RedisTestBase {
 
     @Test
     void positionAndEtaReflectHowFarAdmissionHasAdvanced() {
-        for (int i = 0; i < 399; i++) {
+        for (int i = 0; i < 149; i++) {
             queueService.join();
         }
-        clock().advance(Duration.ofSeconds(1));   // 200 admitted
+        clock().advance(Duration.ofMillis(500));   // 100 admitted at 200/s
 
-        JoinResult result = queueService.join();  // ticket 400
+        JoinResult result = queueService.join();   // ticket 150
 
-        assertThat(result.ticket()).isEqualTo(400);
-        assertThat(result.position()).isEqualTo(200);
-        assertThat(result.etaSeconds()).isEqualTo(1.0);
+        assertThat(result.ticket()).isEqualTo(150);
+        assertThat(result.position()).isEqualTo(50);
+        assertThat(result.etaSeconds()).isEqualTo(0.25);
         assertThat(result.admitted()).isFalse();
     }
 
