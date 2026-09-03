@@ -7,4 +7,4 @@ images:
   - name: ghcr.io/marwanbukhori/queue-gate
     newTag: 270288f
   - name: ghcr.io/marwanbukhori/booking-service
-    newTag: b5cc878
+    newTag: 66393c1
