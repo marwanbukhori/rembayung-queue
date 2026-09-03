@@ -7,3 +7,6 @@ resources:
   - queue-gate/deployment.yaml
   - queue-gate/service.yaml
   - queue-gate/route.yaml
+  - booking-service/deployment.yaml
+  - booking-service/service.yaml
+  - networkpolicy.yaml

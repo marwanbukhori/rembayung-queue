@@ -5,4 +5,6 @@ resources:
   - ../../base
 images:
   - name: ghcr.io/marwanbukhori/queue-gate
+    newTag: 270288f
+  - name: ghcr.io/marwanbukhori/booking-service
     newTag: 4dbb543
