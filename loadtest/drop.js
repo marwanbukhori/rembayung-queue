@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 
 const bookingsCreated = new Counter('bookings_created');
@@ -58,9 +58,16 @@ export default function () {
 
   const token = join.json('token');
 
-  for (let i = 0; i < 30; i++) {
+  // Poll roughly once a second, as a real client would, for long enough to
+  // outlast the queue. A tight spin of 30 requests covers only ~9 seconds; at a
+  // realistic admit rate the later tickets are not admitted by then, so they
+  // would book unadmitted and take a 403 that says nothing about the system.
+  const pollSeconds = Number(__ENV.POLL_SECONDS || 90);
+  for (let i = 0; i < pollSeconds; i++) {
     const poll = http.get(`${GATE}/queue/${token}`);
     if (poll.status === 200 && poll.json('admitted') === true) break;
+    if (poll.status === 404) break;              // token expired or unknown
+    sleep(1);
   }
 
   const booking = http.post(
