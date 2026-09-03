@@ -13,3 +13,4 @@ way it was — particularly where a default was rejected on correctness grounds.
 | [02 — Database schema and Flyway](02-database-schema-and-flyway.md) | Versioned migrations, the anti-oversell CHECK constraint, idempotency at the database, Oracle type notes | `a553c86`, `e140dcf` |
 | [03 — How this runs](03-how-this-runs.md) | What triggers the code, why there is no HTTP layer or UI yet, and how to run the concurrency proof by hand | — |
 | [04 — OpenShift deployment](04-openshift-deployment.md) | Cluster topology, boundary enforcement via Routes and NetworkPolicies, liveness vs. readiness split, image architecture and tagging, the load test undercount, and dev/prod version skew | Phase 3 |
+| [05 — Debugging on OpenShift](05-debugging-openshift.md) | The method, and the eight real failures this project hit — including the two first diagnoses that were wrong | — |
