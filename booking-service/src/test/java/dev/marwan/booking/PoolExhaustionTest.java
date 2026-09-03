@@ -22,8 +22,10 @@ class PoolExhaustionTest {
     @Test
     void connectionPoolTimeoutReturnsServiceUnavailableWithRetryAfter() {
         // When the connection pool is exhausted, Hikari throws SQLTransientConnectionException.
-        // Spring wraps this in CannotCreateTransactionException before it reaches the handler.
-        var poolTimeoutException = new CannotCreateTransactionException(
+        // Spring wraps this in DataAccessResourceFailureException (the superclass of several
+        // more specific types like CannotCreateTransactionException and CannotGetJdbcConnectionException)
+        // before it reaches the handler.
+        var poolTimeoutException = new org.springframework.dao.DataAccessResourceFailureException(
                 "Could not open JPA EntityManager for transaction",
                 new java.sql.SQLTransientConnectionException(
                         "HikariPool-1 - Connection is not available, request timed out after 2001ms"));

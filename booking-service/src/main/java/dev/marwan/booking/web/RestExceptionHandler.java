@@ -45,19 +45,19 @@ public class RestExceptionHandler {
      * 20 connections cap throughput near 7/sec. Telling the caller to retry is
      * truthful; a 500 is not.
      *
-     * Handles the actual exception type thrown when pool exhaustion occurs:
-     * CannotCreateTransactionException wraps SQLTransientConnectionException
-     * when the Hikari pool times out.
+     * Handles pool exhaustion via DataAccessResourceFailureException, which is
+     * the superclass of CannotCreateTransactionException and CannotGetJdbcConnectionException.
+     * Both are thrown when the Hikari pool times out.
      */
-    @ExceptionHandler(org.springframework.transaction.CannotCreateTransactionException.class)
-    public ResponseEntity<ApiError> overloaded(org.springframework.transaction.CannotCreateTransactionException e) {
-        // Check if this is a pool timeout by examining the cause chain
+    @ExceptionHandler(org.springframework.dao.DataAccessResourceFailureException.class)
+    public ResponseEntity<ApiError> overloaded(org.springframework.dao.DataAccessResourceFailureException e) {
+        // Check if this is a connection pool timeout by examining the cause chain
         if (isSQLTransientConnectionException(e)) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .header(HttpHeaders.RETRY_AFTER, "2")
                     .body(new ApiError("BOOKING_SERVICE_BUSY", Map.of()));
         }
-        // Not a pool timeout, let default handling occur by re-throwing
+        // Not a pool timeout, re-throw to use default error handling
         throw e;
     }
 
