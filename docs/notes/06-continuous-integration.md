@@ -1,6 +1,6 @@
 # 06 — Continuous integration
 
-**Covers:** why CI runs real Oracle instead of H2, why it builds images at all when the dev loop does not need to, why images are tagged by commit SHA and never republished, and why publishing is currently blocked
+**Covers:** why CI runs real Oracle instead of H2, why it builds images at all when the dev loop does not need to, why images are tagged by commit SHA and never republished, and what it actually took to make publishing work
 **Branch state:** `phase-1-booking-domain-core`
 
 ---
@@ -158,25 +158,79 @@ For no gain — the workflow already runs sequentially. A single job is simpler,
 
 ---
 
-## Current status: publishing is blocked
+## Publishing: how it was broken, and what it actually took
 
-**Images are not yet published.** The push fails with:
+Images publish correctly now. Getting there is worth recording, because the
+error named the symptom and not the cause, and because the fix had a second half
+that is easy to miss.
+
+The push failed with:
 
 ```
 denied: permission_denied: write_package
 ```
 
-The two packages (`booking-service` and `queue-gate`) were created by hand in Phase 3 with a personal access token. When created that way, they are user-owned and are not linked to the repository. A workflow's `GITHUB_TOKEN` can **create** new packages, but it cannot **write** to a pre-existing unlinked one.
+The misleading part: **the token was fine.** The job log prints its grants, and
+they read `Contents: read` / `Packages: write` in every failing run. Login
+succeeded and GHCR issued a `pull,push` token. So authentication worked and the
+permission was present — and the push was still refused.
 
-**The fix is one browser step, pending with the repository owner:**
+The cause was on the other side. Queried directly:
 
-1. Visit https://github.com/marwanbukhori/rembayung-queue/settings/packages
-2. Select each package → Manage Actions access
-3. Add `marwanbukhori/rembayung-queue` with the **Write** role
+```console
+$ gh api /user/packages/container/booking-service
+  owner      : marwanbukhori (User)
+  repository : null
+```
 
-Once granted, the next push will publish images and populate the Actions run summary with the deploy command.
+Both packages were created by hand in Phase 3 with a personal access token, so
+they are **user-owned with no repository linked**. `GITHUB_TOKEN`'s
+`packages: write` is scoped to *this repository*; a package that has no
+relationship to the repository is not covered by it. A workflow can freely
+**create** a new package — that one is linked at birth and writable ever after —
+but it cannot write to a pre-existing unlinked one.
 
-This is scoped to the package, not the branch or the ref. It has nothing to do with whether you are pushing to `main` or a feature branch — the `if` condition evaluated true and the step ran, so the ref was never the issue. The permission is package-specific.
+### The half that is easy to miss
+
+The fix is in each package's settings → **Manage Actions access** → **Add
+Repository** → `rembayung-queue`. That is the step everyone writes down.
+
+**Adding the repository is not enough. The new row defaults to the `Read` role,**
+and Read does not permit push. Changing it to `Write` is a separate dropdown, and
+skipping it produces the identical `write_package` denial — so it looks like the
+fix did not work at all, rather than like it was half applied.
+
+That misdiagnosis is worth the paragraph it costs. The evidence that settled it
+was accidental and better than anything designed: one repository was switched to
+`Write` and the other left at `Read`, and the next run pushed `booking-service`
+successfully and failed `queue-gate` — same job, same token, same second. One
+variable, two outcomes.
+
+### What is not the cause
+
+- **Not the branch.** The `if` guard evaluated true and the step ran; the ref was
+  never involved. The permission is scoped to the package.
+- **Not the repository's default workflow permissions.** That setting *is*
+  `read` on this repo, which looks like a smoking gun. It is not: the workflow's
+  explicit `permissions:` block overrides it, which the job log confirms by
+  printing `Packages: write`. Changing that setting would have altered something
+  that was never broken.
+- **Not the `org.opencontainers.image.source` label.** It links a package created
+  by a workflow push, and is why every *future* package will not need any of
+  this. It cannot rescue these two, for a circular reason: GHCR reads that label
+  from a manifest that has already been pushed, and the push is what is denied.
+
+### Verified working
+
+Run `33831363387`, all steps green:
+
+```
+Test booking-service   Tests run: 36, Failures: 0, Errors: 0, Skipped: 0
+Test queue-gate        Tests run: 38, Failures: 0, Errors: 0, Skipped: 0
+booking-service        linux/amd64   HTTP 200 in the registry
+queue-gate             linux/amd64   HTTP 200 in the registry
+wall clock             147s
+```
 
 ---
 

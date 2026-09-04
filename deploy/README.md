@@ -153,13 +153,16 @@ the Actions run summary (for a CI build) or from the script's own output (for a
 local one). Phase 5's playbook takes the tag as an explicit argument for this
 reason and never derives it.
 
-**Publishing is currently blocked.** The push fails with `permission_denied: write_package` because the packages were created as user-owned by hand in Phase 3 and are not linked to the repository. The fix (pending with the repository owner) is one browser step:
+**Publishing works** as of run `33831363387`. Both images are in the registry at
+the run's commit SHA, verified `linux/amd64`, and the run summary prints the exact
+`oc set image` command — copy it from there rather than retyping a tag.
 
-- Visit https://github.com/marwanbukhori/rembayung-queue/settings/packages
-- Select each package → Manage Actions access
-- Add `marwanbukhori/rembayung-queue` with the **Write** role
-
-Once granted, the next push to `main` will publish images and print the exact deploy command in the Actions run summary.
+It did not work at first: the two packages were created by hand in Phase 3 with a
+PAT, so they are user-owned and unlinked, and a repository-scoped `GITHUB_TOKEN`
+cannot write to them. Both now grant `rembayung-queue` **Write** under Package
+settings → Manage Actions access. If you ever recreate these packages by hand,
+you will need to redo that — and note that Add Repository defaults the new row to
+**Read**, which fails identically. See `docs/notes/06-continuous-integration.md`.
 
 **`deploy/scripts/build-push.sh` remains useful for:**
 

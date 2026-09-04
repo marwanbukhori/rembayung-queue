@@ -75,12 +75,11 @@ currently pins whichever was last set by hand. The playbook must take the tag as
 an explicit parameter and never derive it — deriving it is how a deploy quietly
 targets an image that does not exist.
 
-**Phase 4 is not finished.** Publishing currently fails with
-`denied: permission_denied: write_package`, because the packages were created by
-hand with a personal access token and carry no repository link. That is a
-two-minute browser fix pending with the repository owner. **Phase 5's playbook
-can be written and tested against existing tags regardless** — it consumes
-images, it does not produce them.
+**Phase 4 is complete.** Publishing was blocked by a package-permission problem
+(user-owned packages with no repository link, plus an Actions-access row left at
+the default `Read` role); both are fixed, and run `33831363387` published both
+images and verified them `linux/amd64`. So this phase has a real supply of
+CI-built tags to consume.
 
 ---
 
