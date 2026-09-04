@@ -4,3 +4,6 @@
 # from here, because it must run only when something has already gone wrong.
 - name: Discover current state and validate inputs
   ansible.builtin.include_tasks: discover.yml
+
+- name: Apply the requested tag and wait for the rollout
+  ansible.builtin.include_tasks: apply.yml

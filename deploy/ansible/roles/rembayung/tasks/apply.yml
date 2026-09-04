@@ -1,0 +1,49 @@
+---
+# strategic_merge_patch on the Deployment rather than `oc apply -k`: the overlay
+# pins a tag in git, and CD deploys a tag chosen at run time. Patching the image
+# leaves every other field the overlay owns untouched.
+- name: Set the image on each Deployment
+  kubernetes.core.k8s:
+    state: patched
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ item }}"
+    definition:
+      spec:
+        template:
+          spec:
+            containers:
+              - name: "{{ item }}"
+                image: "{{ rembayung_registry }}/{{ item }}:{{ image_tag }}"
+  loop: "{{ rembayung_services }}"
+
+# wait_condition Available is not sufficient on its own: a Deployment stays
+# Available while a new ReplicaSet is still rolling, because the old pods are
+# still serving. Progressing with reason NewReplicaSetAvailable is what actually
+# means "the new pods are up".
+- name: Wait for both rollouts to complete
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ item }}"
+    wait: true
+    wait_condition:
+      type: Progressing
+      status: "True"
+      reason: NewReplicaSetAvailable
+    wait_timeout: "{{ rembayung_rollout_timeout }}"
+  loop: "{{ rembayung_services }}"
+  register: rollout_result
+  # A timeout here means the new image will not run — a bad tag, an unpullable
+  # image, a crash loop. Do not let the play stop: rollback.yml must run.
+  ignore_errors: true
+
+- name: Roll back if either rollout failed
+  ansible.builtin.include_tasks: rollback.yml
+  vars:
+    failure_reason: >-
+      rollout did not complete within {{ rembayung_rollout_timeout }}s
+      for tag {{ image_tag }}
+  when: rollout_result is failed

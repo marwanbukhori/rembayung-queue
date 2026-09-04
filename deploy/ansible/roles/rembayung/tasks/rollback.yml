@@ -1,0 +1,5 @@
+---
+# Replaced in full by Task 4. Present so apply.yml's include resolves.
+- name: Rollback placeholder
+  ansible.builtin.fail:
+    msg: "deploy failed ({{ failure_reason }}) and rollback is not implemented yet"
