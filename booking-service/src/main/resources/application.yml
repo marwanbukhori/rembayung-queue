@@ -26,7 +26,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        # prometheus rides the management port (9090), which is not on the public
+        # Route. Adding it to a publicly routed port would publish internal
+        # timings and JVM detail to the internet.
+        include: health,prometheus
   endpoint:
     health:
       probes:
