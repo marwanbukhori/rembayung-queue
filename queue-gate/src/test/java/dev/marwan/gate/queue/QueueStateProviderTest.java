@@ -13,6 +13,8 @@ import java.time.ZoneOffset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class QueueStateProviderTest {
@@ -62,5 +64,33 @@ class QueueStateProviderTest {
 
         assertThat(state.admitted()).isGreaterThan(state.ticketsIssued());
         assertThat(state.waiting()).isZero();
+    }
+
+    // The three gauges each call current() independently. Without memoisation
+    // they take three separate Redis reads and three separate clock reads, so a
+    // scrape straddling a second boundary can publish an `admitted` that does
+    // not match the `admitted` used to derive `waiting`. Consecutive reads at
+    // the same instant must return the identical snapshot.
+    @Test
+    void returnsOneConsistentSnapshotAcrossRepeatedReadsAtTheSameInstant() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> ops = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(ops);
+        when(ops.get(anyString())).thenReturn("40");
+
+        DropProperties drop = new DropProperties(
+                OPENS, OPENS.plus(Duration.ofHours(1)), 250, 250, 1,
+                Duration.ofMinutes(5), Duration.ofMinutes(30));
+        QueueStateProvider provider = new QueueStateProvider(
+                redis, drop, Clock.fixed(OPENS.plusSeconds(10), ZoneOffset.UTC));
+
+        QueueState a = provider.current();
+        QueueState b = provider.current();
+        QueueState c = provider.current();
+
+        assertThat(a).isEqualTo(b).isEqualTo(c);
+        // and the derived field genuinely agrees with the two it is derived from
+        assertThat(a.waiting()).isEqualTo(a.ticketsIssued() - a.admitted());
+        verify(ops, times(1)).get(anyString());
     }
 }
