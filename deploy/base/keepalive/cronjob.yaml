@@ -1,0 +1,76 @@
+---
+# Keeps every pod younger than the platform's 12-hour kill.
+#
+# The Developer Sandbox idler terminates pods by AGE, not by traffic — a
+# resource-reclamation policy, not a health decision. Nothing the application
+# does can prevent it, and no amount of traffic resets the clock.
+#
+# It looked for a long time like redis was being singled out. It was not: redis
+# is simply the only workload that ever stands still. Every CD deploy replaces
+# booking-service and queue-gate pods and resets their age, while redis is never
+# redeployed, so it alone reached 12h — twice, taking the public Route down with
+# it both times, because queue-gate's readiness group includes redis.
+#
+# The dangerous version of this is not the one already seen. If no commit lands
+# in the 12 hours before a demo — exactly what a sensible person does the day
+# before one — then ALL THREE workloads age out together and the site is simply
+# dead when the link is opened.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: keepalive
+  labels:
+    app.kubernetes.io/part-of: rembayung-queue
+    app.kubernetes.io/component: platform-workaround
+spec:
+  # Every 8 hours, comfortably inside the 12-hour budget with room for a missed
+  # run. Deliberately NOT 13:00 UTC, which is 21:00 in Kuala Lumpur and the
+  # moment reservations open: restarting redis discards the queue's ticket
+  # counter and every issued admission token, which is harmless at 02:00 and
+  # ruinous mid-drop. 18:00 UTC is five hours clear of it.
+  schedule: "0 2,10,18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          # Reuses the CD account rather than minting another identity. It holds
+          # patch and get on deployments and nothing else — verified: it cannot
+          # read secrets and cannot delete anything. A rollout restart only
+          # patches an annotation on the pod template, so this is exactly the
+          # permission required and no more.
+          serviceAccountName: rembayung-cd
+          restartPolicy: Never
+          containers:
+            - name: keepalive
+              image: image-registry.openshift-image-registry.svc:5000/openshift/cli
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+
+                  # redis first, and waited for, because queue-gate's readiness
+                  # includes a redis health check: restarting them together
+                  # would take the gate out for the sum of both rollouts rather
+                  # than the longer of the two.
+                  echo "restarting redis"
+                  oc rollout restart deploy/redis
+                  oc rollout status deploy/redis --timeout=180s
+
+                  # These roll with maxUnavailable 0, so each is replaced without
+                  # dropping a request. booking-service takes ~60s to start, so
+                  # the generous timeout is expected rather than slack.
+                  for d in booking-service queue-gate; do
+                    echo "restarting ${d}"
+                    oc rollout restart "deploy/${d}"
+                    oc rollout status "deploy/${d}" --timeout=420s
+                  done
+
+                  echo "all pod ages reset"
+              resources:
+                requests: { cpu: 10m, memory: 64Mi }
+                limits:   { cpu: 100m, memory: 128Mi }

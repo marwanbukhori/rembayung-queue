@@ -13,6 +13,7 @@ resources:
   - booking-service/hpa.yaml
   - networkpolicy.yaml
   - observability
+  - keepalive
 labels:
   - pairs:
       app.kubernetes.io/part-of: rembayung-queue
