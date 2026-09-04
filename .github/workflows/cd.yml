@@ -37,6 +37,16 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    # Environment rather than a bare repository secret, so OPENSHIFT_TOKEN is
+    # readable only by a job that declares it. A repository secret is visible to
+    # every workflow in the repo — and this one is public, so a merged pull
+    # request adding a workflow would inherit cluster credentials.
+    #
+    # It also gives the Environments tab a real deployment history: what was
+    # deployed, when, from which commit, with a link to the running system.
+    environment:
+      name: sandbox
+      url: https://queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com
     runs-on: ubuntu-latest
     # 40 minutes, not 20, and the margin is not padding.
     #
