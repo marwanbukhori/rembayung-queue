@@ -36,6 +36,61 @@ spec:
         app.kubernetes.io/component: gateway
         app.openshift.io/runtime: spring-boot
     spec:
+      # Application-only OneAgent, not full-stack. Full-stack wants a
+      # privileged DaemonSet or the Dynatrace operator; this sandbox grants
+      # only restricted-v2 and denies `get nodes`, so neither is available.
+      # What this buys is distributed traces and the service map. It does NOT
+      # buy host, process or infrastructure metrics, and claiming otherwise
+      # would be false.
+      initContainers:
+        - name: dynatrace-agent
+          # alpine, not ubi-minimal. The PaaS installer is a ZIP and it has to
+          # be unpacked as the arbitrary non-root UID restricted-v2 assigns.
+          # ubi-minimal ships no unzip and `microdnf install` needs root, so
+          # the obvious base image cannot extract its own download here.
+          # busybox gives us TLS wget and unzip with nothing to install.
+          image: alpine:3.20
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              if [ -z "$DT_API_URL" ] || [ -z "$DT_PAAS_TOKEN" ]; then
+                echo "Secret 'dynatrace' is absent. Instrumenting the JVM makes"
+                echo "the agent a hard dependency: -agentpath cannot be made"
+                echo "conditional, so the pod cannot start without it."
+                exit 1
+              fi
+              wget -q -O /dynatrace/agent.zip \
+                "${DT_API_URL}/v1/deployment/installer/agent/unix/paas/latest?Api-Token=${DT_PAAS_TOKEN}&flavor=default&arch=x86&bitness=64"
+              mkdir -p /dynatrace/agent
+              unzip -q /dynatrace/agent.zip -d /dynatrace/agent
+              # Freed before the JVM starts: the archive and its contents share
+              # one emptyDir, and only the unpacked tree is needed from here.
+              rm -f /dynatrace/agent.zip
+              # Printed, not assumed. The layout inside the archive is version
+              # dependent and a wrong -agentpath stops the JVM from starting at
+              # all, so the path JAVA_TOOL_OPTIONS names is visible in these
+              # logs for anyone checking it against the manifest.
+              find /dynatrace/agent -name liboneagent.so
+          env:
+            - name: DT_API_URL
+              valueFrom:
+                secretKeyRef: { name: dynatrace, key: api-url, optional: true }
+            - name: DT_PAAS_TOKEN
+              valueFrom:
+                secretKeyRef: { name: dynatrace, key: paas-token, optional: true }
+          # Stated rather than inherited. The namespace LimitRange would
+          # otherwise default this container to 1 CPU / 1000Mi, and a pod's
+          # effective limit is the max of its init container and the sum of its
+          # app containers — so the default would inflate what the deployment
+          # charges the quota for the whole pod's lifetime.
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - name: dynatrace-agent
+              mountPath: /dynatrace
       containers:
         - name: queue-gate
           image: ghcr.io/marwanbukhori/queue-gate
@@ -68,14 +123,48 @@ spec:
             - name: SPRING_PROFILES_INCLUDE
               valueFrom:
                 secretKeyRef: { name: splunk-hec, key: profile, optional: true }
+            # The agent is loaded by the JVM itself, so this is a hard
+            # dependency: unlike the Splunk keys above, `optional: true` on the
+            # secret only changes how the failure reads, not whether the pod
+            # can start. The path is the one the initContainer's `find` reports.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-agentpath:/dynatrace/agent/agent/lib64/liboneagent.so"
+          volumeMounts:
+            - name: dynatrace-agent
+              mountPath: /dynatrace
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits:   { cpu: 500m, memory: 512Mi }
           livenessProbe:
             httpGet: { path: /actuator/health/liveness, port: management }
+            # Explicit, though 1s would do: the liveness group is livenessState
+            # only and answers in 2.5-7.8ms because it deliberately does NOT
+            # touch Redis. That asymmetry is the point — a dependency outage
+            # should make a pod unready, never restart it.
+            timeoutSeconds: 3
             initialDelaySeconds: 20
             periodSeconds: 10
           readinessProbe:
             httpGet: { path: /actuator/health/readiness, port: management }
+            # 5s, not the 1s default, and the default is what broke a real
+            # deploy. This group includes `redis`, so the check crosses the network
+            # to Redis. Measured in-cluster: 0.26s, 0.26s, 0.51s, 0.51s, 0.54s —
+            # already 26-54% of a 1s budget with nothing left for a GC pause,
+            # pool contention, or a slow round trip.
+            #
+            # Under a rollout it reliably exceeded 1s: a cold JVM with an
+            # initialising connection pool is the worst case, which is exactly
+            # when the probe runs. CD deployed 2c60885, both new pods failed
+            # readiness, the rollout wait timed out, and the playbook rolled the
+            # whole thing back. The images were fine; the probe budget was not.
+            timeoutSeconds: 5
             initialDelaySeconds: 10
             periodSeconds: 5
+      volumes:
+        # Holds the 217MB archive and its unpacked contents at the same
+        # time, briefly. sizeLimit is what turns an over-large future agent
+        # build into an evicted pod with a clear reason instead of quiet node
+        # disk pressure; 2Gi is roughly triple the measured high-water mark.
+        - name: dynatrace-agent
+          emptyDir:
+            sizeLimit: 2Gi
