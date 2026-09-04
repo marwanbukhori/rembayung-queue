@@ -226,6 +226,74 @@ moment the sandbox is gone, regardless of whether the secret is updated.
 
 ---
 
+## Observability
+
+Metrics, traces and logs are split across three tools by job — see
+`docs/notes/08-observability.md` for the full reasoning, including what the
+sandbox's SCC ruled out and why Prometheus is the one piece that has to
+outlive the other two.
+
+### Metrics: Prometheus, on the management port only
+
+Both services expose `/actuator/prometheus` on their **management port
+(9090)**, not on the port behind the public Route. This is deliberate — a
+publicly routed metrics endpoint would publish internal timings and JVM
+detail to the internet. Confirmed structurally, not just left unrouted:
+
+```
+curl https://queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com/actuator/prometheus
+-> 404
+```
+
+The whole actuator tree — `/actuator`, `/actuator/health`,
+`/actuator/prometheus` — is absent from the Route. There is no address on
+the internet that reaches these endpoints.
+
+**Viewing metrics in the OpenShift console:** open the project, switch to
+the **Developer** perspective, and go to **Observe**. The `ServiceMonitor`
+(`deploy/base/observability/servicemonitor.yaml`) targets the named
+`management` port on both Services, so `rembayung_slot_*` and
+`rembayung_queue_*` series appear there once an image built after Task 1/2
+is deployed. To query directly instead, `oc exec` into an ephemeral pod on
+the cluster network and curl port 9090 — the JRE-based application images
+have no `curl` themselves.
+
+### Alerts
+
+`deploy/base/observability/prometheusrule.yaml` defines five rules:
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `RedisDown` | `redis` has zero ready replicas for 2m | critical |
+| `ServiceHasNoEndpoints` | `queue-gate` or `booking-service` has no endpoints for 2m | critical |
+| `SlotOversold` | `rembayung_slot_oversold > 0`, with no debounce (`for: 0m`) | critical |
+| `BookingLatencyDegraded` | `/bookings` p99 exceeds 10s for 5m | warning |
+| `DeployStuck` | any Deployment in the namespace has unavailable replicas for 10m | warning |
+
+`RedisDown` exists because of a real incident: Redis drifted to zero
+replicas and the public Route served 503 for roughly nine hours before
+anyone noticed, because nothing was watching (`docs/notes/07`).
+`SlotOversold` fires with zero debounce because it is redundant with the
+database's own `ck_slots_seats` CHECK constraint — if it ever moves off
+zero, either that invariant broke or the metric is lying, and both deserve
+immediate attention (`docs/notes/08`).
+
+### Traces and logs are on the clock; Prometheus is not
+
+Dynatrace (traces and service topology, application-only OneAgent — no
+`privileged` SCC to run full-stack) and Splunk (structured JSON logs over
+HTTP Event Collector) are both **trial accounts** and both expire soon:
+Dynatrace around **2026-09-19**, Splunk around **2026-09-18**. After those
+dates, tracing and log search on this cluster stop, regardless of what else
+is true about the deployment.
+
+**Prometheus does not expire.** It is the cluster's own in-cluster stack,
+costs no SaaS quota, and is the reason the alert rules above — the ones
+that have to keep watching this system — are `PrometheusRule` objects and
+not a Dynatrace policy or a Splunk saved search.
+
+---
+
 ## Routine Redeploy
 
 After the initial setup, code changes flow through this pipeline:
