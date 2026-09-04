@@ -21,6 +21,18 @@ spec:
   # gives the same behaviour. Relying on that was wrong twice over: it is a
   # value we do not control, and it silently stops holding at 5 replicas,
   # where 25% rounds to 1. Stating 0 keeps the property at any replica count.
+
+  # Revision history, and not cosmetic here. This sandbox caps the namespace at 30 ReplicaSets, the
+  # default keeps 10 revisions per Deployment, and every manifest change makes
+  # one more. That ceiling was reached during this task: the controller stopped
+  # creating ReplicaSets with `exceeded quota: count/replicasets.apps=30` and
+  # the rollout silently stalled at "waiting for spec update to be observed" —
+  # a rollout that never starts, reported as one that never finishes.
+  #
+  # 5 is safe because rollback does not depend on ReplicaSet history: the
+  # playbook re-applies the previous tag rather than running `oc rollout undo`,
+  # precisely so a pruned history cannot cost it a rollback.
+  revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -61,8 +73,15 @@ spec:
                 echo "conditional, so the pod cannot start without it."
                 exit 1
               fi
+              # The token travels in a header, never in the query string. A URL
+              # carrying a credential is visible in `ps` to anything that can
+              # list processes on the node, is written in full to the access log
+              # of any proxy between here and Dynatrace, and is echoed back into
+              # pod logs by some non-2xx responses. This token is valid for the
+              # life of the tenant, so one leak is a working credential.
               wget -q -O /dynatrace/agent.zip \
-                "${DT_API_URL}/v1/deployment/installer/agent/unix/paas/latest?Api-Token=${DT_PAAS_TOKEN}&flavor=default&arch=x86&bitness=64"
+                --header="Authorization: Api-Token ${DT_PAAS_TOKEN}" \
+                "${DT_API_URL}/v1/deployment/installer/agent/unix/paas/latest?flavor=default&arch=x86&bitness=64"
               mkdir -p /dynatrace/agent
               unzip -q /dynatrace/agent.zip -d /dynatrace/agent
               # Freed before the JVM starts: the archive and its contents share
@@ -71,8 +90,11 @@ spec:
               # Printed, not assumed. The layout inside the archive is version
               # dependent and a wrong -agentpath stops the JVM from starting at
               # all, so the path JAVA_TOOL_OPTIONS names is visible in these
-              # logs for anyone checking it against the manifest.
-              find /dynatrace/agent -name liboneagent.so
+              # logs for anyone checking it against the manifest. There is no
+              # liboneagent.so in the archive at all; manifest.json marks
+              # liboneagentloader.so as the loader for the java technology, and
+              # that is the file the JVM must be pointed at.
+              find /dynatrace/agent -name liboneagentloader.so
           env:
             - name: DT_API_URL
               valueFrom:
@@ -126,15 +148,33 @@ spec:
             # The agent is loaded by the JVM itself, so this is a hard
             # dependency: unlike the Splunk keys above, `optional: true` on the
             # secret only changes how the failure reads, not whether the pod
-            # can start. The path is the one the initContainer's `find` reports.
+            # can start. The path is the one the initContainer's `find` reports
+            # — checked by running `java -agentpath:... -version` inside a live
+            # container before any rollout was allowed to depend on it.
             - name: JAVA_TOOL_OPTIONS
-              value: "-agentpath:/dynatrace/agent/agent/lib64/liboneagent.so"
+              value: "-agentpath:/dynatrace/agent/agent/lib64/liboneagentloader.so"
           volumeMounts:
             - name: dynatrace-agent
               mountPath: /dynatrace
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits:   { cpu: 500m, memory: 512Mi }
+          # Added with the agent, not before it. Loading OneAgent costs about
+          # 30 extra seconds of JVM start: measured, queue-gate went from
+          # roughly 10s to "Started QueueGateApplication in 40.386 seconds".
+          # That is past initialDelaySeconds + failureThreshold x periodSeconds
+          # on the liveness probe below, so the first instrumented rollout
+          # crash looped — every pod killed a second or two after Spring
+          # finished starting, which reads as a broken image and is not one.
+          #
+          # A startupProbe is the fix rather than a longer initialDelay: it
+          # holds liveness and readiness off until the app answers once and
+          # then hands over to the tight liveness probe, so a slow start is
+          # tolerated without making a hung process take 150s to notice.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: management }
+            periodSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             httpGet: { path: /actuator/health/liveness, port: management }
             # Explicit, though 1s would do: the liveness group is livenessState
@@ -161,10 +201,12 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
       volumes:
-        # Holds the 217MB archive and its unpacked contents at the same
-        # time, briefly. sizeLimit is what turns an over-large future agent
-        # build into an evicted pod with a clear reason instead of quiet node
-        # disk pressure; 2Gi is roughly triple the measured high-water mark.
+        # Holds the archive and its unpacked contents at the same time,
+        # briefly: 217MB downloaded on top of 514MB extracted, measured at
+        # agent 1.343.106, so a ~731MB high-water mark before the zip is
+        # deleted. sizeLimit is what turns an over-large future agent build
+        # into an evicted pod with a clear reason instead of quiet node disk
+        # pressure; 2Gi leaves roughly 2.8x headroom over what was measured.
         - name: dynatrace-agent
           emptyDir:
             sizeLimit: 2Gi
