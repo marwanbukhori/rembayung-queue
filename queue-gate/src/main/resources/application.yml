@@ -27,7 +27,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        # Management port 9090 only — it is not on the public Route.
+        include: health,prometheus
   endpoint:
     health:
       probes:
