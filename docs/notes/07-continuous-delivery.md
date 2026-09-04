@@ -126,9 +126,11 @@ The playbook is a decision procedure. `oc set image` is one step inside it.
 Kubernetes API directly. Two things follow that matter:
 
 **It is declarative in the same way the manifests are.** Re-running with the
-same tag is a genuine no-op — measured: `changed=0`, and all three Deployment
-generations unchanged (9, 68, 6). A shell-out would have to parse text to know
-that.
+same tag is a genuine no-op — measured: `changed=0`, with `booking-service`
+still at generation 9 and `queue-gate` at 68. Those are the two the playbook
+manages; `redis` also sits in the namespace, but the playbook never touches it,
+so its generation is not evidence of anything. A shell-out would have to parse
+text to know any of this.
 
 **The playbook is portable to Ansible Automation Platform unchanged.** That is
 the production story: the same role, run by an AAP Job Template with a managed
