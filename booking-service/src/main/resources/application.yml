@@ -9,6 +9,23 @@ spring:
       # long since given up, and the thread is held the whole time. Fail in two
       # seconds instead and tell the client to retry.
       connection-timeout: 2000
+      # 5, not Hikari's default of 10, because the pool is PER JVM and the
+      # database's session budget is shared across all of them.
+      #
+      #   sessions = replicas x maximum-pool-size
+      #
+      # The HPA is allowed 4 replicas, and Oracle Autonomous Database on the
+      # Always Free tier caps sessions near 20. At the default of 10 a scale to
+      # 4 would ask for 40 sessions against a 20 cap — so autoscaling, the thing
+      # meant to absorb the 21:00 spike, would itself take the database down at
+      # exactly the moment it engaged. 4 x 5 = 20 fits.
+      #
+      # Four pods with a pool of 5 beats two pods with a pool of 10: the same
+      # database footprint, twice the HTTP concurrency, and one pod dying costs
+      # a quarter of capacity instead of half. It does not raise booking
+      # throughput — that is bounded by one row lock at about 1/second — but
+      # throughput was never what more replicas were for.
+      maximum-pool-size: 5
   jpa:
     hibernate:
       ddl-auto: validate

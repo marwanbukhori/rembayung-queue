@@ -8,6 +8,13 @@ spec:
     kind: Deployment
     name: booking-service
   minReplicas: 2
+  # 4 is not a round number, it is a division: Oracle Autonomous Database on the
+  # Always Free tier caps sessions near 20, and each replica holds its own
+  # Hikari pool of 5 (see booking-service application.yml). 4 x 5 = 20.
+  #
+  # Raising this without shrinking the pool would let autoscaling exhaust the
+  # database's sessions during the 21:00 spike — the HPA would cause the outage
+  # it exists to prevent. The two numbers must be changed together.
   maxReplicas: 4
   metrics:
     - type: Resource
