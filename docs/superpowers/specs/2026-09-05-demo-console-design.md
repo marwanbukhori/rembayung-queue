@@ -1,7 +1,7 @@
 # Demo Console — Design (Phase 7)
 
 **Date:** 2026-09-05
-**Status:** Draft, awaiting review
+**Status:** Draft, awaiting review — **supersedes the first draft of this file**
 **Phase:** 7 of the Rembayung booking queue build
 **Parent spec:** [`2026-09-02-rembayung-booking-queue-design.md`](2026-09-02-rembayung-booking-queue-design.md)
 **Previous phase:** [`2026-09-04-observability-design.md`](2026-09-04-observability-design.md)
@@ -10,244 +10,256 @@
 
 ## 1. Purpose
 
-Six phases have produced a system whose most interesting property — 250 seats
-never oversold under a synchronised burst — is **invisible**. It lives in `curl`,
-SQL prompts and log greps. A hiring manager will not clone a repository.
+Six phases produced a system whose most interesting property — 250 seats never
+oversold under a synchronised burst — is invisible. It lives in `curl`, SQL
+prompts and log greps.
 
-This phase builds a **deployed, authenticated console** that makes the system
-demonstrable: every operation currently held in a shell script or a SQL snippet
-becomes a button, the traffic becomes something you can watch, and the
-documentation becomes something you can read in place.
+This phase builds a **deployed console that a stranger can drive**. Not watch:
+drive. The target user is a hiring manager, opening a link three or four days
+before an interview, with no cluster account, running a real drop against real
+Oracle and watching the invariant hold.
 
-The model is an **internal developer platform**: one front door onto a system,
-where the things an operator needs to do are named, safe and repeatable rather
-than remembered.
+The model is an internal developer platform: one front door, where every
+operation currently trapped in a shell script or a SQL snippet is a named, safe,
+repeatable action.
 
-**The honest framing for an interview:** this is not a product feature. It is a
-control plane for a demo, and the interesting content is what it controls —
-admission rate, rollback, a database invariant — not the console itself.
-
----
-
-## 2. The constraint that shapes everything
-
-**Every button is a privileged action on a live cluster.** Reset the database,
-open the drop, roll back a deploy, scale a Deployment. Exposed carelessly, that
-is a public endpoint that truncates tables and restarts production.
-
-So the design is built around three rules, in priority order:
-
-1. **Authenticated before anything mutating.** No exceptions, no "it's only a
-   demo" endpoints.
-2. **Enumerated operations, never arbitrary commands.** The console exposes a
-   fixed list of named actions. It never accepts a command, a script path, or
-   SQL from the browser. A console that can run arbitrary `oc` is a remote shell
-   with a login form.
-3. **The console's own permissions are the ceiling.** It holds a ServiceAccount
-   scoped to this namespace with no access to Secrets — the same boundary CD
-   already proved.
+**The first draft of this spec gated all controls behind OpenShift OAuth.** That
+was wrong for this goal — it gates on *cluster* identity, which the intended user
+will never have. Rewritten around the real requirement.
 
 ---
 
-## 3. Authentication
+## 2. What the requirement actually forces
 
-**OpenShift OAuth, via `oauth-proxy` as a sidecar.**
+An outsider driving real operations changes three things from the first draft.
 
-The console pods run two containers: the application, listening only on
-localhost, and `openshift/oauth-proxy`, which terminates the Route and forwards
-only authenticated requests.
+**Authentication cannot be OpenShift OAuth.** It has to be a credential you can
+hand someone.
 
-Why this rather than a password:
+**Operations cannot share global state.** Today the gate has exactly one drop: a
+single `queue:ticket` counter in Redis, and a window in `DropProperties` read
+from environment variables at startup. Two visitors would fight over the same
+counter, and changing the window needs a pod restart. **This phase therefore
+changes the gate**, not just the frontend.
 
-- **Nothing to store.** No password hash, no session secret, no rotation. The
-  project's single stored credential stays `OPENSHIFT_TOKEN`.
-- **It is the same identity that owns the cluster.** Access to the console and
-  access to the namespace are the same grant, so there is no second thing to
-  revoke.
-- **It is the platform's own mechanism**, which is a better answer than a
-  bespoke login when the question is "how did you secure it".
-
-The cost is real and worth stating: **a hiring manager cannot open it without a
-cluster account.** That directly contradicts the goal of handing someone a link.
-
-**Resolution: two surfaces, one application.**
-
-| Surface | Auth | Content |
-|---|---|---|
-| **Public** `/` | none | Read-only. Live seats, queue depth, oversold, pod health, recent deploys, rendered documentation. No write endpoint exists on this path. |
-| **Operator** `/ops` | OAuth | Every action. Reset, open drop, deploy, roll back, scale, run a load profile. |
-
-A visitor gets the demo without an account. You get the controls. The split is
-enforced by the proxy at the Route, not by a check inside the application, so a
-missed `if` cannot expose a button.
+**Load has to originate somewhere the visitor can trigger.** The first draft said
+"run k6 from your laptop", which is correct engineering and useless to a stranger.
 
 ---
 
-## 4. Architecture
+## 3. Per-visitor sandboxes: the idea the rest depends on
+
+Rather than protecting a single shared demo with warnings and confirmations,
+**give each visitor their own.**
+
+A session gets a **drop** — an identifier, its own slot row, its own ticket
+counter, its own window:
 
 ```
-                     Route: console
-                          │
-                    ┌─────┴─────┐
-                    │oauth-proxy│  /ops/*  → requires OpenShift login
-                    │  sidecar  │  /       → passes through
-                    └─────┬─────┘
-                          │ localhost only
-                  ┌───────┴────────┐
-                  │  console-api   │  Spring Boot
-                  └───┬────┬───┬───┘
-                      │    │   │
-        ┌─────────────┘    │   └──────────────┐
-        │                  │                  │
-  Kubernetes API      booking-service    docs on disk
-  (fabric8, SA)       /internal/state    (baked into image)
-  scale, rollout,     queue-gate
-  pod status          /internal/state
+drop  d-7f3a91
+  slot        1042        seeded on demand, 250 seats, its own row
+  redis keys  queue:d-7f3a91:ticket
+              admit:d-7f3a91:<token>
+  window      opensAt / closesAt / admitRate, held in Redis
 ```
 
-**Read path.** The console never queries Oracle or Redis directly. It calls
-internal state endpoints on the two existing services, which are backed by
-`SlotStateProvider` and `QueueStateProvider` from Phase 6. That rule was written
-into Phase 6's spec specifically so this phase could not fork the computation of
-the project's central number.
+Everything follows from this:
 
-**This phase adds those internal endpoints** — Phase 6 built the providers and
-deliberately stopped short of exposing them.
+- **"Reset" stops being destructive.** It means *a new drop*, not
+  `DELETE FROM bookings`. Nobody truncates anything.
+- **Visitors cannot interfere with each other**, or with the canonical slot 1.
+- **The invariant is proven per-visitor.** Their drop, their 250 seats, their
+  oversold gauge reading zero.
+- **Confirmation dialogs mostly disappear**, because the blast radius does.
 
-**Write path.** Enumerated operations only, each mapping to one Kubernetes API
-call or one parameterised SQL statement. No shell.
+### What it costs in the gate
+
+| Change | Why |
+|---|---|
+| Key namespacing: `queue:{dropId}:ticket`, `admit:{dropId}:{token}` | One counter per drop instead of one globally |
+| Drop windows move from `DropProperties` to a Redis record | A new drop must be creatable without restarting a pod |
+| `POST /queue` takes a drop id; `DropProperties` becomes the default drop's seed values | Requests must say which drop they mean |
+| Slot seeding endpoint on booking-service | A drop needs a slot row of its own |
+| TTL on drop records and their slots | Sandboxes must expire, or the database fills with abandoned demos |
+
+This is contained — it is namespacing plus moving config into data — but it is
+real work in the service that currently has the project's cleanest code. It also
+**improves** the design: a booking system with exactly one possible drop was
+always a demo artefact rather than a model of the domain.
 
 ---
 
-## 5. What the console actually does
+## 4. Authentication
 
-### Public surface
+**Issued access keys**, not OpenShift OAuth.
 
-**Live state**, polled every two seconds:
+You mint a key per recipient — `hiring-manager-acme`, `recruiter-b` — and give it
+out. The console accepts it as a header or a URL fragment, stores nothing about
+the person, and every operator action is logged against the key that performed
+it.
+
+Why this over the alternatives:
+
+| Option | Verdict |
+|---|---|
+| OpenShift OAuth | **Rejected.** Gates on cluster identity the visitor cannot have — the flaw in the first draft. |
+| One shared password | Workable, but a single revocation revokes everyone and the audit log cannot tell them apart. |
+| **Per-recipient keys** | **Chosen.** Revoke one without disturbing others; the log says who ran what; issuing one is free. |
+| No auth | Rejected. Even sandboxed, this triggers deploys and consumes cluster resources. |
+
+Keys live in a Kubernetes Secret as a simple map, so adding or revoking one is a
+`oc patch` and a pod restart — no user store, no password hashing, no session
+database. Expiry is a date in the value; the console refuses a key past it.
+
+**Three tiers, because not every operation deserves the same trust:**
 
 ```
-  slot 1 · 2026-10-01 19:00
-  seats     ████████████░░░  202 / 250
-  queue     ░░░░░░░░░░░░░░     0 waiting
-  oversold                     0        ← the whole project, in one number
-  pods      booking 2/2   gate 2/2   redis 1/1
+public      no key     read-only: live state, docs, deploy history
+visitor     a key      own sandbox: create a drop, run load, book, reset
+operator    your key   global: deploy, roll back, scale, edit the canonical slot
 ```
 
-**Deploy history** — image tag, commit, when, and whether it rolled back. Read
-from the Deployments' own annotations, so it cannot disagree with reality.
-
-**Documentation**, rendered from Markdown baked into the image: the nine notes,
-the seven specs, the five plans. This is the part most likely to be read by
-someone evaluating you, and it costs almost nothing.
-
-**Links out** to OpenShift's console, the Dynatrace tenant, and the Splunk stack,
-with a plain note that the last two are trials and may have expired.
-
-### Operator surface
-
-Each is one named operation, not a command box:
-
-| Operation | Implementation | Danger |
-|---|---|---|
-| Open the drop | patch `queue-gate-config`, roll out | low |
-| Reset the queue | `FLUSHALL` via the gate's own admin path | low |
-| Reset seats | one parameterised `UPDATE booking.slots SET seats_taken = 0` | **destructive** |
-| Pre-scale the gate | scale Deployment to 10 | quota-bound |
-| Scale back | scale to 2 | low |
-| Deploy a tag | trigger the CD workflow | outward-facing |
-| Roll back | trigger CD with a previous tag | outward-facing |
-| Run a load profile | see §6 | see §6 |
-
-Destructive operations require a typed confirmation of the slot id. Not a modal
-with an OK button — the operator has to name the thing they are about to wipe.
+A hiring manager gets a **visitor** key. It cannot touch slot 1, cannot deploy,
+cannot scale. It can do everything interesting inside its own sandbox.
 
 ---
 
-## 6. The load test, and why it does not run in the cluster
+## 5. Load generation, and the honest tradeoff
 
-Tempting: a "run a load test" button that starts k6 in a pod.
+A visitor must be able to *cause* the burst. That means load originates in the
+cluster, which the first draft rejected. The rejection was right on the
+engineering and wrong on the requirement, so here is the trade, stated plainly.
 
-**Rejected, on the same evidence that removed AAP and Jenkins.** The namespace
-budget is 3000m; the autoscaling demonstration needs roughly 1900m; the console
-itself will take ~200m. A load generator inside that budget competes for CPU
-with the system it is measuring, and the numbers it produces are then about the
-contention, not the system.
+**Bounded k6 as a Kubernetes Job**, capped at **200 virtual users**.
 
-There is a second reason that matters more. The measured edge ceiling is 600–800
-concurrent connections at the sandbox router. Load originating *inside* the
-cluster bypasses that path entirely, so an in-cluster run would not exercise the
-thing the load test exists to exercise.
+200 is not a compromise number — it is the measured ceiling of usefulness.
+Phase 3's ladder found that beyond ~200 the sandbox router sheds connections
+before they reach the application:
 
-**Instead:** the console shows the exact `k6` command for a chosen profile, ready
-to copy, and then *watches* — the live view updates as the burst lands. Load
-originates from a laptop, which is where load belongs.
+```
+offered   arrived   failed
+   200       200       0%
+  1000       662      75%
+  3000       818      92%
+```
 
-This is a better demo anyway. "I'll run this from my machine and we watch it
-together" beats a spinner.
+Above 200, a bigger number tests the router, not the system. So the cap costs
+nothing real and keeps the Job inside ~200m CPU.
+
+**What is genuinely lost:** in-cluster load skips the public Route, so it does not
+exercise the ingress path a real user crosses. The console must say so on the
+page rather than implying otherwise. A visitor sees the queue, the admission
+rate and the invariant — all of which are the point — but not edge behaviour.
+
+**Guards:** one running load Job per drop, a hard 5-minute deadline,
+`activeDeadlineSeconds` set, and a namespace-wide concurrent-Job cap so ten
+enthusiastic visitors cannot exhaust the 3000m budget between them.
+
+---
+
+## 6. What the console does
+
+### Public — no key
+
+Live state of the canonical drop, pod health, `oversold = 0`, deploy history read
+from Deployment annotations, links out to OpenShift, Dynatrace and Splunk (with a
+plain note that the last two are trials and may have expired), and the
+documentation — nine notes, seven specs, five plans — rendered from Markdown
+baked into the image.
+
+### Visitor — an issued key
+
+```
+  Your drop                                    d-7f3a91
+  [ Create a fresh drop ]  [ Open it ▸ ]  [ Send 200 customers ▸ ]
+
+  slot 1042 · yours
+  seats     ████████████░░░   198 / 250
+  queue     ████░░░░░░░░░░     42 waiting
+  admitted                     56
+  oversold                      0     ← the claim, on your own data
+
+  admission rate  [ 1/s ]  [ 8/s ]  [ 200/s ]   ← watch this break things
+```
+
+That last control is the demo. At 200/s the connection pool exhausts and the
+service starts refusing with `503` and `Retry-After` — **and the invariant still
+holds at zero.** A visitor discovering that themselves is worth more than any
+paragraph in a README.
+
+### Operator — your key
+
+Deploy a tag, roll back, scale, open the canonical drop, reset slot 1, run the
+keepalive job.
+
+**Deploy and rollback are worth exposing** despite being outward-facing, because
+Phase 5 proved the safety net works unattended: a bad tag times out, rolls back
+each service to its own previous tag, re-verifies, and exits non-zero, with the
+site serving `200` throughout. "Deploy something broken and watch it heal" is the
+strongest thing this project can show. It stays operator-tier because it affects
+everyone, not because it is dangerous.
 
 ---
 
 ## 7. Security
 
-Beyond §2 and §3:
-
-- **The ServiceAccount cannot read Secrets.** Same boundary as `rembayung-cd`,
-  verified there with `oc auth can-i get secrets` → `no`.
-- **SQL is parameterised and enumerated.** The console holds a handful of named
-  statements. There is no path from an HTTP request to arbitrary SQL.
-- **The database credential is a Secret mounted into the console pod**, never
-  sent to the browser, never logged.
-- **The public surface has no write endpoints at all** — not disabled ones,
-  absent ones. Nothing to reach even if the proxy were misconfigured.
-- **Every operator action is logged** as a structured JSON line carrying the
-  authenticated user, the operation, and the outcome. Those go to Splunk with
-  everything else, which makes the audit trail a demonstration in itself.
+- **Enumerated operations only.** No command box, no script path, no SQL from the
+  browser. A console that runs arbitrary `oc` is a remote shell with a login form.
+- **Visitor keys are scoped by drop id**, checked server-side on every request.
+  A visitor naming someone else's drop is refused; ownership is not a UI concern.
+- **The ServiceAccount cannot read Secrets** — the same boundary `rembayung-cd`
+  already proved with `oc auth can-i get secrets` → `no`.
+- **SQL is parameterised and enumerated**, and visitor-tier SQL is confined to
+  rows belonging to that visitor's slot.
+- **Rate limits per key**: drops per hour, load runs per hour, bookings per
+  minute. A leaked key costs quota, not correctness.
+- **Every action is a structured JSON log line** carrying key id, operation and
+  outcome, shipped to Splunk with everything else. The audit trail is itself a
+  demonstration.
+- **Sandboxes expire** — drop records and their slots are swept after 24 hours,
+  reusing `ExpirySweeper`'s scheduling pattern now that it actually works.
 
 ---
 
-## 8. Scope, honestly
+## 8. Delivery order
 
-The interview is **2026-09-11**. This is six days of work compressed against a
-system that already exists and must not break.
+The interview is **2026-09-11**. Each step is independently useful and the order
+is chosen so that stopping early leaves something coherent.
 
-**Delivered in order, each independently useful:**
-
-1. **Internal state endpoints** on both services, plus the public read API. No UI
-   yet — verifiable with `curl`.
-2. **Public read-only page.** Live state, pod health, the invariant. This alone
-   satisfies "a hiring manager can see it".
+1. **Gate: per-drop namespacing.** Redis keys, drop records, slot seeding. No UI.
+   Verifiable with `curl`, and the riskiest change — first, while there is time
+   to get it wrong.
+2. **Console skeleton + public read-only page.** Live state, pod health, the
+   invariant.
 3. **Documentation rendering.** Cheap, high value, no new risk.
-4. **`oauth-proxy` and the operator shell**, with two safe operations: open the
-   drop, reset the queue.
-5. **Destructive and outward-facing operations** — seat reset, scale, deploy,
-   roll back.
-6. **Deploy history and links out.**
+4. **Access keys and the visitor tier**: create a drop, open it, book.
+5. **Bounded load generation** and the admission-rate control. *This is the step
+   that makes it a demo rather than a dashboard.*
+6. **Operator tier**: deploy, roll back, scale.
+7. **Deploy history, links out, polish.**
 
-**Steps 1–3 are the minimum that meets the goal.** If time runs short, stopping
-after 3 leaves a coherent, safe, deployed artefact rather than a half-built
-control panel. That is the point of the ordering.
-
-**Deliberately not in this phase:** custom theming, mobile layout, real-time
-push (polling is adequate for a one-second burst), multi-user roles, and any
-form of stored user account.
+**Steps 1–3 meet the minimum.** **Steps 1–5 meet the actual goal** — a hiring
+manager running a real drop unaided. Six and seven are for you, and can slip.
 
 ---
 
 ## 9. Known weaknesses
 
-- **The console is a single point of demo failure.** If it breaks, the system
-  still works but the demonstration does not. It is deliberately kept simple and
-  read-mostly for that reason.
-- **The public page shows a quiet system most of the time.** Outside a drop,
-  seats and queue sit still. Documentation and deploy history carry the page
-  between bursts; that is a real limitation, not a solved problem.
-- **`oauth-proxy` ties the operator surface to a sandbox account** that expires
-  with the sandbox, around 2026-10-02.
-- **Polling every two seconds from many viewers costs requests.** The read path
-  is cached at the console for one second so viewer count cannot amplify load
-  onto the services.
-- **It adds ~200m of a 3000m budget**, which is affordable now and would not be
-  if the spike demonstration grew.
+- **In-cluster load bypasses the public Route**, so it does not exercise the
+  ingress path or the 600–800 connection ceiling. Stated on the page, not hidden.
+- **A leaked visitor key consumes cluster quota.** Rate limits bound the damage;
+  revocation is a `oc patch`.
+- **The gate change touches the project's cleanest service.** Phase 2's tests are
+  the guard, and the per-drop work must not weaken them.
+- **Sandboxes accumulate rows** until swept. A 24-hour TTL on an Always Free
+  database with finite storage is a real limit, not a formality.
+- **The console is a single point of demo failure.** The system would still work
+  with it down, but the demonstration would not.
+- **~200m of a 3000m budget**, plus up to 200m per running load Job. Affordable
+  now; the concurrency cap is what keeps it so.
+- **Anything a visitor breaks inside their sandbox, they can see.** That is the
+  intent, but it does mean a visitor's first impression may be of a system under
+  deliberate stress rather than one at rest.
 
 ---
 
@@ -255,12 +267,12 @@ form of stored user account.
 
 | Decision | Chosen | Rationale |
 |---|---|---|
-| Auth mechanism | `oauth-proxy` sidecar, OpenShift identity | Nothing to store or rotate; the platform's own mechanism; access to the console and the namespace become one grant |
-| Public vs operator | Two surfaces on one app, split at the Route | A visitor needs no account; write endpoints do not exist on the public path, so a missed check cannot expose them |
-| Operations model | Enumerated named actions | A console that runs arbitrary commands is a remote shell with a login form |
-| Read path | Via the services' state providers | Phase 6 built one computation of seats and oversold precisely so this phase could not fork it |
-| Load generation | Laptop, not the cluster | 3000m budget, 1900m demo; and in-cluster load bypasses the measured 600–800 edge ceiling, so it would not test the real path |
-| SQL | Parameterised, enumerated | No path from HTTP to arbitrary SQL |
-| Destructive actions | Typed confirmation of the slot id | An OK button is not a decision |
-| Real-time updates | Polling, cached 1s | A drop lasts one second; push is complexity without benefit |
-| Delivery order | Read-only first, controls last | Stopping early leaves something coherent rather than half a control panel |
+| Auth | Per-recipient issued keys | OpenShift OAuth gates on cluster identity the visitor cannot have; one shared password cannot be revoked or attributed individually |
+| Isolation | Per-visitor sandbox drops | Turns "reset" from a destructive global action into creating a new object; removes visitor-vs-visitor interference and most confirmation dialogs |
+| Gate change | Namespace Redis keys, move drop windows into Redis | One global counter and restart-only config cannot serve concurrent visitors |
+| Load generation | In-cluster k6 Job, capped at 200 VUs | A stranger cannot run k6 on their laptop. 200 is the measured ceiling above which the router sheds, so the cap costs nothing real |
+| Load tradeoff | Accepted and disclosed on the page | In-cluster load skips the ingress path; hiding that would misrepresent what the number means |
+| Deploy / rollback | Exposed, operator tier | Phase 5 proved unattended rollback works; "break it and watch it heal" is the strongest demonstration available |
+| Operations model | Enumerated named actions | Arbitrary command execution behind a login is a remote shell |
+| Sandbox lifetime | 24-hour sweep | Abandoned demos must not fill a finite Always Free database |
+| Delivery order | Riskiest gate change first, controls last | Stopping early leaves a coherent artefact rather than half a control panel |
