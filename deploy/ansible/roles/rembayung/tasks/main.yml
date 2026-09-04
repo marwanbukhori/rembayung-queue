@@ -7,3 +7,6 @@
 
 - name: Apply the requested tag and wait for the rollout
   ansible.builtin.include_tasks: apply.yml
+
+- name: Smoke-test the public Route
+  ansible.builtin.include_tasks: smoke.yml
