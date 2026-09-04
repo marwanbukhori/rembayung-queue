@@ -1,0 +1,67 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rembayung
+  labels:
+    app.kubernetes.io/part-of: rembayung-queue
+spec:
+  groups:
+    - name: rembayung.rules
+      rules:
+        # Written from a real incident: redis sat at 0 replicas for ~9 hours on
+        # 2026-09-04, queue-gate fell out of its Service because its readiness
+        # group includes redis, and the public Route returned 503 the whole time.
+        # Nobody noticed, because nothing was watching.
+        - alert: RedisDown
+          expr: kube_deployment_status_replicas_ready{deployment="redis"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: Redis has no ready replicas
+            description: >-
+              queue-gate's readiness check includes redis, so every gate replica
+              will drop out of its Service and the public Route will 503.
+
+        - alert: ServiceHasNoEndpoints
+          expr: kube_endpoint_address_available{endpoint=~"queue-gate|booking-service"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.endpoint }} has no endpoints"
+            description: This is what a user experiences as a 503.
+
+        # Should never fire in the lifetime of this system. That is exactly why
+        # it is worth having: the database's ck_slots_seats CHECK constraint makes
+        # the condition impossible to persist, so if this fires either the
+        # invariant broke or the metric is lying.
+        - alert: SlotOversold
+          expr: rembayung_slot_oversold > 0
+          for: 0m
+          labels: { severity: critical }
+          annotations:
+            summary: "Slot {{ $labels.slot }} reports overselling"
+            description: >-
+              The central claim of this system is that this cannot happen.
+              Check seats_taken against capacity in the database immediately.
+
+        # The Phase 3 signature: 250ms RTT plus row-lock serialisation exhausting
+        # the connection pool under an admission rate the database cannot take.
+        - alert: BookingLatencyDegraded
+          expr: >-
+            histogram_quantile(0.99,
+              sum by (le) (rate(http_server_requests_seconds_bucket{uri="/bookings"}[5m]))) > 10
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: Booking p99 above 10s
+            description: Usually admission rate exceeding what the database can absorb.
+
+        # Catches a CD run killed mid-rollback, which leaves the cluster pointing
+        # at an image it cannot run.
+        - alert: DeployStuck
+          expr: kube_deployment_status_replicas_unavailable{namespace="marwanbukhori-dev"} > 0
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.deployment }} has had unavailable replicas for 10m"

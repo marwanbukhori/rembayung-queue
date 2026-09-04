@@ -1,0 +1,19 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rembayung
+  labels:
+    app.kubernetes.io/part-of: rembayung-queue
+spec:
+  # Both services carry app.kubernetes.io/part-of, so one ServiceMonitor covers
+  # them. Scraping the management port keeps metrics off the public Route.
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: rembayung-queue
+  endpoints:
+    - port: management
+      path: /actuator/prometheus
+      # 15s matches the HPA's own polling. Faster would cost a database read per
+      # scrape via SlotStateProvider for resolution nobody looks at.
+      interval: 15s

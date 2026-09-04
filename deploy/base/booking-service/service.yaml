@@ -12,3 +12,10 @@ spec:
     - name: http
       port: 8081
       targetPort: 8081
+    # Scrape target. Deliberately on the Service and NOT on the Route: adding it
+    # to the Route would publish JVM internals and request timings to the
+    # internet. The Route forwards only 8081; this port is reachable inside the
+    # cluster, which is where Prometheus runs.
+    - name: management
+      port: 9090
+      targetPort: 9090
