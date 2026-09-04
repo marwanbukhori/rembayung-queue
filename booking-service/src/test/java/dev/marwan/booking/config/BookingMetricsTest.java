@@ -48,4 +48,31 @@ class BookingMetricsTest {
         assertThat(registry.get("rembayung_slot_seats_taken").tag("slot", "1").gauge().value())
                 .isNaN();
     }
+
+    // The reason MultiGauge is used at all. An earlier version enumerated slots
+    // once in bindTo(), so a slot seeded after startup — routine, see
+    // loadtest/README.md — carried no gauges until the pod restarted, and the
+    // SlotOversold alert silently did not cover it.
+    @Test
+    void picksUpASlotThatAppearsAfterBinding() {
+        SlotStateProvider provider = mock(SlotStateProvider.class);
+        when(provider.trackedSlotIds()).thenReturn(List.of(1L));
+        when(provider.stateFor(1L)).thenReturn(Optional.of(SlotState.of(1L, 250, 10)));
+
+        MeterRegistry registry = new SimpleMeterRegistry();
+        BookingMetrics metrics = new BookingMetrics(provider);
+        metrics.bindTo(registry);
+
+        assertThat(registry.find("rembayung_slot_oversold").tag("slot", "2").gauge()).isNull();
+
+        // A second slot is seeded.
+        when(provider.trackedSlotIds()).thenReturn(List.of(1L, 2L));
+        when(provider.stateFor(2L)).thenReturn(Optional.of(SlotState.of(2L, 100, 100)));
+        metrics.refresh();
+
+        assertThat(registry.get("rembayung_slot_capacity").tag("slot", "2").gauge().value())
+                .isEqualTo(100.0);
+        assertThat(registry.get("rembayung_slot_oversold").tag("slot", "2").gauge().value())
+                .isZero();
+    }
 }
