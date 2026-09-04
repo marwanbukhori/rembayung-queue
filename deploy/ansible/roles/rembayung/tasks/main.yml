@@ -1,0 +1,6 @@
+---
+# What a deploy is, in four lines. Each include is one phase and is readable on
+# its own. rollback.yml is invoked from apply.yml and smoke.yml on failure, not
+# from here, because it must run only when something has already gone wrong.
+- name: Discover current state and validate inputs
+  ansible.builtin.include_tasks: discover.yml

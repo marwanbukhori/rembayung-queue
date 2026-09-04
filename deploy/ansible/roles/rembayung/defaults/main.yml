@@ -1,0 +1,19 @@
+---
+# Everything here changes when the sandbox is renewed (expected around
+# 2026-10-01). Nothing below should appear hardcoded anywhere else.
+rembayung_namespace: marwanbukhori-dev
+rembayung_route_name: queue-gate
+rembayung_registry: ghcr.io/marwanbukhori
+
+# Both Deployments carry their own image tag and can legitimately differ.
+rembayung_services:
+  - booking-service
+  - queue-gate
+
+# A rollout on this cluster takes well under a minute; 300s is slack for a slow
+# image pull, not an expectation.
+rembayung_rollout_timeout: 300
+
+# Route admission and pod readiness are not instantaneous after an apply.
+rembayung_smoke_retries: 10
+rembayung_smoke_delay: 6

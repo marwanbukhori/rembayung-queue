@@ -1,0 +1,39 @@
+---
+# image_tag has no default on purpose. CI publishes full 40-character SHAs and
+# deploy/scripts/build-push.sh publishes 7-character ones; a derived tag would
+# silently target an image that does not exist. Fail before touching anything.
+- name: Require an explicit image_tag
+  ansible.builtin.assert:
+    that:
+      - image_tag is defined
+      - image_tag | length > 0
+    fail_msg: >-
+      image_tag is required and is never derived.
+      Pass it explicitly, e.g.
+      ansible-playbook deploy/ansible/deploy.yml -e image_tag=<sha>
+      Copy the tag from the CI run summary or from build-push.sh output.
+
+- name: Read the image currently running on each Deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ item }}"
+  loop: "{{ rembayung_services }}"
+  register: current_deployments
+
+# One tag per Deployment, not one per cluster. booking-service and queue-gate
+# are currently on different tags because Phase 3 deployed them separately by
+# hand. A single rollback tag would restore one service to the other's tag,
+# which is worse than the failure it was reverting.
+- name: Build the per-service map of currently running tags
+  ansible.builtin.set_fact:
+    current_tags: >-
+      {{ dict(rembayung_services | zip(
+           current_deployments.results
+           | map(attribute='resources.0.spec.template.spec.containers.0.image')
+           | map('split', ':') | map('last') | list)) }}
+
+- name: Show what is running now
+  ansible.builtin.debug:
+    msg: "currently deployed: {{ current_tags }}"
