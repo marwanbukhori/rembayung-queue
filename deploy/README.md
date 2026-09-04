@@ -174,6 +174,58 @@ For routine deployments from `main`, pull the tag from the Actions run summary i
 
 ---
 
+## Continuous Delivery
+
+Phase 5 adds an Ansible playbook (`deploy/ansible/`) that patches the image tag
+on both Deployments, waits for the rollout, smoke-tests the public Route, and
+rolls each service back to its own previous tag automatically if any of that
+fails. See `docs/notes/07-continuous-delivery.md` for why it is built this way
+and for the measured results of running the rollback path against the live
+cluster.
+
+**Run it by hand:**
+
+```bash
+ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml -e image_tag=<sha>
+```
+
+`image_tag` is required and has no default — CI publishes full 40-character
+SHAs, `build-push.sh` publishes 7-character ones, and deriving one would
+silently target the wrong image and fail with `manifest unknown`. Copy the
+exact tag from the CI run summary or from the script's own output.
+
+**Deploy a specific tag from the Actions tab:** open the `CD` workflow, click
+**Run workflow**, and paste the tag into `image_tag`. This is also how you
+redeploy an older tag on purpose — CD does not rebuild, so any tag ever
+published to `ghcr.io` can be redeployed by re-dispatching against it.
+
+**Rollback is automatic, not a separate step.** If the rollout does not
+complete or the smoke test fails, the playbook restores each Deployment to the
+tag it was running before this run started, re-verifies, and then exits
+non-zero naming both the tag that failed and the tags it restored. There is
+nothing to run by hand to recover; a failed run has already recovered by the
+time it reports failure. A rollback that itself does not complete says so
+explicitly in the failure message rather than exiting quietly.
+
+**Automatic dispatch from CI is not live yet.** The `CD` workflow triggers on
+`workflow_run` after `ci`, but that requires an `OPENSHIFT_TOKEN` repository
+secret — a token for the `rembayung-cd` ServiceAccount
+(`deploy/openshift/cd-serviceaccount.yaml`), created by the repository owner
+and stored as a secret, never generated or committed by an implementer — and
+`workflow_run` only fires for workflows on the default branch, so this branch
+must also merge to `main` first. Until then, deploys are dispatch-only via the
+Actions tab or the command above.
+
+**Sandbox renewal invalidates three things together.** The cluster host, the
+namespace and the `OPENSHIFT_TOKEN` secret all come from the same sandbox and
+expire together, expected around **2026-10-01**. On renewal, update
+`deploy/ansible/roles/rembayung/defaults/main.yml` (`rembayung_namespace` and
+the API host used by the `CD` workflow's authentication step) and reissue and
+replace the `OPENSHIFT_TOKEN` secret — the old token stops authenticating the
+moment the sandbox is gone, regardless of whether the secret is updated.
+
+---
+
 ## Routine Redeploy
 
 After the initial setup, code changes flow through this pipeline:

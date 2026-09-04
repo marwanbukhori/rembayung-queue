@@ -127,7 +127,8 @@ Kubernetes API directly. Two things follow that matter:
 
 **It is declarative in the same way the manifests are.** Re-running with the
 same tag is a genuine no-op — measured: `changed=0`, and all three Deployment
-generations unchanged. A shell-out would have to parse text to know that.
+generations unchanged (9, 68, 6). A shell-out would have to parse text to know
+that.
 
 **The playbook is portable to Ansible Automation Platform unchanged.** That is
 the production story: the same role, run by an AAP Job Template with a managed
@@ -208,7 +209,12 @@ rollback.yml   (only on failure) restore each service's own previous tag,
 
 Everything read-only or assertable happens **first**, so a bad input stops the
 play before any Deployment has been touched — verified: a wrong Route name exits
-2 with `changed=0` and all generations unchanged.
+2 with `changed=0` and all generations unchanged. The Route is read and asserted
+in `discover.yml`, not in `smoke.yml` where it is actually used, because an
+earlier version read it there instead — after `apply.yml` had already patched
+both Deployments — and a mistyped Route name would have failed the play with a
+new tag live and unverified, and no rollback, because that failure happened
+while evaluating a fact rather than through the rollback path.
 
 ---
 
@@ -228,3 +234,210 @@ real, and it is a deliberate trade rather than an oversight.
 One smaller cost: each deploy leaves one unused token in Redis, advancing the
 ticket counter by one against the drop's 250-ticket cap. The documented
 procedure flushes Redis before any drop or load test, which resets it.
+
+---
+
+## Why the ServiceAccount cannot read Secrets, verified
+
+The identity GitHub Actions deploys with (`rembayung-cd`, in
+`deploy/openshift/cd-serviceaccount.yaml`) is a namespace-scoped ServiceAccount,
+not a human's login token. A human token carries the human's whole namespace
+authority, including the Oracle wallet; this one has exactly the verbs the
+playbook issues and nothing else, so a leaked repository secret cannot reach
+anything the playbook does not already touch.
+
+Checked directly against the cluster with `oc auth can-i --as=system:serviceaccount:marwanbukhori-dev:rembayung-cd`:
+
+| Allowed | Denied |
+|---|---|
+| `patch deployments` | `get secrets` |
+| `get routes` | `delete deployments` |
+| | `create pods` |
+| | `create pods/exec` |
+| | patch outside the namespace |
+
+No `create pods` and no `create pods/exec` matter as much as no `get secrets`
+does: even a compromised token cannot open a shell in a running container or
+read the wallet and database credentials mounted next to it.
+
+The Role originally also granted `get`/`list`/`watch` on pods and services,
+with a comment claiming the playbook "checks pod status." That comment was
+false — there is no reference to kind `Pod` or `Service` anywhere in the role;
+`smoke.yml` reads `readyReplicas` off the Deployment's own status, which the
+`deployments` grant already covers. Both were removed. A false comment
+justifying an over-broad grant is worse than the grant itself, because it is
+exactly the kind of comment that stops the next person from re-examining it.
+
+---
+
+## The `workflow_run` name trap
+
+`cd.yml` triggers on:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+```
+
+`workflows: [ci]` matches on `ci.yml`'s `name: ci` field, not its filename, and
+the match is case-sensitive. Writing `[CI]` here parses as valid YAML, raises
+no error anywhere, and simply never fires — there is no failed run, no log
+line, nothing to grep for. The only symptom is that CD silently never starts
+after a successful CI run, which looks identical to "nobody pushed to `main`
+yet."
+
+`types: [completed]` also fires on a CI run that *failed*, so the job carries
+an explicit `if: ... workflow_run.conclusion == 'success'` guard. Omitting it
+would deploy a commit CI just rejected.
+
+The tag comes from `workflow_run.head_sha`, not `github.sha`. On a
+`workflow_run` event, `github.sha` points at the current head of the default
+branch, which can differ from the commit CI actually built if another push
+landed in between. `head_sha` is pinned to the run that triggered CD.
+
+---
+
+## Why the timeout is 40 minutes, not 20
+
+The rollout wait in `apply.yml` runs in a per-service loop over
+`rembayung_services`, so each phase of the play costs up to
+`2 × rembayung_rollout_timeout` (2 × 300s = 600s), not one wait of 300s.
+
+Measured on the live rollback test below: the apply phase's two waits took
+302s and 303s — 605s, against a 600s theoretical ceiling for that phase alone.
+A worst-case run pays that once failing, then again rolling back, plus smoke
+retries on both paths — comfortably past 20 minutes.
+
+A 20-minute cap would kill the job mid-rollback on exactly the run where the
+rollback matters: the workflow would be terminated by GitHub before
+`rollback.yml` finished, leaving the cluster in the half-changed state this
+whole phase exists to prevent. `timeout-minutes: 40` is sized off the measured
+number, not a round guess.
+
+---
+
+## The rollback test, run against the live cluster
+
+The test: deploy an all-zeros tag —
+`ghcr.io/marwanbukhori/<svc>:0000000000000000000000000000000000000000` — an
+image that cannot exist, and watch the playbook fail and recover on its own.
+
+**Why the wait had to be right before this test meant anything.** An earlier
+version of `apply.yml` used
+`wait_condition: {type: Progressing, reason: NewReplicaSetAvailable}`. That
+condition is a stateless snapshot match, and `kubernetes.core`'s waiter issues
+its first GET immediately — `waiter.py`'s `clock()` yields `0` before any sleep
+— so it can poll before the Deployment controller has reconciled the patch.
+Worse, `NewReplicaSetAvailable` is also the reason left behind by the
+*previous successful rollout* — the same string, unchanged, still sitting on
+the object. A poll that lands in that window reports a deploy as complete
+before it has started, which would have made this rollback test pass against a
+tag that was never actually running. The fix was bare `wait: true` with no
+`wait_condition`, which selects the collection's built-in `deployment_ready`
+predicate: it additionally requires `status.observedGeneration ==
+metadata.generation`. A stale status always carries the old generation, and a
+generation always bumps on a spec change, so a pre-reconcile snapshot
+structurally cannot satisfy the predicate — there is no window left to race.
+
+**What actually happened, measured:**
+
+- The two rollout waits in `apply.yml` (one per service) each ran to their full
+  budget rather than returning early: **302s and 303s** against the 300s
+  `rembayung_rollout_timeout`. Neither pod ever became Ready — both sat in
+  `ImagePullBackOff`, which cannot resolve — so the timeout firing, not a false
+  early success, is the correct outcome.
+- Total wall clock for the run, apply-and-fail through rollback-and-verify:
+  **628s**.
+- Exit code: **2**.
+- The final message, naming the failed tag, the restored tags, and the health
+  of both halves of the recovery:
+
+  ```
+  Deploy of 0000… failed: rollout did not complete within 300s for tag 0000….
+  Rolled back to {'booking-service': '4573e8f0…', 'queue-gate': '4573e8f0…'}.
+  Rollback rollout: ok. Rollback smoke: ok.
+  ```
+
+Each service was restored to *its own* previous tag — the per-service
+`current_tags` map doing exactly the job it was built for — and both the
+rollback's own rollout wait and its post-rollback smoke check passed before the
+play failed loudly.
+
+---
+
+## Zero downtime is measured, not claimed
+
+It is one thing to reason from the manifests that a bad deploy cannot take the
+service down (see "Why the rollout is safe" above); it is another to watch it
+not happen.
+
+**Captured while the failed deploy above was in flight:** both Deployments
+already pointed at the all-zeros tag, both new pods were in
+`ImagePullBackOff`, and `POST /queue` through the public Route returned
+**HTTP 200 three times in a row**. The Service's endpoints stayed populated
+with the old, working pods throughout — nothing was ever removed from them.
+
+**Afterwards:** all five pods across both Deployments showed **0 restarts**
+and ages of **70–73 minutes** — the pods that were serving before the bad
+deploy were never terminated. Nothing crashed and nothing was replaced; the
+new ReplicaSets simply never earned the right to take over.
+
+The cause is the same rounding noted earlier: `maxUnavailable: 25%` on 2
+replicas rounds down to zero, so Kubernetes cannot evict a working pod for a
+replacement that never becomes Ready.
+
+**This is worth separating from rollback explicitly, because conflating the
+two is the natural mistake to make watching this test.** `maxUnavailable`
+effectively at zero is what keeps the site answering requests *during* a bad
+deploy — that guarantee held with the bad tag still applied and the rollback
+not yet run. Rollback is what stops the cluster from *sitting* in that
+half-changed state afterwards, with a dead ReplicaSet parked next to a live
+one and no record of what should be running. They are two different
+guarantees, enforced by two different mechanisms, and this test is the first
+time both were checked at once rather than assumed from reading the YAML.
+
+---
+
+## The readiness tradeoff: total outage vs. partial degradation
+
+`queue-gate`'s readiness probe checks the Spring Boot readiness group
+`readinessState,redis` — it is not Ready unless Redis answers. This is
+correct given what the service does: `queue-gate` cannot serve *any* endpoint
+without Redis, since the ticket counter and token state live there. Reporting
+unready in that case is an honest signal, not a bug.
+
+The cost is that a Redis outage removes **every** `queue-gate` replica from
+the Service's endpoints simultaneously, rather than degrading gradually. This
+happened: Redis drifted to 0 replicas, and the public Route returned 503 for
+roughly **9 hours** before anyone noticed, because nothing here alerts. Once
+Redis came back, recovery was fast and clean — about **70s**, **zero
+restarts** on the `queue-gate` pods, which simply started passing readiness
+again as soon as their dependency did.
+
+Put the two properties side by side rather than picking one: an
+all-or-nothing readiness gate produces a total, self-healing outage the moment
+its one hard dependency is gone, where a looser gate would have produced
+partial, harder-to-diagnose degradation instead — requests failing at the
+booking step rather than the queue step, for a service that cannot actually
+complete either without Redis. The gate's behavior was correct here. The
+missing alerting is the actual gap, not the readiness check.
+
+---
+
+## What is not finished
+
+Automatic deploys **have not fired yet.** CD is dispatch-only right now. Two
+things are required before `workflow_run` can trigger it on its own:
+
+1. The repository owner creates a token for the `rembayung-cd` ServiceAccount
+   and stores it as the `OPENSHIFT_TOKEN` repository secret — a credential,
+   so it is not something an implementer generates and commits on someone
+   else's behalf.
+2. This branch merges to `main`, because `workflow_run` only fires for
+   workflows defined on the repository's default branch.
+
+Until both are true, every deploy documented above was run by hand — either
+via `workflow_dispatch` or by invoking the playbook directly — and that is the
+only way CD has been exercised. This is a known gap, not a finished pipeline.

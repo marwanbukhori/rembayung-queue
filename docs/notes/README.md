@@ -15,3 +15,4 @@ way it was — particularly where a default was rejected on correctness grounds.
 | [04 — OpenShift deployment](04-openshift-deployment.md) | Cluster topology, boundary enforcement via Routes and NetworkPolicies, liveness vs. readiness split, image architecture and tagging, the load test undercount, and dev/prod version skew | Phase 3 |
 | [05 — Debugging on OpenShift](05-debugging-openshift.md) | The method, and the eight real failures this project hit — including the two first diagnoses that were wrong | — |
 | [06 — Continuous integration](06-continuous-integration.md) | What CI runs and why it uses real Oracle, native amd64 builds, and no registry secret | — |
+| [07 — Continuous delivery](07-continuous-delivery.md) | How CI, Ansible and OpenShift connect; why Ansible and not Jenkins or AAP; the scoped ServiceAccount; and the measured live-cluster rollback test, including wall-clock timing and zero-downtime evidence | — |
