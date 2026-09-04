@@ -93,7 +93,7 @@ jobs:
           {
             echo "### CD"
             echo ""
-            echo "Tag: \`${IMAGE_TAG}\`"
+            echo "Tag: \`${IMAGE_TAG:-not resolved — failed before tag selection}\`"
             echo ""
             echo "Result: ${{ job.status }}"
             echo ""
