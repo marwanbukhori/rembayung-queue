@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <!-- JSON on stdout rather than a pattern layout. OpenShift collects stdout,
+       and a Splunk index of JSON is queryable by field; an index of pretty text
+       is a full-text search that happens to contain numbers. -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <includeMdcKeyName>slot_id</includeMdcKeyName>
+      <includeMdcKeyName>booking_id</includeMdcKeyName>
+      <includeMdcKeyName>idempotency_key</includeMdcKeyName>
+      <includeMdcKeyName>outcome</includeMdcKeyName>
+      <customFields>{"service":"booking-service"}</customFields>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="JSON"/>
+  </root>
+</configuration>
