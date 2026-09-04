@@ -1,17 +1,6 @@
 ---
-# Read the host rather than hardcoding it. The sandbox expires around
-# 2026-10-01 and the hostname changes on renewal.
-- name: Read the public Route host
-  kubernetes.core.k8s_info:
-    api_version: route.openshift.io/v1
-    kind: Route
-    namespace: "{{ rembayung_namespace }}"
-    name: "{{ rembayung_route_name }}"
-  register: route_info
-
-- name: Store the Route host
-  ansible.builtin.set_fact:
-    route_host: "{{ route_info.resources[0].spec.host }}"
+# route_host is read and asserted in discover.yml, before anything is patched,
+# so that a bad Route name cannot fail the play after a deploy has landed.
 
 # This test deliberately does NOT book. A booking consumes seats from a finite
 # 250-seat slot, so a smoke test that booked would drain real inventory on every

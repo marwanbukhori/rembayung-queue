@@ -34,6 +34,42 @@
            | map(attribute='resources.0.spec.template.spec.containers.0.image')
            | map('split', ':') | map('last') | list)) }}
 
+# Read the Route here, in discovery, rather than in smoke.yml where it is used.
+#
+# The reason is ordering, not tidiness. smoke.yml runs AFTER apply.yml has
+# already patched both Deployments. A missing or mistyped Route name discovered
+# at that point fails the play with a new tag deployed and unverified, and it
+# fails while evaluating a fact rather than through the rollback path — so
+# nothing rolls back. Reading it during discovery means a bad Route name stops
+# the play before anything has been changed.
+#
+# It is read rather than hardcoded because the sandbox expires around 2026-10-01
+# and the hostname changes on renewal.
+- name: Read the public Route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ rembayung_route_name }}"
+  register: route_info
+
+# k8s_info returns an empty resources list for a missing named object rather
+# than failing, so the absence has to be asserted explicitly. Without this the
+# next task dies with "object has no element 0", which says nothing useful.
+- name: Require that the Route exists
+  ansible.builtin.assert:
+    that:
+      - route_info.resources | length > 0
+    fail_msg: >-
+      Route "{{ rembayung_route_name }}" not found in namespace
+      "{{ rembayung_namespace }}". Nothing has been deployed. Check
+      rembayung_route_name in roles/rembayung/defaults/main.yml — on a renewed
+      sandbox the namespace changes too.
+
+- name: Store the Route host
+  ansible.builtin.set_fact:
+    route_host: "{{ route_info.resources[0].spec.host }}"
+
 - name: Show what is running now
   ansible.builtin.debug:
-    msg: "currently deployed: {{ current_tags }}"
+    msg: "currently deployed: {{ current_tags }} via {{ route_host }}"
