@@ -1,0 +1,44 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # Internal only. Publishing 6379 would let any host process forge
+    # admission tokens directly in Redis, bypassing the gate entirely.
+    expose: ["6379"]
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    environment:
+      ORACLE_PASSWORD: booking
+      APP_USER: booking
+      APP_USER_PASSWORD: booking
+    ports: ["1521:1521"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  booking-service:
+    build: ./booking-service
+    depends_on:
+      oracle:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      SPRING_DATASOURCE_USERNAME: booking
+      SPRING_DATASOURCE_PASSWORD: booking
+      SERVER_PORT: 8081
+    # Only expose to compose network, not to host. Bookings must go through queue-gate.
+    expose: ["8081"]
+
+  queue-gate:
+    build: ./queue-gate
+    depends_on: [redis, booking-service]
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      BOOKING_SERVICE_BASE_URL: http://booking-service:8081
+      DROP_CLOSES_AT: "2026-09-03T23:59:59Z"
+      DROP_ADMIT_RATE: "200"
+      DROP_TICKET_CAP: "250"
+      DROP_ADMISSION_WINDOW: PT30M
+    ports: ["8080:8080"]

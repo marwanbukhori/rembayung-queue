@@ -1,0 +1,101 @@
+name: CD
+
+# Separate from CI so a rollback needs no rebuild: this workflow can be
+# re-dispatched against any previously published tag. It also means a failed
+# deploy does not mark the build red, which would be a lie about the code.
+on:
+  workflow_run:
+    # Must match the `name:` in ci.yml exactly — this filter matches on the
+    # workflow's name, not its filename, and it is case-sensitive. ci.yml
+    # declares `name: ci`, so `CI` here would silently never fire.
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to deploy (full commit SHA from the CI run summary)
+        required: true
+        type: string
+
+concurrency:
+  group: cd-${{ github.ref }}
+  # Never cancel a deploy midway. A half-applied rollout is worse than a queued
+  # one, and the same reasoning applies here as to CI's publish steps.
+  cancel-in-progress: false
+
+# The playbook talks to OpenShift with the ServiceAccount token, not with
+# GITHUB_TOKEN. Nothing here needs to write to the repository.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # A CI run that failed must not deploy. workflow_run fires on completion
+    # regardless of outcome, so the conclusion has to be checked explicitly —
+    # this is the one place where omitting it would ship a broken commit.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    # 40 minutes, not 20, and the margin is not padding.
+    #
+    # The rollout wait in apply.yml runs in a per-service loop, so each phase
+    # costs 2 x rembayung_rollout_timeout (300s), not one. The live failure test
+    # measured the apply phase alone at 302s + 303s = 605s. A worst-case failed
+    # deploy is ~600s failing, then ~600s rolling back, plus smoke retries on
+    # both paths — comfortably over 20 minutes.
+    #
+    # A 20-minute cap would kill the play mid-rollback on the one run where the
+    # safety net matters, leaving exactly the half-changed cluster this phase
+    # exists to prevent.
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible and the Kubernetes client library
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ansible kubernetes
+          ansible-galaxy collection install -r deploy/ansible/requirements.yml
+
+      - name: Authenticate to OpenShift
+        env:
+          OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+        run: |
+          # K8S_AUTH_* is what kubernetes.core reads. Never echo the token.
+          echo "K8S_AUTH_HOST=https://api.rm3.7wse.p1.openshiftapps.com:6443" >> "$GITHUB_ENV"
+          echo "K8S_AUTH_API_KEY=${OPENSHIFT_TOKEN}" >> "$GITHUB_ENV"
+
+      - name: Resolve the tag to deploy
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.image_tag }}"
+          else
+            # The SHA CI built and published, not github.sha — which on a
+            # workflow_run points at the default branch head and can differ.
+            tag="${{ github.event.workflow_run.head_sha }}"
+          fi
+          echo "IMAGE_TAG=${tag}" >> "$GITHUB_ENV"
+          echo "deploying tag ${tag}"
+
+      - name: Deploy
+        run: |
+          ansible-playbook \
+            -i deploy/ansible/inventory.ini \
+            deploy/ansible/deploy.yml \
+            -e image_tag="${IMAGE_TAG}"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### CD"
+            echo ""
+            echo "Tag: \`${IMAGE_TAG:-not resolved — failed before tag selection}\`"
+            echo ""
+            echo "Result: ${{ job.status }}"
+            echo ""
+            echo "Redeploy a previous tag from the Actions tab via Run workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

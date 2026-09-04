@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Two pushes in quick succession would otherwise race. Cancel superseded runs
+# on branches, but never cancel a main build midway — it may be publishing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# ghcr.io accepts the workflow's built-in GITHUB_TOKEN. There is no registry
+# secret to store, rotate or leak — the reason ghcr.io was chosen over Quay.io.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Real Oracle and real Redis, via Testcontainers. Not mocked, and not
+      # H2: SELECT ... FOR UPDATE semantics are the thing under test, and
+      # ConcurrencyInvariantTest — 400 threads against one slot row — is the
+      # claim this whole project exists to make.
+      #
+      # Testcontainers reuse is a no-op here. It needs
+      # testcontainers.reuse.enable=true in ~/.testcontainers.properties, which
+      # a fresh runner does not have, so every run starts clean. That is why CI
+      # is minutes where a laptop is seconds.
+      - name: Test booking-service
+        working-directory: booking-service
+        run: ./mvnw --batch-mode verify
+
+      - name: Test queue-gate
+        working-directory: queue-gate
+        run: ./mvnw --batch-mode verify
+
+      # The Dockerfiles are single-stage and copy target/*.jar, so the jars must
+      # exist before the image build. Locally this exists because building inside
+      # an emulated amd64 container fails on Apple Silicon; here it is simply
+      # faster, and it keeps the Dockerfiles identical in both places.
+      - name: Package jars
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          booking-service/mvnw --batch-mode -f booking-service -DskipTests package
+          queue-gate/mvnw     --batch-mode -f queue-gate     -DskipTests package
+
+      - name: Log in to ghcr.io
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push booking-service
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./booking-service
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/marwanbukhori/booking-service:${{ github.sha }}
+
+      - name: Build and push queue-gate
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./queue-gate
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}
+
+      # Native on an x86_64 runner, unlike the arm64 development machine — but
+      # asserted anyway. A wrong architecture surfaces on the cluster as a
+      # CrashLoopBackOff whose logs say only "exec format error".
+      - name: Verify images are linux/amd64
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          # Without pipefail, a failing imagetools inspect is masked by tee's
+          # exit code; the grep below then fails for the wrong reason.
+          set -o pipefail
+          for svc in booking-service queue-gate; do
+            image="ghcr.io/marwanbukhori/${svc}:${{ github.sha }}"
+            echo "== ${image}"
+            docker buildx imagetools inspect "${image}" | tee /tmp/inspect.txt
+            grep -q 'linux/amd64' /tmp/inspect.txt \
+              || { echo "::error::${image} is not linux/amd64"; exit 1; }
+          done
+
+      - name: Summary
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          {
+            echo "### Images published"
+            echo
+            echo '```'
+            echo "ghcr.io/marwanbukhori/booking-service:${{ github.sha }}"
+            echo "ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}"
+            echo '```'
+            echo
+            echo "Deploy with:"
+            echo '```bash'
+            echo "ansible-playbook -i deploy/ansible/inventory.ini \\"
+            echo "  deploy/ansible/deploy.yml -e image_tag=${{ github.sha }}"
+            echo '```'
+            echo
+            echo "It reads the running tags first, waits for the rollout,"
+            echo "smoke-tests the public Route, and restores the previous tags"
+            echo "if either fails. On main this runs automatically via cd.yml."
+            echo
+            echo "Do NOT deploy with \`oc apply -k\` on a stale overlay — it"
+            echo "reverts the cluster to whatever tags are pinned in git."
+          } >> "$GITHUB_STEP_SUMMARY"

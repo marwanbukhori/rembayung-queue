@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: queue-gate
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 8080
+
+drop:
+  opens-at: 2026-09-03T13:00:00Z
+  closes-at: 2026-09-03T13:30:00Z
+  seats: 250
+  ticket-cap: 250
+  admit-rate: 200
+  admission-window: PT5M
+  ticket-ttl: PT30M
+
+booking-service:
+  base-url: http://localhost:8081
+
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,redis
+          show-details: always

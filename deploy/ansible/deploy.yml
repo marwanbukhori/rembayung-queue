@@ -1,0 +1,6 @@
+---
+- name: Deploy Rembayung to OpenShift
+  hosts: local
+  gather_facts: false
+  roles:
+    - rembayung

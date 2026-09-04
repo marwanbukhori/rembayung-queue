@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.openshift.io/runtime: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+        app.openshift.io/runtime: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # Persistence is off, not merely unbacked. The design treats queue
+          # state as disposable — positions can be lost, confirmed bookings live
+          # only in Oracle — so there is no volume. Leaving Redis's default save
+          # points active means it tries to snapshot to /data, is denied by the
+          # restricted SCC, and then refuses ALL writes, taking the queue down.
+          command:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          ports:
+            - containerPort: 6379
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 200m, memory: 256Mi }
+          livenessProbe:
+            tcpSocket: { port: 6379 }
+            initialDelaySeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5

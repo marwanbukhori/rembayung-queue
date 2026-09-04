@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queue-gate-config
+data:
+  DROP_OPENS_AT: "2026-09-03T12:00:00Z"
+  DROP_CLOSES_AT: "2030-01-01T00:00:00Z"
+  DROP_SEATS: "250"
+  DROP_TICKET_CAP: "250"
+  # Calibrated against measured capacity, not chosen on paper.
+  #
+  # A single booking takes ~2.7s end to end because the cluster is ~250ms from
+  # the database in ap-kulai-2, and one booking is SELECT ... FOR UPDATE, INSERT
+  # and COMMIT — three sequential round trips. Two pods x Hikari's default 10
+  # connections gives 20, and ADB Always Free caps sessions near 20 so the pool
+  # cannot grow. 20 / 2.7s is about 7.4 bookings per second.
+  #
+  # Admitting 200/s into that exhausted the pool and returned 500s. Metering
+  # admission to what the database can actually sustain is what this gate is FOR.
+  # Co-locating the database with the cluster would raise this by two orders of
+  # magnitude; the OCI home region is immutable, so 8 is the honest number here.
+  # 1/sec, and this is measured, not guessed.
+  #
+  # Ten bookings fired simultaneously against an empty slot completed at 2.46,
+  # 3.48, 4.47, 5.45, 6.45, 7.40, 8.39, 9.44, 10.42 and 11.44 seconds — one
+  # second apart, perfectly serialised. Every booking holds SELECT ... FOR
+  # UPDATE on the same slot row from lock to commit: two round trips at 250ms
+  # plus Oracle's work, about a second of lock time. The other nineteen pooled
+  # connections sit idle behind it.
+  #
+  # So throughput on one slot is 1/sec and ADDING CONNECTIONS CANNOT HELP. The
+  # bottleneck is a single row, and it is single by design — it is what makes
+  # overselling impossible. This is the number the gate exists to meter to.
+  DROP_ADMIT_RATE: "1"
+  DROP_ADMISSION_WINDOW: "PT30M"
+  DROP_TICKET_TTL: "PT30M"

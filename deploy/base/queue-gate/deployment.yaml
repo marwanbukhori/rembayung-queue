@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-gate
+  labels:
+    app: queue-gate
+    app.kubernetes.io/name: queue-gate
+    app.kubernetes.io/component: gateway
+    app.openshift.io/runtime: spring-boot
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"redis"},{"apiVersion":"apps/v1","kind":"Deployment","name":"booking-service"}]'
+spec:
+  replicas: 2
+  # Pinned, not left to the API default. The zero-downtime property this
+  # project demonstrates depends on maxUnavailable resolving to 0: a pod that
+  # cannot pull its image never becomes Ready, and with 0 unavailable allowed
+  # Kubernetes may not evict a working pod to make room for it. Measured — a
+  # deploy of a nonexistent tag kept serving HTTP 200 throughout.
+  #
+  # The default happens to be 25%, which on 2 replicas rounds down to 0 and
+  # gives the same behaviour. Relying on that was wrong twice over: it is a
+  # value we do not control, and it silently stops holding at 5 replicas,
+  # where 25% rounds to 1. Stating 0 keeps the property at any replica count.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels: { app: queue-gate }
+  template:
+    metadata:
+      labels:
+        app: queue-gate
+        app.kubernetes.io/name: queue-gate
+        app.kubernetes.io/component: gateway
+        app.openshift.io/runtime: spring-boot
+    spec:
+      containers:
+        - name: queue-gate
+          image: ghcr.io/marwanbukhori/queue-gate
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9090
+          envFrom:
+            - configMapRef: { name: queue-gate-config }
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis
+            - name: BOOKING_SERVICE_BASE_URL
+              value: http://booking-service:8081
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: management }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: management }
+            initialDelaySeconds: 10
+            periodSeconds: 5

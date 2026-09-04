@@ -6,3 +6,23 @@ target/
 *.iml
 .vscode/
 .DS_Store
+
+# Oracle wallet — must never be committed.
+# These files grant mTLS access to the Autonomous Database. They are created
+# outside the repository (~/rembayung-wallet) and loaded into an OpenShift
+# Secret imperatively by deploy/scripts/create-secrets.sh.
+*wallet*/
+Wallet_*.zip
+tnsnames.ora
+sqlnet.ora
+cwallet.sso
+ewallet.p12
+ewallet.pem
+*.jks
+ojdbc.properties
+
+# Local run output
+loadtest-output.txt
+
+# Local scratch — commands to hand-run
+RUN-THESE.md

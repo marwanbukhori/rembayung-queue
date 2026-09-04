@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 40
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+logging:
+  level:
+    org.testcontainers: INFO
+
+management:
+  server:
+    port: ~

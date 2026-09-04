@@ -1,0 +1,100 @@
+---
+# Included by apply.yml (rollout did not complete) and by smoke.yml (the new
+# tag runs but the queue path does not answer). Never included from main.yml:
+# this file only ever runs when something has already gone wrong.
+#
+# It is terminal. Whatever happens below, the play ends non-zero — see the
+# final task for why.
+- name: Announce the rollback
+  ansible.builtin.debug:
+    msg: >-
+      DEPLOY FAILED ({{ failure_reason }}).
+      Rolling back to {{ current_tags }}.
+
+# Re-applying a known tag, not `oc rollout undo`. undo reverts to the previous
+# ReplicaSet, which is state the cluster happens to still hold and which a
+# pruned revisionHistoryLimit can lose. Re-applying the tag read during
+# discovery is explicit, reproducible from the repository, and works on a
+# cluster that has forgotten.
+#
+# Each service goes back to ITS OWN previous tag. current_tags is a per-service
+# map for exactly this reason: booking-service and queue-gate can legitimately
+# be on different tags, and restoring both to one tag would move a service that
+# was never broken.
+- name: Restore each Deployment to the tag it was running
+  kubernetes.core.k8s:
+    state: patched
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ item }}"
+    definition:
+      spec:
+        template:
+          spec:
+            containers:
+              - name: "{{ item }}"
+                image: "{{ rembayung_registry }}/{{ item }}:{{ current_tags[item] }}"
+  loop: "{{ rembayung_services }}"
+
+# Bare `wait: true` with NO wait_condition, for the same reason apply.yml uses
+# it, and the reason bites harder here. A Progressing/NewReplicaSetAvailable
+# condition is a stateless snapshot match, and kubernetes.core's waiter issues
+# its first GET before any sleep (waiter.py, clock() yields 0 first), so it can
+# match the condition left behind by an earlier rollout and return instantly.
+# On this path that would report a rollback as complete when the previous image
+# is not back yet — the one lie this file must never tell.
+#
+# Omitting wait_condition selects the built-in deployment_ready predicate,
+# which also checks status.observedGeneration == metadata.generation. The patch
+# above bumps the generation, so a stale status structurally cannot match.
+- name: Wait for the rollback to complete
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: "{{ item }}"
+    wait: true
+    wait_timeout: "{{ rembayung_rollout_timeout }}"
+  loop: "{{ rembayung_services }}"
+  register: rollback_rollout
+  # Do not stop here. A rollback that did not converge still has to be reported
+  # through the final message, which is the only place a human sees the whole
+  # picture. Swallowing it into a task-level failure loses the restored tags.
+  ignore_errors: true
+
+# route_host is read and asserted in discover.yml, before anything is patched,
+# so it is always set by the time this file can run. No default() filter: a
+# fallback for a case that cannot occur only implies the case exists.
+#
+# Same request as smoke.yml, and deliberately non-booking — it proves the
+# Route, the gate and Redis are serving again without consuming seats from a
+# finite slot. queue-gate's readiness group includes a Redis health check and
+# takes ~60-70s after a restart, which is what the retries are sized for.
+- name: Re-check the queue path after rolling back
+  ansible.builtin.uri:
+    url: "https://{{ route_host }}/queue"
+    method: POST
+    # Same reasoning as smoke.yml: a shut drop window answers 503 NOT_OPEN, and
+    # that is a working system. Without this a rollback performed outside the
+    # window would report "DID NOT PASS - A HUMAN IS NEEDED" for no reason.
+    status_code: [200, 409, 503]
+  register: rollback_smoke
+  retries: "{{ rembayung_smoke_retries }}"
+  delay: "{{ rembayung_smoke_delay }}"
+  until: rollback_smoke is succeeded
+  ignore_errors: true
+
+# Always non-zero. A rollback that succeeded perfectly still means the deploy
+# that was asked for did not happen, and a caller — a CI job, a human watching
+# a pipeline — that reads that as success will carry on as though the new tag
+# is live. The message names the tag that failed, the tags now running, and
+# whether each half of the recovery actually worked, so the exit code is
+# actionable on its own without reading the log above it.
+- name: Fail loudly, naming both the failed tag and the restored tags
+  ansible.builtin.fail:
+    msg: >-
+      Deploy of {{ image_tag }} failed: {{ failure_reason }}.
+      Rolled back to {{ current_tags }}.
+      Rollback rollout: {{ 'ok' if rollback_rollout is not failed else 'DID NOT COMPLETE - A HUMAN IS NEEDED, THE CLUSTER IS HALF-CHANGED' }}.
+      Rollback smoke: {{ 'ok' if rollback_smoke is succeeded else 'DID NOT PASS - A HUMAN IS NEEDED' }}.

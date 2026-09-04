@@ -1,0 +1,85 @@
+---
+# route_host is read and asserted in discover.yml, before anything is patched,
+# so that a bad Route name cannot fail the play after a deploy has landed.
+
+# This test deliberately does NOT book. A booking consumes seats from a finite
+# 250-seat slot, so a smoke test that booked would drain real inventory on every
+# deploy. It proves the Route, the gate and Redis are all working; booking-
+# service's own readiness probe already covers the datasource, which is checked
+# below.
+- name: Join the queue through the public Route
+  ansible.builtin.uri:
+    url: "https://{{ route_host }}/queue"
+    method: POST
+    # 503 is accepted, but only conditionally — see the NOT_OPEN check below.
+    # The gate returns 503 with body {"error":"NOT_OPEN"} before the drop window
+    # opens (GateExceptionHandler), and the project's real schedule is 21:00
+    # daily except Friday. Rejecting 503 outright would mean every deploy made
+    # outside the window failed its smoke test and rolled back a perfectly
+    # healthy release. A 503 from a dead gate looks different and is still a
+    # failure.
+    status_code: [200, 409, 503]
+    return_content: true
+  register: queue_join
+  retries: "{{ rembayung_smoke_retries }}"
+  delay: "{{ rembayung_smoke_delay }}"
+  until: queue_join is succeeded
+  ignore_errors: true
+
+# 409 SOLD_OUT is a correct answer from a healthy system whose ticket counter is
+# exhausted, so it counts as a pass. Only a 200 gives a token to check further.
+- name: Check the token's status when one was issued
+  ansible.builtin.uri:
+    url: "https://{{ route_host }}/queue/{{ queue_join.json.token }}"
+    method: GET
+    status_code: 200
+    return_content: true
+  register: queue_status
+  # Same retry budget as the join above. Previously this had none, so a single
+  # transient 404 or reset rolled back a healthy deploy.
+  retries: "{{ rembayung_smoke_retries }}"
+  delay: "{{ rembayung_smoke_delay }}"
+  until: queue_status is succeeded
+  when:
+    - queue_join is succeeded
+    - queue_join.status == 200
+  ignore_errors: true
+
+- name: Confirm booking-service is Ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ rembayung_namespace }}"
+    name: booking-service
+  register: booking_state
+
+# A 503 counts as healthy only when the gate said NOT_OPEN — that is the drop
+# window being shut, which is a correct answer from a working system. A 503 with
+# anything else in it (or no body at all, which is what the Route returns when
+# no pod is Ready) is a real failure.
+- name: Decide whether the smoke test passed
+  ansible.builtin.set_fact:
+    smoke_passed: >-
+      {{ (queue_join is succeeded)
+         and (queue_join.status != 503
+              or 'NOT_OPEN' in (queue_join.content | default('')))
+         and (queue_status is not failed)
+         and (booking_state.resources[0].status.readyReplicas | default(0) | int > 0) }}
+
+- name: Report the smoke result
+  ansible.builtin.debug:
+    msg: >-
+      smoke: queue={{ queue_join.status | default('unreachable') }}
+      booking-service ready replicas={{ booking_state.resources[0].status.readyReplicas | default(0) }}
+      passed={{ smoke_passed }}
+
+# Fail rather than include rollback.yml directly. main.yml's rescue owns the
+# rollback now, so every failure between the first patch and here takes the same
+# path — including ones this file does not anticipate.
+- name: Fail if the smoke test did not pass
+  ansible.builtin.fail:
+    msg: >-
+      smoke test failed against https://{{ route_host }} —
+      queue={{ queue_join.status | default('unreachable') }}
+      booking-service ready replicas={{ booking_state.resources[0].status.readyReplicas | default(0) }}
+  when: not smoke_passed

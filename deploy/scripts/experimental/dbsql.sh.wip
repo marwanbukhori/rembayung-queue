@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Run SQL against the Autonomous Database from inside the cluster.
+#
+# There is no network path from a laptop to the database, and the wallet is
+# mTLS-protected. Rather than copying credentials locally, this borrows what the
+# cluster already holds: the oracle-wallet and oracle-credentials Secrets are
+# mounted into a throwaway pod that has sqlplus.
+#
+# Four wrinkles, each of which cost an attempt:
+#
+#  1. The wallet's sqlnet.ora points WALLET_LOCATION at "?/network/admin" where
+#     ? means $ORACLE_HOME, so sqlplus looks in the wrong place. The JDBC thin
+#     driver the app uses reads TNS_ADMIN directly and ignores that line, which
+#     is why the app connects and sqlplus did not. Secret mounts are read-only,
+#     so the wallet is copied somewhere writable and the path rewritten.
+#
+#  2. `bash -c`, not `bash -lc`. A login shell sources the image profile, which
+#     resets TNS_ADMIN and undoes the export.
+#
+#  3. The CONNECT line must expand the credential env vars, while the SQL must
+#     NOT be expanded. A single quoted heredoc for both sends Oracle the literal
+#     string "$SPRING_DATASOURCE_PASSWORD" and fails with ORA-01017.
+#
+#  4. The inner script is base64-encoded. Passing multi-line bash through
+#     Python, into JSON, into `oc --overrides`, into `bash -c` is four layers of
+#     quoting; encoding it removes all of them.
+#
+#   ./deploy/scripts/dbsql.sh "SELECT capacity, seats_taken FROM booking.slots;"
+set -euo pipefail
+
+SQL="${1:-$(cat)}"
+ALIAS="${TNS_ALIAS:-cv02eb7y952snfi2_low}"
+
+OVERRIDES="$(SQL="$SQL" ALIAS="$ALIAS" python3 <<'PY'
+import base64, json, os
+
+inner = f'''set -e
+mkdir -p /tmp/w
+cp /oracle/wallet/* /tmp/w/ 2>/dev/null || true
+sed -i "s|?/network/admin|/tmp/w|" /tmp/w/sqlnet.ora
+export TNS_ADMIN=/tmp/w
+{{
+  printf 'CONNECT %s/"%s"@{os.environ["ALIAS"]}\\n' \\
+    "$SPRING_DATASOURCE_USERNAME" "$SPRING_DATASOURCE_PASSWORD"
+  cat <<'EOSQL'
+SET LINESIZE 200
+SET PAGESIZE 100
+SET FEEDBACK OFF
+{os.environ["SQL"]}
+EXIT
+EOSQL
+}} | sqlplus -S /nolog
+'''
+
+encoded = base64.b64encode(inner.encode()).decode()
+print(json.dumps({"spec": {
+  "volumes": [{"name": "w", "secret": {"secretName": "oracle-wallet"}}],
+  "containers": [{
+    "name": "dbsql", "image": "gvenzl/oracle-free:23-slim-faststart",
+    "command": ["bash", "-c", f"echo {encoded} | base64 -d | bash"],
+    "envFrom": [{"secretRef": {"name": "oracle-credentials"}}],
+    "volumeMounts": [{"name": "w", "mountPath": "/oracle/wallet", "readOnly": True}],
+    "resources": {"requests": {"cpu": "50m", "memory": "256Mi"},
+                  "limits": {"cpu": "500m", "memory": "1Gi"}}}]}}))
+PY
+)"
+
+oc run "dbsql-$$" --rm --attach --restart=Never --quiet \
+  --image=gvenzl/oracle-free:23-slim-faststart \
+  --overrides="$OVERRIDES" 2>&1 | grep -vE '^(pod .* deleted|If you)'
