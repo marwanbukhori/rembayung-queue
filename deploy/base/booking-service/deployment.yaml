@@ -47,6 +47,23 @@ spec:
               value: "8081"
             - name: SPRING_DATASOURCE_URL
               value: jdbc:oracle:thin:@cv02eb7y952snfi2_low?TNS_ADMIN=/oracle/wallet
+            # optional: true throughout. Without it the pods would refuse to
+            # start until the Secret exists, which would take a working system
+            # down for the sake of a logging integration.
+            - name: SPLUNK_HEC_URL
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: url, optional: true }
+            - name: SPLUNK_HEC_TOKEN
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: token, optional: true }
+            # The switch. logback-spring.xml puts the Splunk appender behind
+            # <springProfile name="splunk">, so this key — a literal "splunk"
+            # stored alongside the credentials purely so its presence tracks
+            # theirs — is what turns shipping on. No Secret, no profile, no
+            # appender, and no attempt to POST to an unconfigured endpoint.
+            - name: SPRING_PROFILES_INCLUDE
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: profile, optional: true }
           envFrom:
             - secretRef: { name: oracle-credentials }
           volumeMounts:

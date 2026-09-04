@@ -13,7 +13,61 @@
     </encoder>
   </appender>
 
-  <root level="INFO">
-    <appender-ref ref="JSON"/>
-  </root>
+  <!-- Shipping to Splunk is gated on the "splunk" Spring profile, not on
+       logback's <if>. logback 1.5.38 — the version Spring Boot 4.1.1 pulls in —
+       parses <if>, evaluates its condition, and then executes neither <then>
+       nor <else>. Measured here against both the Janino condition="..."
+       attribute (deprecated, and now a no-op that only emits a deprecation
+       warning) and the newer <condition class="..."/> element; a nested <if>
+       inside <root> is rejected outright. A conditional appender-ref would
+       therefore have parsed cleanly, started cleanly, and shipped nothing.
+       <springProfile> is Spring Boot's own mechanism and does work.
+
+       The profile is switched on by SPRING_PROFILES_INCLUDE, injected from the
+       splunk-hec Secret with optional: true. No Secret, no profile, no Splunk
+       appender — and local runs and CI stay untouched with no Splunk tenant. -->
+  <springProfile name="splunk">
+    <appender name="SPLUNK" class="com.splunk.logging.HttpEventCollectorLogbackAppender">
+      <url>${SPLUNK_HEC_URL}</url>
+      <token>${SPLUNK_HEC_TOKEN}</token>
+      <source>rembayung</source>
+      <sourcetype>_json</sourcetype>
+      <!-- Batch rather than one HTTP call per line. -->
+      <batch_size_count>50</batch_size_count>
+      <batch_interval>2000</batch_interval>
+      <disableCertificateValidation>false</disableCertificateValidation>
+      <!-- A <layout>, not an <encoder>. HttpEventCollectorLogbackAppender has
+           setLayout and no setEncoder: given an <encoder> it logs "Ignoring
+           unknown property [encoder]" at configuration time and then throws
+           NullPointerException on every single event, having never been given a
+           layout. Measured — it fails per event, silently as far as the
+           application is concerned, and not one line reaches Splunk. -->
+      <layout class="net.logstash.logback.layout.LogstashLayout">
+        <customFields>{"service":"booking-service"}</customFields>
+      </layout>
+    </appender>
+
+    <!-- The constraint that matters. If Splunk is unreachable this must not
+         block a request thread or grow the heap: bounded queue, and discard
+         when full rather than apply back-pressure. Losing logs is acceptable;
+         a logging integration that can stall the booking path would be a worse
+         bug than having no logging at all. -->
+    <appender name="SPLUNK_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+      <appender-ref ref="SPLUNK"/>
+      <queueSize>512</queueSize>
+      <discardingThreshold>0</discardingThreshold>
+      <neverBlock>true</neverBlock>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="JSON"/>
+      <appender-ref ref="SPLUNK_ASYNC"/>
+    </root>
+  </springProfile>
+
+  <springProfile name="!splunk">
+    <root level="INFO">
+      <appender-ref ref="JSON"/>
+    </root>
+  </springProfile>
 </configuration>

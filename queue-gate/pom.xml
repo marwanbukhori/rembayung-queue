@@ -42,6 +42,11 @@
       <artifactId>logstash-logback-encoder</artifactId>
       <version>8.0</version>
     </dependency>
+    <dependency>
+      <groupId>com.splunk.logging</groupId>
+      <artifactId>splunk-library-javalogging</artifactId>
+      <version>1.11.8</version>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -70,6 +75,17 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <repositories>
+    <!-- Splunk does not publish splunk-library-javalogging to Maven Central.
+         This is their official repository. Worth being conscious that it adds a
+         non-Central source to the build's trust surface — acceptable for a
+         first-party artifact from the vendor whose product it talks to. -->
+    <repository>
+      <id>splunk-artifactory</id>
+      <url>https://splunk.jfrog.io/splunk/ext-releases-local</url>
+    </repository>
+  </repositories>
 
   <build>
     <plugins>
