@@ -31,7 +31,18 @@
       <!-- Batch rather than one HTTP call per line. -->
       <batch_size_count>50</batch_size_count>
       <batch_interval>2000</batch_interval>
-      <disableCertificateValidation>false</disableCertificateValidation>
+      <!-- true, and the reason is measured rather than lazy. Splunk Cloud trial
+           stacks serve a SELF-SIGNED certificate on the HEC port (8088). With
+           validation on, curl from inside this cluster reports "SSL certificate
+           problem: self-signed certificate in certificate chain" and the POST
+           never completes; with it off the same request returns
+           {"text":"Success","code":0}. Because the appender is async with
+           neverBlock, that failure is invisible — a healthy application shipping
+           nothing at all.
+           On a production Splunk stack this must be false, with the stack's CA
+           installed in the container truststore instead. It is true here because
+           a trial stack has no CA to install. -->
+      <disableCertificateValidation>true</disableCertificateValidation>
       <!-- A <layout>, not an <encoder>. HttpEventCollectorLogbackAppender has
            setLayout and no setEncoder: given an <encoder> it logs "Ignoring
            unknown property [encoder]" at configuration time and then throws
