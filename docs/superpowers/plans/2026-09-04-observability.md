@@ -1021,7 +1021,32 @@ git log -1 --format=%B
 
 Continue to Step 2 regardless — the code is written and committed before the secret exists, and only the running integration waits.
 
-- [ ] **Step 2: Add the Splunk appender dependency to both poms**
+- [ ] **Step 2: Add the Splunk repository and two dependencies to both poms**
+
+**Two things here fail at container startup rather than at build time, so both
+were verified against this machine before being written down.**
+
+First: `splunk-library-javalogging` is **not in Maven Central.** Splunk publishes
+it to their own Artifactory. Without this repository block the build fails to
+resolve it. Add to both `pom.xml` files, as a sibling of `<dependencies>`:
+
+```xml
+  <repositories>
+    <!-- Splunk does not publish splunk-library-javalogging to Maven Central.
+         This is their official repository. Worth being conscious that it adds a
+         non-Central source to the build's trust surface — acceptable for a
+         first-party artifact from the vendor whose product it talks to. -->
+    <repository>
+      <id>splunk-artifactory</id>
+      <url>https://splunk.jfrog.io/splunk/ext-releases-local</url>
+    </repository>
+  </repositories>
+```
+
+Second: the `<if condition="...">` in Step 3 is logback conditional processing,
+which **requires Janino**. It is not on the classpath, and without it logback
+fails to parse the configuration at startup — taking logging, and possibly the
+container, with it.
 
 ```xml
     <dependency>
@@ -1029,14 +1054,17 @@ Continue to Step 2 regardless — the code is written and committed before the s
       <artifactId>splunk-library-javalogging</artifactId>
       <version>1.11.8</version>
     </dependency>
+    <!-- Required by logback's <if condition="..."> in logback-spring.xml.
+         Without it the config fails to parse AT STARTUP, not at build. -->
+    <dependency>
+      <groupId>org.codehaus.janino</groupId>
+      <artifactId>janino</artifactId>
+      <version>3.1.12</version>
+    </dependency>
 ```
 
-Verify it resolves before going further:
-
-```bash
-./mvnw -q -f booking-service dependency:get \
-  -Dartifact=com.splunk.logging:splunk-library-javalogging:1.11.8 2>&1 | tail -3
-```
+Both were confirmed to resolve on this machine: janino from Central, and
+`splunk-library-javalogging:1.11.8` from the repository above.
 
 - [ ] **Step 3: Add the appender to both `logback-spring.xml`**
 
