@@ -18,10 +18,29 @@
                 image: "{{ rembayung_registry }}/{{ item }}:{{ image_tag }}"
   loop: "{{ rembayung_services }}"
 
-# wait_condition Available is not sufficient on its own: a Deployment stays
-# Available while a new ReplicaSet is still rolling, because the old pods are
-# still serving. Progressing with reason NewReplicaSetAvailable is what actually
-# means "the new pods are up".
+# Bare `wait: true` with NO wait_condition, deliberately.
+#
+# The obvious spelling — wait_condition Progressing/NewReplicaSetAvailable — is
+# racy, and the race is silent. NewReplicaSetAvailable is also the condition left
+# behind by the PREVIOUS successful rollout. kubernetes.core's waiter issues its
+# first GET immediately (waiter.py clock() yields 0 before any sleep) and
+# custom_condition() is a stateless snapshot match with no "wait for change"
+# semantics. The Deployment controller updates status asynchronously, so between
+# the patch landing in etcd and that reconcile the object still carries the old
+# reason — and a poll in that window returns success for a deploy that has not
+# started. Sub-second on an idle control plane, wider under load, and it would
+# hollow out the rollback in Task 4: a bad tag would be reported as deployed.
+#
+# Omitting wait_condition selects the collection's built-in Deployment predicate
+# (RESOURCE_PREDICATES["Deployment"] = deployment_ready, waiter.py:144), which
+# checks status.observedGeneration == metadata.generation alongside the replica
+# counts. A stale status always carries the old generation, so it structurally
+# cannot match straight after a spec change.
+#
+# Note that checking updatedReplicas == replicas and readyReplicas == replicas
+# would NOT have fixed this on its own: without the generation check, a
+# pre-reconcile snapshot can show those counts already satisfied from the
+# previous rollout, which is the same race wearing different clothes.
 - name: Wait for both rollouts to complete
   kubernetes.core.k8s_info:
     api_version: apps/v1
@@ -29,10 +48,6 @@
     namespace: "{{ rembayung_namespace }}"
     name: "{{ item }}"
     wait: true
-    wait_condition:
-      type: Progressing
-      status: "True"
-      reason: NewReplicaSetAvailable
     wait_timeout: "{{ rembayung_rollout_timeout }}"
   loop: "{{ rembayung_services }}"
   register: rollout_result
