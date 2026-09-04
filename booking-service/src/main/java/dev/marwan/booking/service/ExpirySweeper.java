@@ -27,7 +27,30 @@ public class ExpirySweeper {
         this.slotRepository = slotRepository;
     }
 
+    /**
+     * The scheduled entry point.
+     *
+     * @Transactional is on THIS method, not only on sweepExpired, and the
+     * distinction is not cosmetic. Spring applies @Transactional through a
+     * proxy, and a call from one method of a bean to another goes directly to
+     * `this` — the proxy is never entered. So when this method called
+     * sweepExpired() without being transactional itself, sweepExpired ran with
+     * no transaction at all, findByIdForUpdate could not take its pessimistic
+     * lock, and every single invocation threw "No active transaction".
+     *
+     * That was live for the whole of Phase 1 through 6: 197 such errors on one
+     * production pod, and not one "Expired N unpaid bookings" line ever
+     * written. Unpaid holds never expired and their seats never returned to
+     * inventory.
+     *
+     * The tests did not catch it because all three call sweepExpired() on the
+     * injected bean, which IS the proxy — so they got a transaction and passed,
+     * while production entered through sweep() and did not. A test that never
+     * takes production's path cannot fail the way production does; see
+     * ExpirySweeperTest.sweepRunsInsideATransaction.
+     */
     @Scheduled(fixedDelayString = "PT30S")
+    @Transactional
     public void sweep() {
         int expired = sweepExpired(Instant.now());
         if (expired > 0) {

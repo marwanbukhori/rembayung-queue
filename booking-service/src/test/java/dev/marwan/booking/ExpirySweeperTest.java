@@ -11,6 +11,9 @@ import dev.marwan.booking.service.ExpirySweeper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -23,6 +26,7 @@ class ExpirySweeperTest extends OracleTestBase {
     @Autowired private ExpirySweeper expirySweeper;
     @Autowired private SlotRepository slotRepository;
     @Autowired private BookingRepository bookingRepository;
+    @Autowired private JdbcTemplate jdbc;
 
     @Test
     void expiredPendingBookingsReleaseTheirSeats() {
@@ -54,5 +58,44 @@ class ExpirySweeperTest extends OracleTestBase {
 
         assertThat(expired).isZero();
         assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken()).isEqualTo(5);
+    }
+
+    /**
+     * Enters through sweep(), which is what the scheduler calls — not through
+     * sweepExpired(), which is what every other test here calls.
+     *
+     * That distinction is the whole point. The two tests above passed for six
+     * phases while the sweeper was completely broken in production, because
+     * calling sweepExpired() on the injected bean goes through Spring's
+     * transactional proxy, whereas sweep() calling sweepExpired() internally
+     * goes straight to `this` and never enters it. Production threw
+     * "No active transaction" on every run; the tests never saw it.
+     *
+     * A test that exercises a path production does not take cannot fail the way
+     * production does.
+     */
+    @Test
+    void sweepRunsInsideATransaction() {
+        Long slotId = slotRepository.save(
+                new Slot(LocalDate.of(2026, 12, 12), "19:00", 250)).getId();
+        BookingResult booked = bookingService.book(
+                new BookingRequest(slotId, "+60123456789", 5, "sweep-key-3"));
+
+        assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken()).isEqualTo(5);
+
+        // Backdate the hold with SQL rather than through the entity: Booking
+        // deliberately exposes no setter for expiresAt, and adding one purely to
+        // make a test convenient would weaken the domain to suit the test.
+        jdbc.update("UPDATE bookings SET expires_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(60)), booked.bookingId());
+
+        // The scheduler's entry point. Before the fix this threw
+        // InvalidDataAccessApiUsageException: No active transaction, because
+        // findByIdForUpdate needs a transaction the proxy never opened.
+        expirySweeper.sweep();
+
+        assertThat(bookingRepository.findById(booked.bookingId()).orElseThrow().getStatus())
+                .isEqualTo(BookingStatus.EXPIRED);
+        assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken()).isZero();
     }
 }
