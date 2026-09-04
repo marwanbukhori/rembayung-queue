@@ -628,7 +628,20 @@ oc get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.c
 
 - [ ] **Step 4: Inject a real failure — deploy a tag that does not exist**
 
-This is the only honest way to test a rollback. A nonexistent tag gives `ImagePullBackOff`, the rollout wait times out, and the rollback path runs.
+This is the only honest way to test a rollback. A nonexistent tag gives
+`ImagePullBackOff`, the rollout wait times out, and the rollback path runs.
+
+**The service stays up throughout, and this was verified rather than assumed.**
+Both Deployments run 2 replicas with `maxUnavailable: 25%`, which on 2 replicas
+rounds *down* to zero — Kubernetes may not take a single old pod down until a
+replacement is Ready. A pod that cannot pull its image never becomes Ready, so
+the old pods keep serving for the entire 300s timeout and through the rollback.
+`maxSurge: 25%` rounds *up* to 1, so one extra pod is created; the namespace is
+using 600m of its 3000m CPU request quota, which is ample headroom.
+
+So the failure injection costs a five-minute wait, not an outage. That property
+is worth understanding before you run it and worth saying out loud in a demo:
+a rolling update with `maxUnavailable: 0` makes a bad image a non-event.
 
 ```bash
 ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
