@@ -23,8 +23,10 @@ In Phase 2 terms, `booking-service` is `expose: false`. In OpenShift terms, a Ku
 The boundary is enforced in three layers:
 
 1. **No Route:** the Service has no public DNS name
-2. **NetworkPolicy:** even inside the cluster, only `queue-gate` can talk to
-   `booking-service` (see below)
+2. **NetworkPolicy:** intended to restrict in-cluster access to `queue-gate`
+   only — but measured *not* to work on this cluster, because the sandbox ships
+   an allow-all policy and NetworkPolicy is additive. See below; this is the
+   interesting part of the note.
 3. **Service isolation:** there is no exposed port that differs from the internal
    port — what you see is what you get
 
@@ -71,12 +73,73 @@ spec:
           port: 8081
 ```
 
-These are **not** advisory. If a pod violates them, the packet is dropped. This is the
-difference between a security boundary enforced by code (which can be bypassed by rewriting
-the code) and one enforced by the network (which cannot be).
+### And on this cluster they do nothing at all
 
-A malicious actor inside the cluster cannot reach `booking-service` or `redis` directly;
-they must go through `queue-gate`.
+That is what the previous version of this note claimed. It was measured on
+2026-09-04 and it is **false here**, for a reason worth understanding.
+
+An unlabelled probe pod reached both:
+
+```
+$ oc run np-probe --rm -i --image=...ubi-minimal --command -- bash -c \
+    '</dev/tcp/booking-service/8081 && echo REACHED'
+  REACHED
+  redis REACHED
+```
+
+The policies above are written correctly. The problem is that the sandbox ships
+its own policy alongside them:
+
+```yaml
+# allow-same-namespace — provided by codeready-toolchain, not by this project
+spec:
+  podSelector: {}              # every pod in the namespace
+  ingress:
+    - from:
+        - podSelector: {}      # ...from every pod in the namespace
+```
+
+**NetworkPolicy is purely additive. There is no deny rule.** A pod's allowed
+ingress is the *union* of every policy that selects it. So `allow-same-namespace`
+permits everything to everything, and adding a narrower policy beside it cannot
+subtract from that. `booking-service-from-gate-only` grants an allowance that was
+already granted.
+
+This is the single most common misconception about NetworkPolicy: people read a
+restrictive-looking policy and conclude traffic is restricted, when the policy
+only ever *adds* permission. The only way to get a deny is for no policy to allow
+the traffic.
+
+### What is actually true
+
+| Boundary | Real? | Why |
+|---|---|---|
+| From the internet, only `queue-gate` is reachable | **Yes** | `booking-service` and `redis` have no `Route`. A Service without a Route has no external address at all — verified: the Route list contains only `queue-gate`. |
+| Inside the namespace, only `queue-gate` may reach them | **No** | The platform's allow-all defeats it, as measured above. |
+
+So the external boundary — the one that matters for "can someone on the internet
+skip the queue and book directly" — holds, and holds for a stronger reason than a
+firewall rule: there is no address to connect to.
+
+The internal boundary does not hold, and the manifests describing it are
+aspirational on this cluster.
+
+### Why it was not simply fixed
+
+`allow-same-namespace` carries `toolchain.dev.openshift.com/provider:
+codeready-toolchain`. It is managed by the sandbox operator, so deleting it would
+likely be reconciled back within moments, and might break sandbox features that
+assume intra-namespace reachability — the web console's pod terminal among them.
+
+On a cluster you own, the fix is to delete the blanket policy and let the narrow
+ones do their job. Here, the honest thing is to keep the policies (they are
+correct, and they are what you would ship) and record that the platform overrides
+them.
+
+**The lesson is worth more than the fix:** a NetworkPolicy that looks restrictive
+tells you nothing until you have tested it from a pod that should be denied. This
+one was in the repository for two phases, described in this note as unbypassable,
+and was never once verified.
 
 ---
 
