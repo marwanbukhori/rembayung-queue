@@ -124,17 +124,41 @@ cannot scale. It can do everything interesting inside its own sandbox.
 
 ---
 
-## 5. Load generation, and the honest tradeoff
+## 5. Constraints are content, not failure
 
-A visitor must be able to *cause* the burst. That means load originates in the
-cluster, which the first draft rejected. The rejection was right on the
-engineering and wrong on the requirement, so here is the trade, stated plainly.
+The governing principle, and the one that separates this from a status page:
+**when the system hits a limit, the console explains the limit.** It does not
+hide it, queue silently, or degrade quietly.
 
-**Bounded k6 as a Kubernetes Job**, capped at **200 virtual users**.
+A visitor whose load run sits `Pending` because the namespace is out of CPU has
+just been shown a real quota, a real scheduler decision, and a real operational
+trade — which is worth more than a green tick. The same is true of a connection
+pool exhausting, an HPA refusing to scale past its cap, or a rollout stalling.
 
-200 is not a compromise number — it is the measured ceiling of usefulness.
-Phase 3's ladder found that beyond ~200 the sandbox router sheds connections
-before they reach the application:
+So the console carries a permanent **constraints panel**, live:
+
+```
+  namespace budget      900m / 3000m requested       ████░░░░░░░░
+  your load job         Pending — insufficient cpu
+                        booking-service 400m · queue-gate 200m · console 200m
+                        free 2100m, this job wants 200m ✓ scheduling
+
+  connection pool       4 / 20 active     (4 replicas x 5, Oracle caps ~20)
+  HPA booking-service   2/4 replicas      cpu 12% of 60% target
+  HPA queue-gate        2/10 replicas     cpu 8% of 60% target
+```
+
+When something cannot run, the console says which limit stopped it and what is
+consuming the budget — not "something went wrong".
+
+### Load generation
+
+Load runs **in the cluster**, as a Kubernetes Job, because a visitor cannot run
+k6 on their laptop.
+
+**The default is 200 virtual users, and higher is offered rather than forbidden.**
+200 is the measured ceiling of usefulness, not a resource compromise — Phase 3's
+ladder found the sandbox router sheds connections above it:
 
 ```
 offered   arrived   failed
@@ -143,17 +167,44 @@ offered   arrived   failed
   3000       818      92%
 ```
 
-Above 200, a bigger number tests the router, not the system. So the cap costs
-nothing real and keeps the Job inside ~200m CPU.
+A visitor choosing 1000 will see roughly a third of their traffic never arrive.
+**That is a finding worth showing**, and the console labels it as edge shedding
+rather than letting it read as application failure. Hiding the option would hide
+the lesson.
 
-**What is genuinely lost:** in-cluster load skips the public Route, so it does not
-exercise the ingress path a real user crosses. The console must say so on the
-page rather than implying otherwise. A visitor sees the queue, the admission
-rate and the invariant — all of which are the point — but not edge behaviour.
+**What is genuinely lost, stated on the page:** in-cluster load skips the public
+Route, so it does not exercise the ingress path. A visitor sees the queue, the
+admission rate and the invariant; they do not see edge behaviour unless they pick
+a number large enough to provoke it.
 
-**Guards:** one running load Job per drop, a hard 5-minute deadline,
-`activeDeadlineSeconds` set, and a namespace-wide concurrent-Job cap so ten
-enthusiastic visitors cannot exhaust the 3000m budget between them.
+**Bounds exist for recoverability, not to hide limits:** a hard
+`activeDeadlineSeconds` so no Job can run forever, and one running Job per drop
+so a single visitor cannot spam. There is no global cap on how many visitors may
+run at once — if the namespace fills, the console shows the queue and the reason,
+which is the more honest outcome.
+
+## 5a. Dynamic, and easy for someone who has never seen it
+
+The console is used by a stranger, once, unaided, with no briefing. That is a
+harder audience than an operator who already knows the system, and it drives
+real requirements rather than styling preferences:
+
+- **It updates itself.** Numbers move without a refresh button. A one-second
+  drop is invisible if you have to click to see it.
+- **It explains as it goes.** Each control carries one line saying what it will
+  do and why it matters — "admit 200/s: more than the database can absorb, watch
+  the pool exhaust" — so a visitor who reads nothing else still understands what
+  they just watched.
+- **It has an obvious first move.** A visitor landing on the page should not have
+  to work out where to start. One primary action: *Start a drop*.
+- **Nothing is a dead end.** Every failure state names the next thing to try.
+  A `Pending` job, a sold-out slot, an expired drop — each says what happened and
+  offers the button that resolves it.
+- **It reads as a system, not a form.** Seats, queue, pods, quota and the
+  invariant on one screen, changing together, so cause and effect are visible.
+
+None of this is visual polish, which is explicitly deferred. It is the difference
+between a stranger understanding the system in two minutes and closing the tab.
 
 ---
 
@@ -211,13 +262,19 @@ everyone, not because it is dangerous.
   already proved with `oc auth can-i get secrets` → `no`.
 - **SQL is parameterised and enumerated**, and visitor-tier SQL is confined to
   rows belonging to that visitor's slot.
-- **Rate limits per key**: drops per hour, load runs per hour, bookings per
-  minute. A leaked key costs quota, not correctness.
+- **Rate limits guard against abuse, not against use.** They are set well above
+  anything a person clicking buttons will reach — a leaked key should cost quota,
+  not correctness — and when one is hit the console says so plainly instead of
+  failing opaquely.
 - **Every action is a structured JSON log line** carrying key id, operation and
   outcome, shipped to Splunk with everything else. The audit trail is itself a
   demonstration.
-- **Sandboxes expire** — drop records and their slots are swept after 24 hours,
-  reusing `ExpirySweeper`'s scheduling pattern now that it actually works.
+- **Sandboxes are unlimited and instant.** A visitor may create a drop, run it,
+  discard it and start again as often as they like; nothing rations sessions.
+  Idle drops are swept 30 minutes after their last request, and their slot rows
+  with them, reusing `ExpirySweeper`'s scheduling pattern now that it actually
+  works. Sweeping on idleness rather than a fixed 24 hours is what makes
+  unlimited retries affordable on a finite database.
 
 ---
 
@@ -233,8 +290,10 @@ is chosen so that stopping early leaves something coherent.
    invariant.
 3. **Documentation rendering.** Cheap, high value, no new risk.
 4. **Access keys and the visitor tier**: create a drop, open it, book.
-5. **Bounded load generation** and the admission-rate control. *This is the step
-   that makes it a demo rather than a dashboard.*
+5. **Load generation, the admission-rate control, and the constraints panel.**
+   *This is the step that makes it a demo rather than a dashboard* — and the
+   constraints panel ships with it, because a load run that cannot schedule must
+   explain itself the first time it happens, not later.
 6. **Operator tier**: deploy, roll back, scale.
 7. **Deploy history, links out, polish.**
 
