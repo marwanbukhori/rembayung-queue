@@ -82,9 +82,16 @@ decision, records it in the cluster's desired state, and then supervises.
 
 ## Why the rollout is safe, and why that is a property of the manifests
 
-The Deployments specify `maxUnavailable: 25%` on 2 replicas. 25% of 2 is 0.5,
-which rounds **down to zero**. So Kubernetes may not remove a working pod until
-a replacement is Ready.
+The Deployments specify `maxUnavailable: 0`, so Kubernetes may not remove a
+working pod until a replacement is Ready.
+
+**They did not always.** This note originally claimed the manifests specified
+`maxUnavailable: 25%`, which on 2 replicas rounds down to zero and gives the
+same behaviour. That was wrong in a way worth recording: there was no
+`strategy:` block anywhere in `deploy/` at all. 25% is the *API default* — a
+value nobody here chose, nobody controls, and which stops giving zero the moment
+the replica count reaches 5, where 25% rounds to 1. The property the whole phase
+demonstrates was resting on an accident. It is now pinned explicitly.
 
 Consequence: **a bad image is a non-event.** Deploy a tag that does not exist
 and the new pod sits in `ImagePullBackOff` forever, never becomes Ready, and
@@ -341,7 +348,17 @@ tag that was never actually running. The fix was bare `wait: true` with no
 predicate: it additionally requires `status.observedGeneration ==
 metadata.generation`. A stale status always carries the old generation, and a
 generation always bumps on a spec change, so a pre-reconcile snapshot
-structurally cannot satisfy the predicate — there is no window left to race.
+structurally cannot satisfy the predicate — there is no window left for the specific race that bit us.
+
+To be precise about how strong that claim is: `deployment_ready` checks
+`spec.replicas == status.replicas`, `availableReplicas == replicas`,
+`observedGeneration == metadata.generation` and `not unavailableReplicas`. It
+does **not** check `updatedReplicas`. `observedGeneration` proves the controller
+has seen the patch, which is what kills the stale-condition race — it does not
+prove every surge pod is already reflected in status. The live test waited the
+full 302s and 303s rather than returning early, so the fix works where it
+mattered; "structurally cannot match a stale status" is accurate about
+generation and would be overstating it about everything else.
 
 **What actually happened, measured:**
 
@@ -386,13 +403,14 @@ and ages of **70–73 minutes** — the pods that were serving before the bad
 deploy were never terminated. Nothing crashed and nothing was replaced; the
 new ReplicaSets simply never earned the right to take over.
 
-The cause is the same rounding noted earlier: `maxUnavailable: 25%` on 2
-replicas rounds down to zero, so Kubernetes cannot evict a working pod for a
-replacement that never becomes Ready.
+The cause is `maxUnavailable: 0`: Kubernetes cannot evict a working pod for a
+replacement that never becomes Ready. (At the time of this test the value was
+still the 25% API default, which on 2 replicas rounds down to zero and behaved
+identically. It has since been pinned, for the reason given earlier.)
 
 **This is worth separating from rollback explicitly, because conflating the
-two is the natural mistake to make watching this test.** `maxUnavailable`
-effectively at zero is what keeps the site answering requests *during* a bad
+two is the natural mistake to make watching this test.** `maxUnavailable: 0`
+is what keeps the site answering requests *during* a bad
 deploy — that guarantee held with the bad tag still applied and the rollback
 not yet run. Rollback is what stops the cluster from *sitting* in that
 half-changed state afterwards, with a dead ReplicaSet parked next to a live

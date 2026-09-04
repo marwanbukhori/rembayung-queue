@@ -75,7 +75,10 @@
   ansible.builtin.uri:
     url: "https://{{ route_host }}/queue"
     method: POST
-    status_code: [200, 409]
+    # Same reasoning as smoke.yml: a shut drop window answers 503 NOT_OPEN, and
+    # that is a working system. Without this a rollback performed outside the
+    # window would report "DID NOT PASS - A HUMAN IS NEEDED" for no reason.
+    status_code: [200, 409, 503]
   register: rollback_smoke
   retries: "{{ rembayung_smoke_retries }}"
   delay: "{{ rembayung_smoke_delay }}"

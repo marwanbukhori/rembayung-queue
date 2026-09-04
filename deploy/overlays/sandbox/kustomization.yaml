@@ -3,8 +3,24 @@ kind: Kustomization
 namespace: marwanbukhori-dev
 resources:
   - ../../base
+# WARNING: these tags are the state git declares, NOT necessarily what is
+# running. Phase 5's CD patches the image field on the live Deployments at run
+# time, so after any CD deploy this file lags until someone syncs it.
+#
+# Consequence, and it has already been a live hazard: `oc apply -k` on a stale
+# overlay REVERTS the cluster to whatever is pinned here. Check what is actually
+# running before applying:
+#
+#   oc get deploy -o custom-columns=NAME:.metadata.name,\
+#     IMAGE:.spec.template.spec.containers[0].image
+#
+# To deploy, prefer the playbook, which reads the current state first and can
+# roll back:
+#
+#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
+#     -e image_tag=<sha>
 images:
   - name: ghcr.io/marwanbukhori/queue-gate
-    newTag: 270288f
+    newTag: 4573e8f0a692c7337c0af9b51a615aeeb24767df
   - name: ghcr.io/marwanbukhori/booking-service
-    newTag: 66393c1
+    newTag: 4573e8f0a692c7337c0af9b51a615aeeb24767df

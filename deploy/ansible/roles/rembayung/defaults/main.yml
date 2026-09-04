@@ -1,6 +1,12 @@
 ---
 # Everything here changes when the sandbox is renewed (expected around
-# 2026-10-01). Nothing below should appear hardcoded anywhere else.
+# 2026-10-01).
+#
+# These are not the only places a renewal touches, and pretending otherwise
+# would send someone hunting in the wrong file. Also hardcoded elsewhere:
+# the namespace in deploy/openshift/cd-serviceaccount.yaml (three times) and
+# deploy/overlays/sandbox/kustomization.yaml, and the cluster API host in
+# .github/workflows/cd.yml. The OPENSHIFT_TOKEN secret must be reissued too.
 rembayung_namespace: marwanbukhori-dev
 rembayung_route_name: queue-gate
 rembayung_registry: ghcr.io/marwanbukhori

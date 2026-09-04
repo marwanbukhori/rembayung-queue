@@ -119,10 +119,14 @@ jobs:
             echo
             echo "Deploy with:"
             echo '```bash'
-            echo "cd deploy/overlays/sandbox"
-            echo "kustomize edit set image \\"
-            echo "  ghcr.io/marwanbukhori/booking-service=ghcr.io/marwanbukhori/booking-service:${{ github.sha }} \\"
-            echo "  ghcr.io/marwanbukhori/queue-gate=ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}"
-            echo "oc apply -k deploy/overlays/sandbox"
+            echo "ansible-playbook -i deploy/ansible/inventory.ini \\"
+            echo "  deploy/ansible/deploy.yml -e image_tag=${{ github.sha }}"
             echo '```'
+            echo
+            echo "It reads the running tags first, waits for the rollout,"
+            echo "smoke-tests the public Route, and restores the previous tags"
+            echo "if either fails. On main this runs automatically via cd.yml."
+            echo
+            echo "Do NOT deploy with \`oc apply -k\` on a stale overlay — it"
+            echo "reverts the cluster to whatever tags are pinned in git."
           } >> "$GITHUB_STEP_SUMMARY"

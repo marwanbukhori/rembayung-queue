@@ -50,15 +50,8 @@
     wait: true
     wait_timeout: "{{ rembayung_rollout_timeout }}"
   loop: "{{ rembayung_services }}"
-  register: rollout_result
-  # A timeout here means the new image will not run — a bad tag, an unpullable
-  # image, a crash loop. Do not let the play stop: rollback.yml must run.
-  ignore_errors: true
-
-- name: Roll back if either rollout failed
-  ansible.builtin.include_tasks: rollback.yml
-  vars:
-    failure_reason: >-
-      rollout did not complete within {{ rembayung_rollout_timeout }}s
-      for tag {{ image_tag }}
-  when: rollout_result is failed
+  # No ignore_errors, and no conditional rollback include here. A timeout means
+  # the new image will not run — a bad tag, an unpullable image, a crash loop —
+  # and the rescue block in main.yml turns that into a rollback. Catching it
+  # here caught only this one failure; the rescue catches every failure between
+  # the first patch and the end of the smoke test.

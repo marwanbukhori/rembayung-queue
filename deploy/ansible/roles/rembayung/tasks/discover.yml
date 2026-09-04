@@ -70,6 +70,36 @@
   ansible.builtin.set_fact:
     route_host: "{{ route_info.resources[0].spec.host }}"
 
+# current_tags is read from spec, which is the DESIRED image, not necessarily the
+# one serving. That matters because it becomes the rollback target: if a previous
+# run was killed between its patch and its rollback — a job timeout, a cancelled
+# workflow, a dropped network — the spec is left pinned to the bad tag while the
+# old pods carry on serving. Trusting it blindly would make the next run adopt
+# the broken tag as the thing to roll back TO.
+#
+# Converged means spec and status agree, so the desired image really is the
+# running one. Refusing to proceed otherwise is the conservative choice: a
+# deploy is postponed, rather than a bad tag being enshrined as good.
+- name: Refuse to run against a Deployment that is mid-rollout
+  ansible.builtin.assert:
+    that:
+      - item.resources[0].status.updatedReplicas | default(0) | int
+        == item.resources[0].spec.replicas | int
+      - item.resources[0].status.readyReplicas | default(0) | int
+        == item.resources[0].spec.replicas | int
+    fail_msg: >-
+      {{ item.resources[0].metadata.name }} has not converged
+      (spec {{ item.resources[0].spec.replicas }} replicas,
+      {{ item.resources[0].status.updatedReplicas | default(0) }} updated,
+      {{ item.resources[0].status.readyReplicas | default(0) }} ready).
+      Its spec image cannot be trusted as a rollback target — a previous deploy
+      may have been interrupted. Nothing has been changed. Investigate with
+      `oc get deploy` and `oc describe deploy
+      {{ item.resources[0].metadata.name }}` before deploying again.
+  loop: "{{ current_deployments.results }}"
+  loop_control:
+    label: "{{ item.resources[0].metadata.name }}"
+
 - name: Show what is running now
   ansible.builtin.debug:
     msg: "currently deployed: {{ current_tags }} via {{ route_host }}"

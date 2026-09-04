@@ -1,12 +1,36 @@
 ---
-# What a deploy is, in four lines. Each include is one phase and is readable on
-# its own. rollback.yml is invoked from apply.yml and smoke.yml on failure, not
-# from here, because it must run only when something has already gone wrong.
+# Discovery sits OUTSIDE the block on purpose. Its failures — no image_tag, a
+# Route that does not exist, an unreachable API — all mean nothing has been
+# changed yet, so there is nothing to roll back and rollback.yml would run
+# without current_tags even being set.
 - name: Discover current state and validate inputs
   ansible.builtin.include_tasks: discover.yml
 
-- name: Apply the requested tag and wait for the rollout
-  ansible.builtin.include_tasks: apply.yml
+# Everything that can leave the cluster altered goes in the block. Earlier this
+# was handled by conditional includes inside apply.yml and smoke.yml, which only
+# caught the two failures we thought of: a rollout timing out, and a smoke test
+# returning the wrong thing. It did not catch a failing patch — and the patch
+# runs in a per-service loop, so a failure on the SECOND service (a revoked
+# token, an API blip, a conflict) aborted the play with one service moved and
+# the other not, and no rollback at all. A rescue catches every failure in here,
+# including the ones nobody predicted.
+- name: Deploy and verify
+  block:
+    - name: Apply the requested tag and wait for the rollout
+      ansible.builtin.include_tasks: apply.yml
 
-- name: Smoke-test the public Route
-  ansible.builtin.include_tasks: smoke.yml
+    - name: Smoke-test the public Route
+      ansible.builtin.include_tasks: smoke.yml
+
+  rescue:
+    # Built from the task that actually failed rather than a hardcoded string,
+    # so the final message names the real cause even for a failure mode that did
+    # not exist when this was written.
+    - name: Describe what failed
+      ansible.builtin.set_fact:
+        failure_reason: >-
+          {{ ansible_failed_task.name | default('unknown task') }}
+          — {{ ansible_failed_result.msg | default('see the log above') }}
+
+    - name: Roll back
+      ansible.builtin.include_tasks: rollback.yml
