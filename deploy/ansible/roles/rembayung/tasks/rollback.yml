@@ -93,5 +93,5 @@
     msg: >-
       Deploy of {{ image_tag }} failed: {{ failure_reason }}.
       Rolled back to {{ current_tags }}.
-      Rollback rollout: {{ 'ok' if rollback_rollout is not failed else 'DID NOT COMPLETE' }}.
+      Rollback rollout: {{ 'ok' if rollback_rollout is not failed else 'DID NOT COMPLETE - A HUMAN IS NEEDED, THE CLUSTER IS HALF-CHANGED' }}.
       Rollback smoke: {{ 'ok' if rollback_smoke is succeeded else 'DID NOT PASS - A HUMAN IS NEEDED' }}.
