@@ -3,6 +3,19 @@ kind: Kustomization
 namespace: marwanbukhori-dev
 resources:
   - ../../base
+# BOOTSTRAP ONLY — DO NOT USE `oc apply -k` TO DEPLOY.
+#
+# Two systems write the image field: this file, and Phase 5's CD playbook at run
+# time. They drift the moment CD deploys anything, and `oc apply -k` then quietly
+# rolls the cluster BACK to whatever is pinned here. That has happened twice.
+#
+# Use `oc apply -k` only to bootstrap a fresh namespace or to push a
+# non-image config change — and after any such apply, immediately re-run the
+# playbook to restore the intended image:
+#
+#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
+#     -e image_tag=$(git rev-parse HEAD)
+#
 # WARNING: these tags are the state git declares, NOT necessarily what is
 # running. Phase 5's CD patches the image field on the live Deployments at run
 # time, so after any CD deploy this file lags until someone syncs it.
@@ -21,6 +34,6 @@ resources:
 #     -e image_tag=<sha>
 images:
   - name: ghcr.io/marwanbukhori/queue-gate
-    newTag: 4573e8f0a692c7337c0af9b51a615aeeb24767df
+    newTag: 252efeb7509d814ae201e2c4a39450e4433ad111
   - name: ghcr.io/marwanbukhori/booking-service
-    newTag: 4573e8f0a692c7337c0af9b51a615aeeb24767df
+    newTag: 252efeb7509d814ae201e2c4a39450e4433ad111
