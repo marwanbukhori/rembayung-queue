@@ -35,7 +35,23 @@ public class AdmissionService {
     private Optional<Held> resolve(String raw) {
         int sep = raw.lastIndexOf(':');
         if (sep < 0) {
-            return Optional.empty();
+            // A bare number is a token issued BEFORE drops existed, when the
+            // value was just "{ticket}". Those are in Redis with a live TTL at
+            // the moment this version rolls out, and a rolling deploy replaces
+            // pods one at a time — so for a few minutes both encodings are in
+            // flight at once.
+            //
+            // Rejecting them would hand a 403 to someone who did nothing wrong,
+            // mid-drop, purely because a deploy happened while they were
+            // queueing. They belong to the only drop that existed then.
+            //
+            // Safe to delete once no pre-upgrade token can still be alive:
+            // ticketTtl after the rollout completes.
+            try {
+                return Optional.of(new Held(drops.defaultDrop(), Long.parseLong(raw)));
+            } catch (NumberFormatException e) {
+                return Optional.empty();
+            }
         }
         long ticket;
         try {

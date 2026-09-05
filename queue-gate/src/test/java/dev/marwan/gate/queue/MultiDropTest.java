@@ -11,6 +11,7 @@ class MultiDropTest extends RedisTestBase {
     @Autowired private QueueService queueService;
     @Autowired private AdmissionService admissionService;
     @Autowired private DropRegistry registry;
+    @Autowired private org.springframework.data.redis.core.StringRedisTemplate redis;
 
     // The point of the whole task: two visitors must not share a ticket counter.
     @Test
@@ -60,5 +61,17 @@ class MultiDropTest extends RedisTestBase {
                 .isInstanceOf(TokenRejectedException.class)
                 .extracting(e -> ((TokenRejectedException) e).getReason())
                 .isEqualTo("TOKEN_INVALID");
+    }
+
+    // A rolling deploy replaces pods one at a time, so for a few minutes tokens
+    // in the old encoding ("{ticket}") and the new one ("{dropId}:{ticket}") are
+    // both live. Someone queueing when the rollout starts must not get a 403
+    // because of it.
+    @Test
+    void aTokenIssuedBeforeDropsExistedStillResolves() {
+        String legacyToken = "legacy-" + java.util.UUID.randomUUID();
+        redis.opsForValue().set("admit:" + legacyToken, "1", java.time.Duration.ofMinutes(5));
+
+        assertThat(admissionService.position(legacyToken)).isPresent();
     }
 }
