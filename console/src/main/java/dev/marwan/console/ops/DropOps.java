@@ -43,7 +43,25 @@ public class DropOps {
     private static final Logger log = LoggerFactory.getLogger(DropOps.class);
 
     /** Slow enough to watch a queue drain, fast enough not to be boring. */
-    private static final int DEFAULT_ADMIT_RATE = 8;
+    /**
+     * One a second, which is what this database can actually commit.
+     *
+     * It was 8, from a calculation that divided twenty connections by a 2.7s
+     * round trip. That models the pool as the constraint, and the pool is not
+     * the constraint: every booking for a sitting takes a pessimistic lock on
+     * the same slot row, so they serialise, and each one holds that lock across
+     * a round trip to an Oracle instance a region away.
+     *
+     * Measured against the deployed cluster - thirty admitted holders booking
+     * at once - twelve committed and eighteen came back 503 BOOKING_SERVICE_BUSY
+     * with the pool exhausted. A full run at 8/s created sixteen bookings and
+     * rejected a hundred and eighty-four. That is the system defending itself
+     * correctly, and it is a terrible first thing to show somebody: the default
+     * has to be a rate the database can absorb, so that what a visitor sees
+     * first is a queue draining and seats filling. Breaking it is what the 200
+     * option is for, chosen deliberately.
+     */
+    private static final int DEFAULT_ADMIT_RATE = 1;
 
     /** Above this the queue empties faster than the page can draw it. */
     private static final int MAX_ADMIT_RATE = 500;
@@ -52,14 +70,16 @@ public class DropOps {
      * The three rates the console offers, and what each one demonstrates.
      *
      * <ul>
-     *   <li><b>1/s</b> — slow enough to watch one person at a time reach the
-     *       database.</li>
-     *   <li><b>8/s</b> — what a sandbox drop starts at, and a measured value
-     *       rather than a chosen one: 20 connections at full stretch divided by
-     *       a 2.7s round trip to an Oracle instance a region away. Not the
-     *       canonical 21:00 drop's rate, which queue-gate's configmap sets to 1
-     *       via DROP_ADMIT_RATE; calling this "the production setting" was
-     *       wrong against a file in this repo.</li>
+     *   <li><b>1/s</b> — the default, and what this database actually commits:
+     *       bookings for one sitting serialise on one row. The queue drains and
+     *       the seats fill.</li>
+     *   <li><b>8/s</b> — eight times what the database commits, so the queue
+     *       empties faster than the seats fill and the overflow is refused.
+     *       Measured: a full run at this rate created 16 bookings and took 503
+     *       for 184. This used to be the default, and used to be justified as 20
+     *       connections divided by a 2.7s round trip - which models the pool as
+     *       the constraint when the constraint is one row lock held across that
+     *       round trip.</li>
      *   <li><b>200/s</b> — more than the database can absorb. The pool
      *       exhausts, booking-service refuses with 503 and Retry-After, and
      *       <b>oversold stays at zero anyway</b>.</li>

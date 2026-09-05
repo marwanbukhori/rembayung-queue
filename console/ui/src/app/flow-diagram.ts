@@ -57,7 +57,7 @@ import { StateService } from './state.service';
             exists at all - would go with them.
           -->
           <text class="hop" x="230" y="100">~3,000</text>
-          <text class="hop" x="479" y="100">8/s</text>
+          <text class="hop" x="479" y="100">1/s</text>
           <path id="rb-e2" d="M355 162 V212" />
           <path id="rb-e3" d="M448 116 H510" />
           <path id="rb-e4" d="M696 116 H758" />
@@ -196,7 +196,7 @@ export class FlowDiagram {
       {
         id: 'booking', x: 510, y: 78, w: 186, h: 92, tone: 'plain',
         label: 'booking-service', value: this.reading(drop?.admitted),
-        sub: '8 a second, in order', good: false
+        sub: 'one a second, in order', good: false
       },
       {
         id: 'oracle', x: 758, y: 78, w: 186, h: 92, tone: 'plain',

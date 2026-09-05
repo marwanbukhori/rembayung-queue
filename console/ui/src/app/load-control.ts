@@ -149,21 +149,23 @@ export class LoadControl {
     {
       value: 1,
       label: '1 per second',
-      note: 'Slow enough to watch one person at a time reach the database. The queue barely moves.'
+      note: 'What this database can actually commit. Every booking for a sitting locks the same row '
+        + 'and holds it across a round trip to Oracle, so they serialise at about one a second. The '
+        + 'queue drains steadily and the seats fill.'
     },
     {
       value: 8,
       label: '8 per second',
-      note: 'Where a simulation starts, and a measured value rather than a chosen one: twenty '
-        + 'connections at full stretch divided by a 2.7 second round trip to an Oracle instance a '
-        + 'region away. The pool sits around nine of twenty and the queue drains steadily.'
+      note: 'Eight times what the database commits, so the queue empties faster than the seats fill '
+        + 'and the overflow is refused. Measured on this cluster: a run at this rate created 16 '
+        + 'bookings and took 503 Service Unavailable for 184. Nothing is oversold; work is shed.'
     },
     {
       value: 200,
       label: '200 per second',
-      note: 'More than the database can absorb. The pool exhausts, booking-service starts refusing '
-        + 'with 503 and Retry-After, and oversold stays at zero anyway. That last part is the whole '
-        + 'point, and it is why this option is offered rather than hidden.'
+      note: 'Far more than the database can absorb. The pool exhausts at once, booking-service '
+        + 'refuses with 503 and Retry-After, and oversold stays at zero anyway. That last part is the '
+        + 'whole point, and it is why this option is offered rather than hidden.'
     }
   ];
 

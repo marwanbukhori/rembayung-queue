@@ -91,7 +91,15 @@ public class LoadOps {
     private static final Logger log = LoggerFactory.getLogger(LoadOps.class);
 
     /** The measured ceiling of usefulness. Above it the edge sheds, not the app. */
-    public static final int DEFAULT_VUS = 200;
+    /**
+     * Sixty, so the default run finishes while somebody is still watching it.
+     *
+     * At one admission a second - the rate this database can actually commit at
+     * - two hundred customers take over three minutes to get through, and the
+     * k6 script gives up polling after ninety seconds. Sixty drains in a minute,
+     * inside the poll window, and fills about half the sitting.
+     */
+    public static final int DEFAULT_VUS = 60;
 
     /** Far past the point the finding is visible; a typo should not book the cluster for an hour. */
     private static final int MAX_VUS = 5000;
