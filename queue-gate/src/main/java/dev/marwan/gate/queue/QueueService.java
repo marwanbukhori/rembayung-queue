@@ -55,10 +55,14 @@ public class QueueService {
             throw new SoldOutException();
         }
         if (ticket == 1L) {
-            // find() above ran touch() before this key existed, and EXPIRE on a
-            // missing key does nothing. Without this the counter would carry no
-            // expiry until some later request touched the drop again, so a drop
-            // that saw exactly one join would leave its counter behind forever.
+            // The rush starts here, not when the drop was created. Admission is
+            // elapsed time times a rate, so without this it banks capacity while
+            // nobody is queueing and the first arrivals are admitted on contact.
+            drops.recordFirstArrival(dropId, now);
+            // find() above ran touch() before these keys existed, and EXPIRE on a
+            // missing key does nothing. Without this they would carry no expiry
+            // until some later request touched the drop again, so a drop that saw
+            // exactly one join would leave them behind forever.
             drops.touch(dropId);
         }
 
@@ -69,7 +73,7 @@ public class QueueService {
         redis.opsForValue().set(ADMIT_PREFIX + token,
                 dropId + ":" + ticket, drop.ticketTtl());
 
-        long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
+        long admitted = Admission.admittedBy(now, drops.admissionStartsAt(drop), drop.admitRate());
         long position = Math.max(0, ticket - admitted);
 
         return new JoinResult(token, ticket, position,

@@ -87,7 +87,7 @@ public class QueueStateProvider {
 
         String raw = redis.opsForValue().get(QueueService.ticketCounter(dropId));
         long issued = raw == null ? 0L : Long.parseLong(raw);
-        long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
+        long admitted = Admission.admittedBy(now, drops.admissionStartsAt(drop), drop.admitRate());
         QueueState state = QueueState.of(issued, admitted, drop.ticketCap());
         snapshots.put(dropId, new Snapshot(state, now));
         pruneExpired(now);

@@ -222,7 +222,7 @@ export class App {
   readonly readingLabel = computed(() => {
     const drop = this.state.view()?.drop;
     return drop && drop.available
-      ? `reading slot ${drop.slotId} of session ${drop.dropId}`
+      ? `reading your own sitting of ${drop.capacity} seats`
       : 'nothing read yet';
   });
 

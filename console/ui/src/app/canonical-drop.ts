@@ -133,7 +133,7 @@ export class CanonicalDrop {
   readonly subheading = computed(() => {
     const d = this.drop();
     return d && d.available
-      ? `Slot ${d.slotId}, read from the services that own the data`
+      ? `One sitting of ${d.capacity} seats, read from the services that own the data`
       : 'Read from the services that own the data';
   });
 

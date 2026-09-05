@@ -76,11 +76,12 @@ public class AdmissionService {
         long ticket = resolved.get().ticket();
         Instant now = clock.instant();
 
-        long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
+        Instant startsAt = drops.admissionStartsAt(drop);
+        long admitted = Admission.admittedBy(now, startsAt, drop.admitRate());
         long position = Math.max(0, ticket - admitted);
         boolean isAdmitted = position == 0;
 
-        Instant expiresAt = Admission.turnAt(ticket, drop.opensAt(), drop.admitRate())
+        Instant expiresAt = Admission.turnAt(ticket, startsAt, drop.admitRate())
                 .plus(drop.admissionWindow());
         long expiresIn = isAdmitted ? Math.max(0, Duration.between(now, expiresAt).toSeconds()) : 0;
 
@@ -102,10 +103,11 @@ public class AdmissionService {
         long ticket = held.ticket();
         Instant now = clock.instant();
 
-        if (!Admission.isAdmitted(ticket, now, drop.opensAt(), drop.admitRate())) {
+        Instant startsAt = drops.admissionStartsAt(drop);
+        if (!Admission.isAdmitted(ticket, now, startsAt, drop.admitRate())) {
             throw new TokenRejectedException("TOKEN_NOT_YET_ADMITTED");
         }
-        if (Admission.hasExpired(ticket, now, drop.opensAt(),
+        if (Admission.hasExpired(ticket, now, startsAt,
                                  drop.admitRate(), drop.admissionWindow())) {
             throw new TokenRejectedException("TOKEN_EXPIRED");
         }

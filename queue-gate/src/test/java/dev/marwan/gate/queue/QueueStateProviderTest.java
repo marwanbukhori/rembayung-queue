@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -103,7 +104,11 @@ class QueueStateProviderTest {
         assertThat(a).isEqualTo(b).isEqualTo(c);
         // and the derived field genuinely agrees with the two it is derived from
         assertThat(a.waiting()).isEqualTo(a.ticketsIssued() - a.admitted());
-        verify(ops, times(1)).get(anyString());
+        // Two reads per uncached snapshot, not one: the ticket counter, and the
+        // instant the first arrival started the admission clock. Both are read
+        // once per TTL window rather than once per caller, which is what this
+        // test exists to hold - three calls still cost one trip's worth.
+        verify(ops, times(2)).get(anyString());
     }
 
     // The memo above is keyed by drop, not global. A single-field cache would
@@ -120,6 +125,9 @@ class QueueStateProviderTest {
         when(ops.get(QueueService.ticketCounter("d-xyz"))).thenReturn("7");
 
         DropRegistry drops = mock(DropRegistry.class);
+        // No first arrival recorded: admission starts when the drop opened.
+        when(drops.admissionStartsAt(any()))
+                .thenAnswer(call -> ((DropRecord) call.getArgument(0)).opensAt());
         when(drops.find("d-abc")).thenReturn(Optional.of(drop("d-abc")));
         when(drops.find("d-xyz")).thenReturn(Optional.of(drop("d-xyz")));
 
@@ -158,6 +166,9 @@ class QueueStateProviderTest {
                 Duration.ofMinutes(5), Duration.ofMinutes(30));
         Clock clock = Clock.fixed(OPENS.plusSeconds(10), ZoneOffset.UTC);
         DropRegistry drops = mock(DropRegistry.class);
+        // No first arrival recorded: admission starts when the drop opened.
+        when(drops.admissionStartsAt(any()))
+                .thenAnswer(call -> ((DropRecord) call.getArgument(0)).opensAt());
         when(drops.find(DropRegistry.DEFAULT_ID))
                 .thenReturn(Optional.of(new DropRegistry(redis, properties, clock).defaultDrop()));
         when(drops.find("d-abc")).thenReturn(Optional.of(drop("d-abc")));
@@ -173,6 +184,9 @@ class QueueStateProviderTest {
     void readingAnUnknownDropIsRejectedRatherThanReportedAsEmpty() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         DropRegistry drops = mock(DropRegistry.class);
+        // No first arrival recorded: admission starts when the drop opened.
+        when(drops.admissionStartsAt(any()))
+                .thenAnswer(call -> ((DropRecord) call.getArgument(0)).opensAt());
         when(drops.find("d-gone")).thenReturn(Optional.empty());
 
         QueueStateProvider provider = new QueueStateProvider(

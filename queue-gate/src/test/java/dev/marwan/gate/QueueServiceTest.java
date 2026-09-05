@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class QueueServiceTest extends RedisTestBase {
 
     @Autowired private QueueService queueService;
+    @Autowired private AdmissionService admissionService;
 
     @Test
     void joiningBeforeTheDropOpensIsRejectedWithACountdown() {
@@ -55,14 +56,31 @@ class QueueServiceTest extends RedisTestBase {
         assertThat(result.admitted()).isFalse();
     }
 
+    /**
+     * The clock starts with the crowd, so nothing is admitted before anyone is
+     * there to admit.
+     *
+     * This test used to advance a second first and assert the first joiner was
+     * already through - "200 admitted before anyone joins". That banking is the
+     * bug: on the deployed console a sandbox drop sat open for the forty seconds
+     * its load job took to schedule, banked three hundred and twenty places, and
+     * then admitted all two hundred arrivals on contact. issued 200, admitted
+     * 200, waiting 0, for the entire run. There was never a queue to look at.
+     *
+     * The first arrival now starts the admission clock and is through on the
+     * first tick of it, which at 200 a second is five milliseconds later.
+     */
     @Test
-    void anAlreadyAdmittedTicketReportsPositionZero() {
-        clock().advance(Duration.ofSeconds(1));   // 200 admitted before anyone joins
+    void theFirstArrivalStartsTheClockAndIsAdmittedOnTheFirstTick() {
+        clock().advance(Duration.ofSeconds(1));   // an open gate nobody has used
 
-        JoinResult result = queueService.join(DropRegistry.DEFAULT_ID);  // ticket 1
+        JoinResult joined = queueService.join(DropRegistry.DEFAULT_ID);  // ticket 1
+        assertThat(joined.ticket()).isEqualTo(1);
+        assertThat(joined.admitted()).isFalse();
 
-        assertThat(result.position()).isZero();
-        assertThat(result.admitted()).isTrue();
+        clock().advance(Duration.ofMillis(5));    // one tick at 200 a second
+
+        assertThat(admissionService.position(joined.token()).orElseThrow().admitted()).isTrue();
     }
 
     @Test

@@ -156,7 +156,57 @@ public class DropRegistry {
         if (!DEFAULT_ID.equals(id)) {
             redis.expire(KEY_PREFIX + id, IDLE_TTL);
             redis.expire(QueueService.ticketCounter(id), IDLE_TTL);
+            redis.expire(openedKey(id), IDLE_TTL);
         }
+    }
+
+    /** When the first person joined this drop's queue. */
+    static String openedKey(String id) {
+        return "queue:" + id + ":opened";
+    }
+
+    /**
+     * Records the instant the rush began, once. Later arrivals do not move it.
+     */
+    public void recordFirstArrival(String id, Instant when) {
+        redis.opsForValue().setIfAbsent(openedKey(id), when.toString(), IDLE_TTL);
+    }
+
+    /**
+     * The instant admission starts counting for this drop, which is not
+     * necessarily when the drop opened.
+     *
+     * Admission is elapsed time times a rate, so it accrues whether or not
+     * anyone is queueing. A sandbox drop is created the moment a visitor presses
+     * start, but their crowd arrives when a k6 Job has been scheduled, pulled
+     * and started - forty seconds later, by which point admission has banked
+     * three hundred places at 8/s and every one of the two hundred arrivals is
+     * admitted on contact. Measured against the deployed console: 200 issued,
+     * 200 admitted, 0 waiting, the whole run over in eight seconds. The queue
+     * this project is about never formed, and a page with nothing moving on it
+     * is the thing a visitor actually sees.
+     *
+     * Taking the later of the two means capacity cannot bank up before there is
+     * anybody to admit. For the canonical 21:00 drop nothing changes: arrivals
+     * gather before it opens, so opensAt is the later instant and admission
+     * still begins at 21:00 exactly.
+     */
+    public Instant admissionStartsAt(DropRecord drop) {
+        String raw = redis.opsForValue().get(openedKey(drop.id()));
+        if (raw == null) {
+            return drop.opensAt();
+        }
+        Instant firstArrival;
+        try {
+            firstArrival = Instant.parse(raw);
+        } catch (RuntimeException e) {
+            // Same rule the drop record follows: a value that cannot be read is
+            // treated as one that is not there. Admission falling back to the
+            // published opening time is a worse demo; a state endpoint that
+            // throws is a broken page.
+            return drop.opensAt();
+        }
+        return firstArrival.isAfter(drop.opensAt()) ? firstArrival : drop.opensAt();
     }
 
     private void write(DropRecord drop) {

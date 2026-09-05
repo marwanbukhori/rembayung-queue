@@ -54,9 +54,9 @@ import { StateService } from './state.service';
             </button>
             @if (sandbox(); as s) {
               <p class="reason">
-                Watching session <span class="mono">{{ s.dropId }}</span> on slot
-                <span class="mono">{{ s.slotId }}</span>, admitting {{ s.admitRate }} a second.
-                It expires by itself after thirty idle minutes, and so does the slot behind it.
+                Your own sitting of 250 seats is open, admitting {{ s.admitRate }} a second.
+                It clears itself up after thirty idle minutes, and nothing you do here touches
+                anyone else looking at this page.
               </p>
             } @else if (failure(); as reason) {
               <p class="reason">{{ reason }}</p>
