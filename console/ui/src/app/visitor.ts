@@ -41,12 +41,13 @@ import { StateService } from './state.service';
               looking at this page, and starting again is free.
             </p>
           </div>
-          <ol class="steps">
-            <li>Start a simulation, which seeds a fresh 250-seat slot and a counter in about a second.</li>
-            <li>Open it, then send two hundred customers at it at once — the 9pm rush, on demand.</li>
-            <li>Push the admission rate up until the connection pool gives out, and watch oversold stay at zero.</li>
-            <li>If the namespace is out of CPU your run will sit Pending, and the constraints panel will say so in the scheduler's own words. That is the demonstration, not a fault.</li>
-          </ol>
+          <div class="start-step">
+            <div class="card-title"><span class="step-num mono">1</span>Start a simulation</div>
+            <p class="sub">
+              Seeds a fresh 250-seat slot and a ticket counter of your own, in about a second. This
+              opens an <strong>empty</strong> queue — step 2 below is what puts people into it.
+            </p>
+          </div>
           <div>
             <button class="btn btn-primary" [disabled]="starting()" (click)="start()">
               {{ starting() ? 'Starting…' : sandbox() ? 'Start another simulation' : 'Start a simulation' }}
@@ -70,8 +71,19 @@ import { StateService } from './state.service';
       </section>
 
       @if (sandbox(); as s) {
-        <rb-canonical-drop heading="Your simulation, live" />
         <rb-load-control [startingRate]="s.admitRate" />
+        <rb-canonical-drop heading="Your simulation, live" />
+        <!--
+          Said plainly, because the panel above appears full of zeros the moment
+          a simulation starts, and a page of zeros reads as broken rather than
+          as waiting for you.
+        -->
+        <p class="reason">
+          Every counter above stays at zero until a run from step 2 reaches it. A simulation with
+          no traffic against it is idle, not broken. If the namespace is out of CPU the run sits
+          Pending and the constraints panel says so in the scheduler's own words — that is the
+          demonstration, not a fault.
+        </p>
       }
 
       <rb-constraints />
@@ -95,15 +107,28 @@ import { StateService } from './state.service';
   styles: `
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     .body { padding: 32px 24px; display: flex; flex-direction: column; gap: 20px; }
-    .steps {
-      margin: 0;
-      padding-left: 22px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+    .start-step .card-title { font-size: 19px; font-weight: 700; }
+    .start-step .sub {
+      margin: 6px 0 0;
       font-size: 15px;
+      color: var(--ink-soft);
       max-width: 66ch;
+      text-wrap: pretty;
     }
+    /* Ties the button to the step in the controls that follow it. */
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      margin-right: 8px;
+      border-radius: 999px;
+      background: var(--dhl-yellow);
+      font-size: 12px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+
     .exit {
       border-top: 1px solid var(--line);
       padding-top: 20px;

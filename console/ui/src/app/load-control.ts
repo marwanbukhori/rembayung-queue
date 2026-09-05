@@ -27,25 +27,12 @@ const LADDER = [
     <section class="pair">
       <div class="card pad">
         <div>
-          <div class="card-title">Admission rate</div>
-          <p class="sub">How fast the gate lets ticket holders reach the database.</p>
-        </div>
-        <div class="tabs">
-          @for (rate of rates; track rate.value) {
-            <button class="tab" [class.on]="rate.value === admitRate()"
-                    (click)="setRate(rate.value)">{{ rate.label }}</button>
-          }
-        </div>
-        <p class="note">{{ rateNote() }}</p>
-        @if (rateFailure(); as reason) {
-          <p class="reason" style="margin-top: 0;">{{ reason }}</p>
-        }
-      </div>
-
-      <div class="card pad">
-        <div>
-          <div class="card-title">Send customers</div>
-          <p class="sub">A k6 Job inside the cluster, so you do not need anything installed.</p>
+          <div class="card-title"><span class="step-num mono">2</span>Send the crowd</div>
+          <p class="sub">
+            <strong>Nothing moves until you do this.</strong> Starting a simulation opens an empty
+            queue; this is what puts people into it. A k6 Job runs inside the cluster, so there is
+            nothing to install.
+          </p>
         </div>
         <div class="tabs">
           @for (option of vuOptions; track option) {
@@ -81,6 +68,26 @@ const LADDER = [
           <span class="hint">{{ hint() }}</span>
         </div>
       </div>
+      <div class="card pad">
+        <div>
+          <div class="card-title"><span class="step-num mono">3</span>Change the admission rate</div>
+          <p class="sub">
+            How fast the gate lets ticket holders reach the database. Raise it while a run is in
+            flight and watch what gives.
+          </p>
+        </div>
+        <div class="tabs">
+          @for (rate of rates; track rate.value) {
+            <button class="tab" [class.on]="rate.value === admitRate()"
+                    (click)="setRate(rate.value)">{{ rate.label }}</button>
+          }
+        </div>
+        <p class="note">{{ rateNote() }}</p>
+        @if (rateFailure(); as reason) {
+          <p class="reason" style="margin-top: 0;">{{ reason }}</p>
+        }
+      </div>
+
     </section>
   `,
   styles: `
@@ -92,6 +99,19 @@ const LADDER = [
     }
     .pad { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
     .card-title { font-size: 19px; font-weight: 700; }
+    /* The number ties a control to the step that tells you to use it. */
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      margin-right: 8px;
+      border-radius: 999px;
+      background: var(--dhl-yellow);
+      font-size: 12px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
     .tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
     .tab {
       background: none;
