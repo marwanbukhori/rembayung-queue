@@ -92,7 +92,7 @@ public class AdmissionService {
      * requests carrying the same token race inside Redis and exactly one wins —
      * there is no check-then-act window to exploit.
      */
-    public void consume(String token) {
+    public DropRecord consume(String token) {
         String raw = redis.opsForValue().getAndDelete(QueueService.ADMIT_PREFIX + token);
         if (raw == null) {
             throw new TokenRejectedException("TOKEN_INVALID");
@@ -109,5 +109,9 @@ public class AdmissionService {
                                  drop.admitRate(), drop.admissionWindow())) {
             throw new TokenRejectedException("TOKEN_EXPIRED");
         }
+        // Returns the drop rather than void, so the caller can pin the booking to
+        // the slot this token was actually issued for. Without that, slotId is
+        // whatever the request body says and a sandbox token books slot 1.
+        return drop;
     }
 }

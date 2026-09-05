@@ -1,3 +1,12 @@
+# One Route, no path restriction — and that is NOT the security boundary.
+#
+# A path-scoped Route was tried and abandoned: this sandbox forbids setting
+# spec.host, so a second Route for /bookings could not share the hostname, and
+# splitting the API across two origins would break loadtest/drop.js, the console
+# and every documented curl. Closing the hole that way cost more than the hole.
+#
+# The boundary is InternalGuard in the application instead: /internal/* requires
+# a shared secret that only in-cluster callers hold. See that filter for why.
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
