@@ -4,11 +4,6 @@ import dev.marwan.console.ConsoleProperties;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Quantity;
-import io.fabric8.kubernetes.client.Config;
-import io.fabric8.kubernetes.client.ConfigBuilder;
-import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientBuilder;
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,10 +27,11 @@ import java.util.Objects;
  *
  * <h2>Off-cluster is a normal state, not a failure</h2>
  * On a laptop there is no ServiceAccount token and the API is unreachable. The
- * client is therefore built lazily and every call is wrapped, so the console
- * starts, serves, and simply says it cannot see the cluster. A failed build is
- * remembered briefly rather than retried on every poll, because a DNS lookup
- * that will not resolve should not be attempted once per viewer per second.
+ * client comes from {@link KubernetesAccess}, which builds it lazily, and every
+ * call is wrapped, so the console starts, serves, and simply says it cannot see
+ * the cluster. A failure is remembered briefly rather than retried on every
+ * poll, because a DNS lookup that will not resolve should not be attempted once
+ * per viewer per second.
  */
 @Service
 public class PodHealthProvider {
@@ -45,18 +41,17 @@ public class PodHealthProvider {
     /** Long enough that a dead API is not dialled every poll, short enough that a recovery shows up. */
     private static final Duration RETRY_AFTER_FAILURE = Duration.ofSeconds(30);
 
-    private static final int API_TIMEOUT_MILLIS = 2000;
-
     private final ConsoleProperties properties;
+    private final KubernetesAccess kubernetes;
     private final Clock clock;
 
-    private volatile KubernetesClient client;
     private volatile Instant lastFailure;
     private volatile String lastFailureDetail;
     private volatile Cached cached;
 
-    public PodHealthProvider(ConsoleProperties properties, Clock clock) {
+    public PodHealthProvider(ConsoleProperties properties, KubernetesAccess kubernetes, Clock clock) {
         this.properties = properties;
+        this.kubernetes = kubernetes;
         this.clock = clock;
     }
 
@@ -76,7 +71,7 @@ public class PodHealthProvider {
 
     private PodHealth read() {
         try {
-            List<PodStatus> pods = client().pods()
+            List<PodStatus> pods = kubernetes.client().pods()
                     .inNamespace(properties.namespace())
                     .list()
                     .getItems()
@@ -91,30 +86,12 @@ public class PodHealthProvider {
             // Throwable rather than Exception: a missing optional HTTP client on
             // the classpath surfaces as an Error, and the console going down
             // because it could not describe pods would be the wrong trade.
-            String detail = "cluster not readable: " + summarise(e);
+            String detail = "cluster not readable: " + KubernetesAccess.summarise(e);
             log.warn("console could not read pods in {}: {}", properties.namespace(), e.toString());
             lastFailure = clock.instant();
             lastFailureDetail = detail;
-            client = null;
+            kubernetes.invalidate();
             return PodHealth.unavailable(detail);
-        }
-    }
-
-    private KubernetesClient client() {
-        KubernetesClient existing = client;
-        if (existing != null) {
-            return existing;
-        }
-        synchronized (this) {
-            if (client == null) {
-                Config config = new ConfigBuilder()
-                        .withRequestTimeout(API_TIMEOUT_MILLIS)
-                        .withConnectionTimeout(API_TIMEOUT_MILLIS)
-                        .withNamespace(properties.namespace())
-                        .build();
-                client = new KubernetesClientBuilder().withConfig(config).build();
-            }
-            return client;
         }
     }
 
@@ -167,20 +144,6 @@ public class PodHealthProvider {
             return Math.max(0, up.toMinutes()) + "m";
         } catch (Exception e) {
             return "-";
-        }
-    }
-
-    private static String summarise(Throwable e) {
-        String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-        String oneLine = message.replaceAll("\\s+", " ").trim();
-        return oneLine.length() <= 160 ? oneLine : oneLine.substring(0, 157) + "...";
-    }
-
-    @PreDestroy
-    void close() {
-        KubernetesClient open = client;
-        if (open != null) {
-            open.close();
         }
     }
 

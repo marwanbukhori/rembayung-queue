@@ -13,6 +13,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class DropOpsTest {
@@ -93,5 +94,84 @@ class DropOpsTest {
 
         // Nothing was expected of booking-service, and nothing was asked of it.
         bookingServer.verify();
+    }
+
+    /**
+     * 200 a second is offered deliberately, and the console must not quietly
+     * refuse it.
+     *
+     * It exhausts the connection pool and produces 503 with Retry-After while
+     * oversold stays at zero, which is the most persuasive thing this project
+     * can put on a screen. A control that only accepted comfortable values
+     * would have nothing to demonstrate.
+     */
+    @Test
+    void twoHundredASecondIsAnOfferedRateAndReachesTheGate() {
+        MockRestServiceServer gateServer = MockRestServiceServer.bindTo(gate).build();
+        gateServer.expect(requestTo("http://queue-gate:8080/internal/drops/d-abc12345/rate"))
+                .andExpect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(jsonPath("$.admitRate").value(200))
+                .andRespond(withSuccess("{\"id\":\"d-abc12345\",\"admitRate\":200}",
+                        MediaType.APPLICATION_JSON));
+
+        DropOps.Rate rate = new DropOps(booking.build(), gate.build())
+                .rate("d-abc12345", new DropOps.SetRate(200));
+
+        assertThat(rate.admitRate()).isEqualTo(200);
+        assertThat(rate.dropId()).isEqualTo("d-abc12345");
+        gateServer.verify();
+    }
+
+    /**
+     * The three offers are a fixed list, not a range. Anything else is a typo
+     * or a probe, and neither should become a stored drop nobody chose.
+     */
+    @Test
+    void aRateOutsideTheThreeOffersIsRefusedBeforeTheGateIsAsked() {
+        MockRestServiceServer gateServer = MockRestServiceServer.bindTo(gate).build();
+
+        assertThatThrownBy(() -> new DropOps(booking.build(), gate.build())
+                .rate("d-abc12345", new DropOps.SetRate(50)))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        gateServer.verify();
+    }
+
+    /**
+     * The gate's own refusal is passed through with its status, not flattened
+     * into a 503. A drop that expired is a 404 and the canonical drop is a 409,
+     * and both of those tell the person pressing the button something true;
+     * "service unavailable" would tell them the system was broken when it had
+     * in fact answered them precisely.
+     */
+    @Test
+    void theGatesRefusalKeepsItsOwnStatus() {
+        MockRestServiceServer gateServer = MockRestServiceServer.bindTo(gate).build();
+        gateServer.expect(requestTo("http://queue-gate:8080/internal/drops/default/rate"))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"the canonical drop's admission rate is configuration\"}"));
+
+        assertThatThrownBy(() -> new DropOps(booking.build(), gate.build())
+                .rate("default", new DropOps.SetRate(200)))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void aDropThatExpiredIsANotFoundRatherThanAnOutage() {
+        MockRestServiceServer gateServer = MockRestServiceServer.bindTo(gate).build();
+        gateServer.expect(requestTo("http://queue-gate:8080/internal/drops/d-gone/rate"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThatThrownBy(() -> new DropOps(booking.build(), gate.build())
+                .rate("d-gone", new DropOps.SetRate(8)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("may have expired")
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

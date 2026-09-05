@@ -10,6 +10,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -115,5 +116,49 @@ class InternalControllerTest extends RedisTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"admitRate\": 0, \"slotId\": 1}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * The rate the console's control writes, and the one it exists to offer.
+     *
+     * 200 a second is more than the database can absorb: the pool exhausts,
+     * booking-service refuses with 503 and Retry-After, and oversold stays at
+     * zero throughout. The gate stores it without argument, because refusing
+     * an "unsafe" rate would remove the only way to show that.
+     */
+    @Test
+    void aDropsRateCanBeRaisedToTwoHundredWhileItIsOpen() throws Exception {
+        DropRecord drop = drops.create(8, 4242L);
+
+        mvc.perform(post("/internal/drops/" + drop.id() + "/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"admitRate\": 200}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.admitRate").value(200))
+                .andExpect(jsonPath("$.slotId").value(4242));
+
+        assertThat(drops.find(drop.id()).orElseThrow().admitRate()).isEqualTo(200);
+    }
+
+    /**
+     * 409 rather than 400: the request is well formed, and it is the canonical
+     * drop being configuration rather than a stored record that makes it
+     * impossible. That distinction is what keeps the scheduled 21:00 path
+     * driven by the ConfigMap.
+     */
+    @Test
+    void theCanonicalDropsRateIsAConflictRatherThanAWrite() throws Exception {
+        mvc.perform(post("/internal/drops/" + DropRegistry.DEFAULT_ID + "/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"admitRate\": 200}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void theRateOfAnExpiredDropIsNotFound() throws Exception {
+        mvc.perform(post("/internal/drops/d-gone/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"admitRate\": 8}"))
+                .andExpect(status().isNotFound());
     }
 }

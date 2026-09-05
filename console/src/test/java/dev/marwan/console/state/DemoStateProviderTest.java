@@ -144,8 +144,9 @@ class DemoStateProviderTest {
 
     private ConsoleProperties properties() {
         return new ConsoleProperties("http://booking-service:8081", "http://queue-gate:8080",
-                "default", 1, Duration.ofSeconds(2), Duration.ofSeconds(1), "rembayung",
-                "s3cret-demo-key");
+                "default", 1, Duration.ofSeconds(2), Duration.ofSeconds(1), "marwanbukhori-dev",
+                "s3cret-demo-key", "compute-deploy", "grafana/k6:0.53.0",
+                new ConsoleProperties.Pool("booking-service", 5, 20));
     }
 
     /** A clock the test moves, so cache expiry is asserted rather than slept through. */

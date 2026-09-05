@@ -1,5 +1,8 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
+import { Constraints } from './constraints';
+import { LoadControl } from './load-control';
+import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
 import { StateService } from './state.service';
 
@@ -15,7 +18,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop],
+  imports: [CanonicalDrop, LoadControl, Constraints],
   template: `
     <div class="stack">
       <section class="panel">
@@ -33,6 +36,7 @@ import { StateService } from './state.service';
             <li>Start a drop, which seeds a slot and a counter in about a second.</li>
             <li>Open it, then send two hundred customers at it at once.</li>
             <li>Push the admission rate up until the connection pool gives out, and watch oversold stay at zero.</li>
+            <li>If the namespace is out of CPU your run will sit Pending, and the constraints panel will say so in the scheduler's own words. That is the demonstration, not a fault.</li>
           </ol>
           <div>
             <button class="btn btn-primary" [disabled]="starting()" (click)="start()">
@@ -56,24 +60,12 @@ import { StateService } from './state.service';
         </div>
       </section>
 
-      @if (sandbox()) {
+      @if (sandbox(); as s) {
         <rb-canonical-drop heading="Your drop" />
+        <rb-load-control [startingRate]="s.admitRate" />
       }
 
-      <section class="stack-16">
-        <div class="section-head">
-          <div style="min-width: 0;">
-            <h2>Constraints</h2>
-            <p class="sub">What the cluster will and will not give you, live</p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="reason" style="margin-top: 0;">
-            Not read yet. The namespace CPU budget, the autoscalers and the Oracle pool arrive with
-            task 7, alongside the load runs that make them move.
-          </div>
-        </div>
-      </section>
+      <rb-constraints />
     </div>
   `,
   styles: `
@@ -98,21 +90,37 @@ import { StateService } from './state.service';
 export class Visitor implements OnInit, OnDestroy {
   private readonly sandboxes = inject(SandboxService);
   private readonly state = inject(StateService);
+  private readonly loads = inject(LoadService);
 
   readonly sandbox = this.sandboxes.sandbox;
   readonly starting = this.sandboxes.starting;
   readonly failure = this.sandboxes.failure;
 
   ngOnInit(): void {
-    this.state.watch(this.sandbox()?.dropId ?? null);
+    const existing = this.sandbox();
+    this.state.watch(existing?.dropId ?? null);
+    this.loads.watch(existing?.dropId ?? null, existing?.admitRate ?? null);
   }
 
+  /**
+   * Leaving puts the state loop back on the canonical drop and stops the load
+   * loop entirely.
+   *
+   * The two differ on purpose. The canonical drop always has numbers worth
+   * showing, so the state loop follows it; there is no canonical load run, and
+   * polling for one would ask about a Job nobody started once every two seconds
+   * forever.
+   */
   ngOnDestroy(): void {
     this.state.watch(null);
+    this.loads.watch(null);
   }
 
   start(): void {
     // The page reads the drop; the slot comes back with it from the gate.
-    this.sandboxes.start((sandbox) => this.state.watch(sandbox.dropId));
+    this.sandboxes.start((sandbox) => {
+      this.state.watch(sandbox.dropId);
+      this.loads.watch(sandbox.dropId, sandbox.admitRate);
+    });
   }
 }

@@ -1,6 +1,21 @@
 spring:
   application:
     name: console
+  mvc:
+    problemdetails:
+      # RFC 9457 bodies, so a refusal arrives with its reason in `detail`.
+      #
+      # Not cosmetic. The governing principle of this page is that constraints
+      # are content: when something cannot run, the console names the limit.
+      # Without this, Spring's default error body carries only
+      # {"status":503,"error":"Service Unavailable"} — server.error.include-message
+      # does not put a ResponseStatusException's reason in it — and the browser
+      # was left printing a generic sentence in place of "queue-gate could not
+      # start a sandbox: Connection refused" or "a load run for this drop is
+      # already in flight". Verified against a running console before and after.
+      #
+      # KeyFilter is unaffected: it writes its own 401 body before any handler.
+      enabled: true
   web:
     resources:
       # The Angular build first, the classpath second. In the image the node
@@ -39,6 +54,24 @@ console:
   # One key for the whole console, from a Secret. Unset means the API refuses
   # every call: a console nobody configured must be shut, not open.
   access-key: ${CONSOLE_ACCESS_KEY:}
+  # The namespace has two CPU quotas with opposing scopes: compute-build
+  # (Terminating) and compute-deploy (NotTerminating). A pod counts against
+  # whichever matches, and a pod is Terminating only when its own spec sets
+  # activeDeadlineSeconds. The load Job sets that deadline on the JOB, not on
+  # the pod template, so its pods are NotTerminating and compete with the
+  # Deployments for the same 3000m — which is the whole reason scaling the gate
+  # can leave a visitor's run Pending.
+  quota: ${CONSOLE_QUOTA:compute-deploy}
+  # Pinned. A load run that behaves differently between two demos because
+  # :latest moved underneath it would be untraceable.
+  k6-image: ${CONSOLE_K6_IMAGE:grafana/k6:0.53.0}
+  pool:
+    deployment: booking-service
+    # spring.datasource.hikari.maximum-pool-size in booking-service.
+    per-replica: 5
+    # Oracle Autonomous Database Always Free stops handing out sessions around
+    # here, so the pool cannot be grown out of the problem.
+    cap: 20
   static-path: ${CONSOLE_STATIC_PATH:./ui/dist/ui/browser/}
 
 management:

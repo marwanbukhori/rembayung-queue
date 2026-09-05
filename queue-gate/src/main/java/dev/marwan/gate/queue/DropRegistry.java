@@ -77,6 +77,48 @@ public class DropRegistry {
         return drop;
     }
 
+    /**
+     * Change a stored drop's admission rate.
+     *
+     * The point of holding drops in Redis: the rate used to be an environment
+     * variable, so changing it meant a redeploy. Now it is a write, and a
+     * visitor can push their own drop from 8 to 200 admissions a second and
+     * watch the connection pool give out while the seat invariant does not.
+     *
+     * The canonical drop is deliberately not updatable. It is built from
+     * configuration by {@link #defaultDrop()} and has no key in Redis, which is
+     * what keeps the scheduled 21:00 path driven by the ConfigMap and
+     * open-drop.sh rather than by whatever the last person to press a button
+     * chose. Writing it here would create a stored record that silently
+     * outranked the configuration — a drop whose real rate you could no longer
+     * read from the deployment.
+     *
+     * @return the updated record, or empty if no such stored drop exists
+     * @throws IllegalArgumentException if asked to change the canonical drop
+     */
+    public Optional<DropRecord> updateAdmitRate(String id, int admitRate) {
+        if (DEFAULT_ID.equals(id)) {
+            throw new IllegalArgumentException(
+                    "the canonical drop's admission rate is configuration, not a stored value");
+        }
+        if (admitRate <= 0) {
+            throw new IllegalArgumentException("admitRate must be positive but was " + admitRate);
+        }
+        return find(id).map(existing -> {
+            DropRecord updated = new DropRecord(
+                    existing.id(),
+                    existing.opensAt(),
+                    existing.closesAt(),
+                    existing.ticketCap(),
+                    admitRate,
+                    existing.admissionWindow(),
+                    existing.ticketTtl(),
+                    existing.slotId());
+            write(updated);
+            return updated;
+        });
+    }
+
     public Optional<DropRecord> find(String id) {
         if (DEFAULT_ID.equals(id)) {
             return Optional.of(defaultDrop());

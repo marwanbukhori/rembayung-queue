@@ -4,14 +4,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -45,6 +48,28 @@ public class DropOps {
     /** Above this the queue empties faster than the page can draw it. */
     private static final int MAX_ADMIT_RATE = 500;
 
+    /**
+     * The three rates the console offers, and what each one demonstrates.
+     *
+     * <ul>
+     *   <li><b>1/s</b> — slow enough to watch one person at a time reach the
+     *       database.</li>
+     *   <li><b>8/s</b> — the production setting, and a measured one: 20
+     *       connections divided by a 2.7s round trip to an Oracle instance a
+     *       region away.</li>
+     *   <li><b>200/s</b> — more than the database can absorb. The pool
+     *       exhausts, booking-service refuses with 503 and Retry-After, and
+     *       <b>oversold stays at zero anyway</b>.</li>
+     * </ul>
+     *
+     * That third one is offered on purpose and labelled rather than hidden
+     * behind a warning. It is the most persuasive thing this console can show:
+     * the system under genuine overload, refusing work correctly instead of
+     * breaking its own invariant. A control that only let you pick safe values
+     * would have nothing to prove.
+     */
+    private static final List<Integer> OFFERED_RATES = List.of(1, 8, 200);
+
     private final RestClient booking;
     private final RestClient gate;
 
@@ -61,6 +86,53 @@ public class DropOps {
         String dropId = createDrop(admitRate, slotId);
         log.info("Started sandbox drop {} on slot {} at {} admissions/s", dropId, slotId, admitRate);
         return new Sandbox(dropId, slotId, admitRate);
+    }
+
+    /**
+     * Change a drop's admission rate while it is open.
+     *
+     * A write to the DropRecord in Redis, which is why this is possible at all:
+     * the rate used to be an environment variable, and changing it meant a
+     * redeploy. It is per drop, so a visitor turning theirs up to 200 does not
+     * touch the canonical 21:00 drop — and the gate refuses that one outright,
+     * because the canonical drop is built from configuration and is not stored.
+     */
+    @PostMapping("/{dropId}/rate")
+    public Rate rate(@PathVariable String dropId, @RequestBody SetRate request) {
+        if (request == null || request.admitRate() == null
+                || !OFFERED_RATES.contains(request.admitRate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "admitRate must be one of " + OFFERED_RATES);
+        }
+        int admitRate = request.admitRate();
+        try {
+            gate.post()
+                    .uri("/internal/drops/{id}/rate", dropId)
+                    .body(Map.of("admitRate", admitRate))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            // The gate's own refusal, kept as it was written: 404 for a drop
+            // that expired, 409 for the canonical one. Flattening either into a
+            // 503 would tell the person pressing the button that the system was
+            // broken when in fact it had answered them precisely.
+            throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()),
+                    reasonFrom(e, dropId));
+        } catch (Exception e) {
+            throw unavailable("queue-gate", e);
+        }
+        log.info("Set drop {} to {} admissions/s", dropId, admitRate);
+        return new Rate(dropId, admitRate);
+    }
+
+    private String reasonFrom(RestClientResponseException e, String dropId) {
+        if (e.getStatusCode().value() == 404) {
+            return "no drop " + dropId + ": it may have expired";
+        }
+        String body = e.getResponseBodyAsString();
+        return body == null || body.isBlank()
+                ? "queue-gate refused the change: " + e.getStatusText()
+                : body;
     }
 
     private int admitRateOf(StartDrop request) {
@@ -122,6 +194,12 @@ public class DropOps {
 
     /** {@code {"admitRate": 8}}, or an empty body for the default. */
     public record StartDrop(Integer admitRate) { }
+
+    /** {@code {"admitRate": 200}}; one of 1, 8 or 200. */
+    public record SetRate(Integer admitRate) { }
+
+    /** What the rate is now, so the page does not have to assume it took. */
+    public record Rate(String dropId, int admitRate) { }
 
     /** What the browser needs to watch what it just made. */
     public record Sandbox(String dropId, long slotId, int admitRate) { }

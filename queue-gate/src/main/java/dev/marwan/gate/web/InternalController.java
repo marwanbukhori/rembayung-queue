@@ -73,8 +73,43 @@ public class InternalController {
         return drops.create(admitRate, asked.slotId());
     }
 
+    /**
+     * Change an open drop's admission rate.
+     *
+     * This is what makes the console's rate control a write rather than a
+     * redeploy. 200/s is a rate a visitor is meant to choose: it asks the gate
+     * to admit far more than the database can absorb, the connection pool
+     * exhausts, booking-service refuses with 503 and Retry-After, and oversold
+     * stays at zero throughout. Refusing to store an "unsafe" rate would remove
+     * the only way to demonstrate that.
+     *
+     * 409 rather than 400 for the canonical drop: the request is well formed,
+     * and it is the state of that particular drop — configuration, not a stored
+     * record — that makes it impossible.
+     */
+    @PostMapping("/{dropId}/rate")
+    public ResponseEntity<DropRecord> rate(@PathVariable String dropId,
+                                           @RequestBody SetRate request) {
+        if (request == null || request.admitRate() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "admitRate is required");
+        }
+        try {
+            return drops.updateAdmitRate(dropId, request.admitRate())
+                    .map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException e) {
+            HttpStatus status = DropRegistry.DEFAULT_ID.equals(dropId)
+                    ? HttpStatus.CONFLICT
+                    : HttpStatus.BAD_REQUEST;
+            throw new ResponseStatusException(status, e.getMessage());
+        }
+    }
+
     /** {@code {"admitRate": 8, "slotId": 4242}}; both optional. */
     public record CreateDrop(Integer admitRate, Long slotId) { }
+
+    /** {@code {"admitRate": 200}}. */
+    public record SetRate(Integer admitRate) { }
 
     /**
      * The queue numbers, plus the slot the drop sells.
