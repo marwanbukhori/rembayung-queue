@@ -21,12 +21,27 @@ class HealthProbeTest extends OracleTestBase {
                 .andExpect(jsonPath("$.status").value("UP"));
     }
 
+    /**
+     * Readiness answers for this pod only. `db` is deliberately not in the
+     * group: it borrows a pooled connection, so it reports DOWN whenever the
+     * pool is saturated, and saturating the pool is something this system does
+     * on purpose. See ReadinessUnderLoadTest.
+     */
     @Test
-    void readinessIncludesTheDatabase() throws Exception {
+    void readinessDoesNotGateOnTheDatabase() throws Exception {
         mvc.perform(get("/actuator/health/readiness"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.components.db").exists());
+                .andExpect(jsonPath("$.components.readinessState").exists())
+                .andExpect(jsonPath("$.components.db").doesNotExist());
+    }
+
+    /** Still checked, still visible - just not a gate on traffic. */
+    @Test
+    void theDatabaseIsStillReportedOnTheHealthEndpoint() throws Exception {
+        mvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
     }
 
     @Test

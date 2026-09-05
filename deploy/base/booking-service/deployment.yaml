@@ -188,16 +188,22 @@ spec:
           readinessProbe:
             httpGet: { path: /actuator/health/readiness, port: management }
             # 5s, not the 1s default, and the default is what broke a real
-            # deploy. This group includes `db`, so the check crosses the network
-            # to Oracle. Measured in-cluster: 0.26s, 0.26s, 0.51s, 0.51s, 0.54s —
-            # already 26-54% of a 1s budget with nothing left for a GC pause,
-            # pool contention, or a slow round trip.
+            # deploy. The group used to include `db`, so the check crossed the
+            # network to Oracle. Measured in-cluster: 0.26s, 0.26s, 0.51s, 0.51s,
+            # 0.54s — already 26-54% of a 1s budget with nothing left for a GC
+            # pause, pool contention, or a slow round trip.
             #
             # Under a rollout it reliably exceeded 1s: a cold JVM with an
             # initialising connection pool is the worst case, which is exactly
             # when the probe runs. CD deployed 2c60885, both new pods failed
             # readiness, the rollout wait timed out, and the playbook rolled the
             # whole thing back. The images were fine; the probe budget was not.
+            #
+            # `db` has since been taken out of the group entirely (see
+            # application.yml): it borrowed a pooled connection, so a saturated
+            # pool reported the pod as unready during the one run this system is
+            # built to demonstrate. The generous budget stays — it costs nothing
+            # and the rollout evidence above was real.
             timeoutSeconds: 5
             initialDelaySeconds: 20
             periodSeconds: 5

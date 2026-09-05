@@ -53,6 +53,29 @@ management:
         enabled: true
       show-details: never
       group:
+        # readinessState only, and `db` deliberately absent.
+        #
+        # The db indicator borrows a pooled connection, so it fails whenever the
+        # pool is saturated - measured, not assumed: with every connection
+        # checked out this group returned 503 with
+        # "CannotGetJdbcConnectionException: Failed to obtain JDBC Connection".
+        # Saturating the pool is something this system does on purpose. The
+        # console offers 200 admissions a second to show booking-service shed
+        # load with 503 and Retry-After while oversold stays at zero, and under
+        # the old grouping that run made every pod unready, emptied the Service,
+        # and replaced the application's deliberate refusal with the router's
+        # own error page. Load shedding and readiness were fighting each other.
+        #
+        # Removing it costs less than it looks. Oracle is shared by every
+        # replica, so an outage fails them all at once: gating readiness on it
+        # does not shift traffic to a healthy pod, it just empties the Service
+        # and turns an application 503 that carries Retry-After into a router
+        # 503 that carries nothing. A readiness probe that depends on a shared
+        # backing service converts that dependency's blip into a total outage.
+        #
+        # The database is still checked and still visible - /actuator/health
+        # reports db, and Prometheus scrapes it - it just no longer decides
+        # whether this pod is allowed to answer.
         readiness:
-          include: readinessState,db
+          include: readinessState
           show-details: always
