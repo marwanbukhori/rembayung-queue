@@ -45,12 +45,35 @@ public class RestExceptionHandler {
      * 20 connections cap throughput near 7/sec. Telling the caller to retry is
      * truthful; a 500 is not.
      *
-     * Handles pool exhaustion via DataAccessResourceFailureException, which is
-     * the superclass of CannotCreateTransactionException and CannotGetJdbcConnectionException.
-     * Both are thrown when the Hikari pool times out.
+     * Two exception types, because they are NOT related and an earlier version of
+     * this comment claimed they were.
+     *
+     * The claim was that DataAccessResourceFailureException is the superclass of
+     * CannotCreateTransactionException. It is not. Verified against the running
+     * classpath:
+     *
+     *   CannotCreateTransactionException
+     *     -> org.springframework.transaction.TransactionException
+     *     -> org.springframework.core.NestedRuntimeException
+     *
+     * It lives in org.springframework.transaction and shares no ancestor with
+     * org.springframework.dao below RuntimeException. So this handler caught
+     * CannotGetJdbcConnectionException — thrown when code already inside a
+     * transaction asks for a connection — and completely missed the one Spring
+     * actually throws when @Transactional cannot obtain a connection to OPEN the
+     * transaction, which is the overwhelmingly common case under pool exhaustion.
+     *
+     * The cost was not theoretical. The first load run ever executed inside the
+     * cluster returned HTTP 500 for 188 of 200 bookings, while loadtest/drop.js
+     * and the project's notes both stated that overload produces 503 with
+     * Retry-After. No test caught it because nothing in the suite exhausts a
+     * pool, and no laptop run had ever pushed hard enough.
      */
-    @ExceptionHandler(org.springframework.dao.DataAccessResourceFailureException.class)
-    public ResponseEntity<ApiError> overloaded(org.springframework.dao.DataAccessResourceFailureException e) {
+    @ExceptionHandler({
+            org.springframework.dao.DataAccessResourceFailureException.class,
+            org.springframework.transaction.CannotCreateTransactionException.class
+    })
+    public ResponseEntity<ApiError> overloaded(RuntimeException e) {
         // Check if this is a connection pool timeout by examining the cause chain
         if (isSQLTransientConnectionException(e)) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
