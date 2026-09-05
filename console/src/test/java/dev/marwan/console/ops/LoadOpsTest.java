@@ -81,10 +81,18 @@ class LoadOpsTest {
         assertThat(run.phase()).isEqualTo(LoadRun.Phase.NONE);
     }
 
-    /** 200 is the measured ceiling of usefulness, so it is what an empty body means. */
+    /**
+     * 60, so the default run finishes while somebody is still watching it.
+     *
+     * It was 200, chosen as the ceiling of usefulness. At the one admission a
+     * second this database actually commits, 200 customers take over three
+     * minutes to get through and the k6 script stops polling after ninety
+     * seconds, so most of them would give up before their turn. 60 drains in a
+     * minute, inside that window.
+     */
     @Test
-    void theDefaultIsTheMeasuredCeiling() {
-        assertThat(LoadOps.DEFAULT_VUS).isEqualTo(200);
+    void theDefaultCrowdFitsInsideThePollWindow() {
+        assertThat(LoadOps.DEFAULT_VUS).isEqualTo(60);
     }
 
     private static ConsoleProperties properties() {

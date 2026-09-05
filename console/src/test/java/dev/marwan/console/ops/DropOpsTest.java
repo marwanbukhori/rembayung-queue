@@ -36,7 +36,7 @@ class DropOpsTest {
         gateServer.expect(requestTo("http://queue-gate:8080/internal/drops"))
                 .andExpect(method(org.springframework.http.HttpMethod.POST))
                 .andExpect(jsonPath("$.slotId").value(4242))
-                .andExpect(jsonPath("$.admitRate").value(8))
+                .andExpect(jsonPath("$.admitRate").value(1))
                 .andRespond(withSuccess("{\"id\":\"d-abc12345\",\"slotId\":4242}",
                         MediaType.APPLICATION_JSON));
 
@@ -44,7 +44,9 @@ class DropOpsTest {
 
         assertThat(sandbox.dropId()).isEqualTo("d-abc12345");
         assertThat(sandbox.slotId()).isEqualTo(4242);
-        assertThat(sandbox.admitRate()).isEqualTo(8);
+        // One a second: what the database commits, so the default run fills seats
+        // rather than shedding nine in ten of them.
+        assertThat(sandbox.admitRate()).isEqualTo(1);
         bookingServer.verify();
         gateServer.verify();
     }

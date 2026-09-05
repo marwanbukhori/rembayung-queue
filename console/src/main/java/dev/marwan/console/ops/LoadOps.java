@@ -352,7 +352,12 @@ public class LoadOps {
      * gets refused, and the panel would have nothing to explain.
      */
     static int cpuMillis(int vus) {
-        if (vus <= DEFAULT_VUS) {
+        // Thresholds stated, not keyed to DEFAULT_VUS. They were the same number
+        // by coincidence, so lowering the default from 200 to 60 silently moved
+        // every 200-VU run up a step and asked the quota for twice the CPU. What
+        // a run costs should not change because a different button's default
+        // moved.
+        if (vus <= 200) {
             return 200;
         }
         return vus <= 1000 ? 400 : 800;
