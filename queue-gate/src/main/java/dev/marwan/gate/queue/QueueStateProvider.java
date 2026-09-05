@@ -1,12 +1,13 @@
 package dev.marwan.gate.queue;
 
-import dev.marwan.gate.config.DropProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reads queue state without disturbing it.
@@ -19,25 +20,52 @@ import java.time.Instant;
 public class QueueStateProvider {
 
     private final StringRedisTemplate redis;
-    private final DropProperties drop;
+    private final DropRegistry drops;
     private final Clock clock;
 
     /** Shorter than any scrape interval: unifies reads within a scrape, never across two. */
     private static final Duration TTL = Duration.ofMillis(500);
 
-    private volatile Snapshot snapshot;
+    /**
+     * Above this many memoised drops, drop the expired ones on the next miss.
+     * Drops expire in Redis after half an hour of idleness; without this the
+     * memo would be the one place a discarded sandbox left something behind.
+     */
+    private static final int PRUNE_ABOVE = 64;
 
-    public QueueStateProvider(StringRedisTemplate redis, DropProperties drop, Clock clock) {
+    /**
+     * One memo per drop, not one memo.
+     *
+     * A single field keyed by nothing was correct only while there was exactly
+     * one drop. With a console handing every visitor their own, currentFor("A")
+     * followed by currentFor("B") inside the TTL would answer B with A's queue
+     * depth: one visitor shown another visitor's numbers, confidently and with
+     * no error anywhere. Keying by drop keeps the consistency the memo exists
+     * for and removes the confusion it would otherwise introduce.
+     */
+    private final Map<String, Snapshot> snapshots = new ConcurrentHashMap<>();
+
+    public QueueStateProvider(StringRedisTemplate redis, DropRegistry drops, Clock clock) {
         this.redis = redis;
-        this.drop = drop;
+        this.drops = drops;
         this.clock = clock;
     }
 
     /**
-     * One snapshot per instant, briefly memoised.
+     * The canonical 21:00 drop — what the three Micrometer gauges report on.
      *
-     * Not for load — three Redis GETs per scrape is nothing. For consistency.
-     * The three gauges call this independently, and admittedBy() is a function
+     * Kept as its own method so the gauges and their alert rules cannot be
+     * pointed at somebody's sandbox by accident.
+     */
+    public QueueState current() {
+        return currentFor(DropRegistry.DEFAULT_ID);
+    }
+
+    /**
+     * One snapshot per drop per instant, briefly memoised.
+     *
+     * Not for load — a Redis GET per scrape is nothing. For consistency. The
+     * three gauges call current() independently, and admittedBy() is a function
      * of the clock, so three uncached reads can straddle a second boundary and
      * publish an `admitted` that does not match the `admitted` used to derive
      * `waiting`. A dashboard where issued - admitted != waiting undermines
@@ -45,19 +73,33 @@ public class QueueStateProvider {
      *
      * The TTL is deliberately shorter than any scrape interval, so a snapshot is
      * never stale between scrapes — it only unifies the reads within one.
+     *
+     * @throws UnknownDropException if the drop has expired or never existed
      */
-    public QueueState current() {
+    public QueueState currentFor(String dropId) {
         Instant now = clock.instant();
-        Snapshot cached = snapshot;
+        Snapshot cached = snapshots.get(dropId);
         if (cached != null && Duration.between(cached.takenAt(), now).compareTo(TTL) < 0) {
             return cached.state();
         }
-        String raw = redis.opsForValue().get(QueueService.TICKET_COUNTER);
+        DropRecord drop = drops.find(dropId)
+                .orElseThrow(() -> new UnknownDropException(dropId));
+
+        String raw = redis.opsForValue().get(QueueService.ticketCounter(dropId));
         long issued = raw == null ? 0L : Long.parseLong(raw);
         long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
         QueueState state = QueueState.of(issued, admitted, drop.ticketCap());
-        snapshot = new Snapshot(state, now);
+        snapshots.put(dropId, new Snapshot(state, now));
+        pruneExpired(now);
         return state;
+    }
+
+    private void pruneExpired(Instant now) {
+        if (snapshots.size() <= PRUNE_ABOVE) {
+            return;
+        }
+        snapshots.values().removeIf(
+                s -> Duration.between(s.takenAt(), now).compareTo(TTL) >= 0);
     }
 
     private record Snapshot(QueueState state, Instant takenAt) { }
