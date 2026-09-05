@@ -45,8 +45,13 @@ interface WorkloadRow {
   pods: PodGlyph[];
   millis: number;
   /** What the autoscaler is allowed and what it currently wants. */
+  min: number | null;
   max: number | null;
   desired: number | null;
+  /** The autoscaler's own replica count, which spans ReplicaSets mid-rollout. */
+  current: number | null;
+  /** Empty slots between the running pods and the ceiling. */
+  headroom: number[];
   currentPercent: number | null;
   targetPercent: number | null;
   hasHpa: boolean;
@@ -133,8 +138,9 @@ interface WorkloadRow {
               <div class="who">
                 <span class="name mono">{{ row.name }}</span>
                 <span class="count mono">
-                  {{ row.pods.length }}@if (row.max) { <span class="of"> / {{ row.max }}</span> }
-                  {{ row.pods.length === 1 ? 'pod' : 'pods' }}
+                  {{ row.pods.length }}{{ row.pods.length === 1 ? ' pod' : ' pods' }}@if (row.hasHpa) {
+                    <span class="of"> · autoscales {{ row.min }}–{{ row.max }}</span>
+                  }
                 </span>
                 @if (row.atCeiling) { <span class="ceiling mono">at the ceiling</span> }
               </div>
@@ -145,6 +151,15 @@ interface WorkloadRow {
                      [class.starting]="pod.starting" [class.fresh]="pod.fresh"
                      [title]="pod.name + ' · ' + pod.phase + ' · ' + pod.cpu
                               + ' · ' + pod.restarts + ' restarts'"></i>
+                }
+                <!--
+                  Headroom the autoscaler still has, drawn as outlines. The
+                  ceiling is the thing a reader wants when watching something
+                  scale, and "8 pods" alone does not say whether that is nearly
+                  all of it or barely any.
+                -->
+                @for (spare of row.headroom; track spare) {
+                  <i class="pod spare" [title]="'headroom to ' + row.max"></i>
                 }
               </div>
 
@@ -157,7 +172,7 @@ interface WorkloadRow {
               @if (row.hasHpa) {
                 <p class="note">
                   {{ utilisation(row.currentPercent, row.targetPercent) }}@if (row.desired !== null
-                    && row.desired !== row.pods.length) {, wants {{ row.desired }}}@if (row.note) { — {{ row.note }}}
+                    && row.current !== null && row.desired !== row.current) {, scaling to {{ row.desired }}}@if (row.note) { — {{ row.note }}}
                 </p>
               }
             </div>
@@ -244,6 +259,8 @@ interface WorkloadRow {
       display: inline-block;
     }
     .pod.sick { background: var(--chip-bad-fg); }
+    /* Room the autoscaler could still use. */
+    .pod.spare { background: none; border: 1px dashed var(--line); }
     /*
       Starting is not sick. A pod coming up during a scale-out or a rollout is
       the normal case on this page, and colouring it like a fault made a healthy
@@ -518,7 +535,12 @@ export class PodPulse {
     return [...collapsed.entries()]
       .sort((a, b) => b[1].length - a[1].length)
       .map(([name, glyphs]) => {
-        const hpa = cluster?.autoscalers.find((a) => a.name === name) ?? null;
+        // The API names autoscalers "hpa/queue-gate" while consumers and pods
+        // are just "queue-gate", so matching on equality found nothing at all -
+        // which is why no row has ever shown a ceiling, a target or what the
+        // autoscaler wants, however hard the cluster was scaling.
+        const hpa = cluster?.autoscalers
+          .find((a) => a.name === name || a.name === `hpa/${name}`) ?? null;
         const spend = name === 'load generator'
           ? {
               millis: (cluster?.consumers ?? [])
@@ -530,8 +552,13 @@ export class PodPulse {
           name,
           pods: glyphs,
           millis: spend?.millis ?? 0,
+          min: hpa?.min ?? null,
           max: hpa?.max ?? null,
+          headroom: hpa
+            ? Array.from({ length: Math.max(0, hpa.max - glyphs.length) }, (_, i) => i)
+            : [],
           desired: hpa?.desired ?? null,
+          current: hpa?.current ?? null,
           currentPercent: hpa?.currentPercent ?? null,
           targetPercent: hpa?.targetPercent ?? null,
           hasHpa: !!hpa,
