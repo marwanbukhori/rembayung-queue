@@ -138,10 +138,24 @@ public class DropRegistry {
         }
     }
 
-    /** Refreshes the idle timer. Any read counts as activity. */
+    /**
+     * Refreshes the idle timer. Any read counts as activity.
+     *
+     * Both keys, because a drop is not just its record: the ticket counter is
+     * created by INCR, which sets no expiry of its own, so without this every
+     * sandbox drop ever started would leave one key in Redis permanently. They
+     * are refreshed together so the counter cannot expire while the drop that
+     * owns it is still being read - a counter that vanished early would restart
+     * ticket numbering at 1 and admit a second visitor into a taken seat's
+     * position.
+     *
+     * The canonical drop is skipped for both: it is never stored in Redis and
+     * never expires, and neither should the tickets it has issued.
+     */
     public void touch(String id) {
         if (!DEFAULT_ID.equals(id)) {
             redis.expire(KEY_PREFIX + id, IDLE_TTL);
+            redis.expire(QueueService.ticketCounter(id), IDLE_TTL);
         }
     }
 

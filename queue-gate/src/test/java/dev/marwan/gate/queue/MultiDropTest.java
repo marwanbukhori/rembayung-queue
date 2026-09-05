@@ -74,4 +74,32 @@ class MultiDropTest extends RedisTestBase {
 
         assertThat(admissionService.position(legacyToken)).isPresent();
     }
+
+    /**
+     * A sandbox drop must leave nothing behind, and the ticket counter is the
+     * one key that had no expiry: INCR creates it with no TTL, while the drop
+     * record and the admission tokens both carry one. Every simulation a
+     * visitor started left queue:<id>:ticket in Redis permanently.
+     */
+    @Test
+    void aDropsTicketCounterExpiresWithTheDrop() {
+        DropRecord drop = registry.create(1, 300L);
+        queueService.join(drop.id());
+
+        Long ttl = redis.getExpire(QueueService.ticketCounter(drop.id()));
+        // -1 is Redis for "the key exists and never expires", which is the leak.
+        assertThat(ttl).isNotNull().isPositive();
+    }
+
+    /**
+     * The canonical 21:00 drop is the exception: it is not stored in Redis and
+     * does not expire, so neither should the tickets it has issued.
+     */
+    @Test
+    void theCanonicalDropsCounterIsNotGivenAnExpiry() {
+        queueService.join(DropRegistry.DEFAULT_ID);
+
+        assertThat(redis.getExpire(QueueService.ticketCounter(DropRegistry.DEFAULT_ID)))
+                .isEqualTo(-1L);
+    }
 }

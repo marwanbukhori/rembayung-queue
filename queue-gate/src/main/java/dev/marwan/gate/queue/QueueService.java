@@ -54,6 +54,13 @@ public class QueueService {
         if (ticket == null || ticket > drop.ticketCap()) {
             throw new SoldOutException();
         }
+        if (ticket == 1L) {
+            // find() above ran touch() before this key existed, and EXPIRE on a
+            // missing key does nothing. Without this the counter would carry no
+            // expiry until some later request touched the drop again, so a drop
+            // that saw exactly one join would leave its counter behind forever.
+            drops.touch(dropId);
+        }
 
         String token = UUID.randomUUID().toString();
         // The drop id travels with the ticket so the token is self-describing:
