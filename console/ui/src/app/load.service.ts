@@ -30,7 +30,9 @@ export class LoadService {
    * when you switch tabs, and a choice forgotten on the way to the pod list is
    * a choice the visitor has to make twice.
    */
-  readonly chosenVus = signal(200);
+  /** Matches LoadOps.DEFAULT_VUS. A run that outlasts the script's poll window
+   *  reports customers giving up, which says nothing about the system. */
+  readonly chosenVus = signal(60);
 
   private dropId: string | null = null;
 

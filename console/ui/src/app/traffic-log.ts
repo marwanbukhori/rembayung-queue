@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
+import { LatencyStrip } from './latency-strip';
 import { TrafficService } from './traffic.service';
 
 /**
@@ -15,7 +16,7 @@ import { TrafficService } from './traffic.service';
  */
 @Component({
   selector: 'rb-traffic-log',
-  imports: [DatePipe],
+  imports: [DatePipe, LatencyStrip],
   template: `
     <div class="card">
       <div class="head">
@@ -27,6 +28,8 @@ import { TrafficService } from './traffic.service';
           <span class="dot"></span>{{ traffic.flowing() ? 'moving' : 'idle' }}
         </span>
       </div>
+
+      <rb-latency-strip />
 
       @if (feed().length) {
         <ol class="lines">

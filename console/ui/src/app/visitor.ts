@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
 import { Constraints } from './constraints';
 import { LoadControl } from './load-control';
+import { RunBanner } from './run-banner';
 import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
@@ -22,7 +23,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, LoadControl, Constraints, TrafficLog],
+  imports: [CanonicalDrop, LoadControl, Constraints, RunBanner, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -42,8 +43,12 @@ import { StateService } from './state.service';
               looking at this page, and starting again is free.
             </p>
           </div>
-          <div class="start-step">
-            <div class="card-title"><span class="step-num mono">1</span>Start a simulation</div>
+          <div class="start-step" [class.done]="sandbox()">
+            <div class="card-title">
+              <span class="step-num mono" [class.ticked]="sandbox()">{{ sandbox() ? '✓' : '1' }}</span>
+              Start a simulation
+              @if (sandbox()) { <span class="done-tag mono">done</span> }
+            </div>
             <p class="sub">
               Seeds a fresh 250-seat slot and a ticket counter of your own, in about a second. This
               opens an <strong>empty</strong> queue — step 2 below is what puts people into it.
@@ -72,6 +77,7 @@ import { StateService } from './state.service';
       </section>
 
       @if (sandbox(); as s) {
+        <rb-run-banner />
         <rb-load-control [startingRate]="s.admitRate" />
         <rb-canonical-drop heading="Your simulation, live" />
         <rb-traffic-log />
@@ -110,6 +116,19 @@ import { StateService } from './state.service';
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     .body { padding: 32px 24px; display: flex; flex-direction: column; gap: 20px; }
     .start-step .card-title { font-size: 19px; font-weight: 700; }
+    /* Ticked rather than removed: the sequence still has to read 1, 2, 3. */
+    .step-num.ticked { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+    .done-tag {
+      margin-left: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      background: var(--chip-ok-bg);
+      color: var(--chip-ok-fg);
+      border-radius: 999px;
+      padding: 3px 10px;
+      vertical-align: middle;
+    }
     .start-step .sub {
       margin: 6px 0 0;
       font-size: 15px;

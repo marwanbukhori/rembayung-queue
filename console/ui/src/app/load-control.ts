@@ -3,6 +3,12 @@ import { LoadService } from './load.service';
 
 /** The Phase 3 ladder, measured against this deployment rather than chosen. */
 const LADDER = [
+  // 60 is the default and the only one that finishes inside the k6 script's
+  // ninety-second poll window at one admission a second. 200 at that rate needs
+  // over three minutes, so more than half the crowd gives up before its turn -
+  // which is a property of the run, not of the system, and a confusing first
+  // thing to show. The larger rows stay: they are the measured shedding.
+  { offered: 60, arrived: 60, shed: 0 },
   { offered: 200, arrived: 200, shed: 0 },
   { offered: 1000, arrived: 662, shed: 338 },
   { offered: 3000, arrived: 818, shed: 2182 }
@@ -24,10 +30,13 @@ const LADDER = [
 @Component({
   selector: 'rb-load-control',
   template: `
-    <section class="pair">
-      <div class="card pad">
+    <section class="steps">
+      <div class="card pad" [class.busy]="busy()">
         <div>
-          <div class="card-title"><span class="step-num mono">2</span>Send the crowd</div>
+          <div class="card-title">
+            <span class="step-num mono">2</span>Send the crowd
+            @if (busy()) { <span class="wait-tag mono">running — wait</span> }
+          </div>
           <p class="sub">
             <strong>Nothing moves until you do this.</strong> Starting a simulation opens an empty
             queue; this is what puts people into it. A k6 Job runs inside the cluster, so there is
@@ -91,14 +100,32 @@ const LADDER = [
     </section>
   `,
   styles: `
-    .pair {
+    .steps {
       display: grid;
       gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+      grid-template-columns: 1fr;
       align-items: start;
     }
     .pad { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
     .card-title { font-size: 19px; font-weight: 700; }
+
+    /*
+      Dimmed, not hidden: the control stays where it was so the page does not
+      reflow under a visitor mid-run, and it says why it cannot be used.
+    */
+    .card.busy { opacity: .55; }
+    .card.busy .tabs, .card.busy .send { pointer-events: none; }
+    .wait-tag {
+      margin-left: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      background: var(--chip-warn-bg);
+      color: var(--chip-warn-fg);
+      border-radius: 999px;
+      padding: 3px 10px;
+      vertical-align: middle;
+    }
     /* The number ties a control to the step that tells you to use it. */
     .step-num {
       display: inline-grid;
@@ -137,7 +164,8 @@ export class LoadControl {
   private readonly loads = inject(LoadService);
 
   /** The rate the drop was created with, until the visitor changes it. */
-  readonly startingRate = input<number>(8);
+  /** Matches DropOps.DEFAULT_ADMIT_RATE: what the database actually commits. */
+  readonly startingRate = input<number>(1);
 
   readonly ladder = LADDER;
   readonly vuOptions = LADDER.map((row) => row.offered);
@@ -187,8 +215,11 @@ export class LoadControl {
       + 'rung of that ladder.';
   });
 
-  readonly sendDisabled = computed(() =>
+  /** A run is in flight, so a second one would muddle the numbers being watched. */
+  readonly busy = computed(() =>
     this.loads.starting() || this.phase() === 'PENDING' || this.phase() === 'RUNNING');
+
+  readonly sendDisabled = this.busy;
 
   readonly sendLabel = computed(() => {
     if (this.loads.starting()) {
