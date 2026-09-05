@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #F7F6F4; }
+  a { color: #D40511; text-underline-offset: .15em; }
+  a:hover { color: #A80410; }
+  @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+</helmet>
+<div style="min-height: 100vh; width: 100%; background: #F7F6F4; color: #1A1A1A; font-family: 'Delivery', 'DHL Delivery', 'Source Sans 3', 'Segoe UI', 'Helvetica Neue', Helvetica, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+
+  <header style="background: #FFCC00; border-bottom: 1px solid #E6B800;">
+    <div style="max-width: 1120px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; min-height: 64px;">
+      <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+        <div style="font-size: 19px; font-weight: 800; letter-spacing: -0.015em; white-space: nowrap;">Rembayung</div>
+        <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: rgba(0,0,0,.08); border-radius: 2px; padding: 2px 8px; white-space: nowrap; letter-spacing: .04em;">ns/rembayung</div>
+      </div>
+      <div style="flex: 1 1 20px;"></div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px;">
+        <div style="display: flex; gap: 24px;">
+          <button onClick="{{ showPublic }}" style="{{ publicTabStyle }}">Public</button>
+          <button onClick="{{ showVisitor }}" style="{{ visitorTabStyle }}">Visitor</button>
+          <button onClick="{{ showOps }}" style="{{ opsTabStyle }}">Operator</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; letter-spacing: .04em; background: rgba(0,0,0,.08); border-radius: 2px; padding: 3px 8px; white-space: nowrap;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #1A1A1A; animation: livePulse 2s ease-in-out infinite;"></span>
+          <span>{{ keyLabel }}</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 32px;">
+
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 32px;">
+
+        <section style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+          <div style="height: 4px; background: #FFCC00;"></div>
+          <div style="padding: 32px 24px; display: flex; flex-wrap: wrap; gap: 24px 32px; align-items: flex-end; justify-content: space-between;">
+            <div style="flex: 1 1 320px; min-width: 0;">
+              <h1 style="margin: 0 0 12px; font-size: 36px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; max-width: 22ch;">250 seats, never oversold</h1>
+              <p style="margin: 0; font-size: 17px; color: #4A4A4A; max-width: 60ch; text-wrap: pretty;">Start your own drop, send two hundred customers at it in one second, and watch the invariant hold on your own data. No cluster account, nothing shared with anyone else looking at this page.</p>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+              <button onClick="{{ startFromHome }}" style="{{ primaryBtn }}" style-hover="background: #A80410; color: #FFFFFF">Start a drop</button>
+              <button onClick="{{ openDoc7 }}" style="{{ secondaryBtn }}" style-hover="background: #1A1A1A; color: #FFFFFF">Read the spec</button>
+            </div>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">The canonical drop</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">Slot 1, read from the services that own the data</p>
+            </div>
+            <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">refreshes every {{ pollLabel }}</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 16px;">
+            <div style="flex: 2 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline;">
+                <div style="font-size: 14px; font-weight: 700;">Seats taken</div>
+                <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">capacity {{ capacity }}</div>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 8px; margin: 12px 0 16px;">
+                <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 44px; font-weight: 700; line-height: 1;">{{ canonSeats }}</div>
+                <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 17px; color: #767676;">/ {{ capacity }}</div>
+              </div>
+              <div style="height: 8px; background: #EEECE8; border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; background: #1A1A1A; width: {{ canonPct }}%; transition: width 180ms cubic-bezier(.2,0,.2,1);"></div>
+              </div>
+            </div>
+            <div style="flex: 1 1 250px; min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+              <div style="font-size: 14px; font-weight: 700;">Queue depth</div>
+              <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 44px; font-weight: 700; line-height: 1; margin: 12px 0 8px;">0</div>
+              <div style="font-size: 14px; color: #4A4A4A;">Quiet outside a drop. Your own sandbox is where the queue moves.</div>
+            </div>
+            <div style="flex: 1 1 250px; min-width: 0; background: #1A1A1A; border-radius: 4px; padding: 24px; color: #FFFFFF;">
+              <div style="font-size: 14px; font-weight: 700;">Oversold</div>
+              <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 56px; font-weight: 700; line-height: 1; margin: 10px 0;">0</div>
+              <div style="font-size: 14px; color: #CFCFCF; text-wrap: pretty;">Across every drop this cluster has run.</div>
+            </div>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Pod health</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">Read with a namespace scoped ServiceAccount</p>
+            </div>
+            <button onClick="{{ goPods }}" style="{{ tertiaryBtn }}" style-hover="background: #FDE7E8; color: #A80410">See more</button>
+          </div>
+          <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));">
+            <sc-for list="{{ podCards }}" as="pod" hint-placeholder-count="4">
+              <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+                <span style="{{ okChip }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>Ready</span>
+                <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; min-width: 0; overflow-wrap: anywhere;">{{ pod.name }}</span>
+                <span style="margin-left: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: #4A4A4A;">{{ pod.ready }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Deploy history</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">From the Deployments' own annotations</p>
+            </div>
+            <button onClick="{{ goDeploys }}" style="{{ tertiaryBtn }}" style-hover="background: #FDE7E8; color: #A80410">See more</button>
+          </div>
+          <div style="overflow-x: auto; border: 1px solid #D9D9D9; border-radius: 4px; background: #FFFFFF;">
+            <table style="border-collapse: collapse; width: 100%; min-width: 560px;">
+              <thead>
+                <tr>
+                  <th style="{{ thLeft }}">Tag</th>
+                  <th style="{{ thLeft }}">Commit</th>
+                  <th style="{{ thLeft }}">When</th>
+                  <th style="{{ thLeft }}">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ deployRowsShort }}" as="row" hint-placeholder-count="4">
+                  <tr>
+                    <td style="{{ tdMono }}">{{ row.tag }}</td>
+                    <td style="{{ tdMonoMuted }}">{{ row.commit }}</td>
+                    <td style="{{ tdMonoMuted }}">{{ row.when }}</td>
+                    <td style="{{ td }}"><span style="{{ row.chipStyle }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ row.result }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Documentation</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">Rendered from Markdown baked into the image</p>
+            </div>
+            <button onClick="{{ goDocs }}" style="{{ tertiaryBtn }}" style-hover="background: #FDE7E8; color: #A80410">See more</button>
+          </div>
+          <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));">
+            <button onClick="{{ openDoc7 }}" style="{{ docCardBtn }}" style-hover="border-color: #1A1A1A">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em;">Spec 07</span>
+              <span style="font-size: 19px; font-weight: 700; line-height: 1.35; margin-top: 4px;">Demo console</span>
+              <span style="font-size: 14px; color: #4A4A4A; margin-top: 8px; text-wrap: pretty;">Per visitor sandboxes, issued keys, and why constraints are content.</span>
+              <span style="font-size: 14px; font-weight: 700; color: #D40511; margin-top: 12px;">Read</span>
+            </button>
+            <button onClick="{{ openDoc6 }}" style="{{ docCardBtn }}" style-hover="border-color: #1A1A1A">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em;">Spec 06</span>
+              <span style="font-size: 19px; font-weight: 700; line-height: 1.35; margin-top: 4px;">Observability</span>
+              <span style="font-size: 14px; color: #4A4A4A; margin-top: 8px; text-wrap: pretty;">One computation of seats and oversold, deliberately unexposed.</span>
+              <span style="font-size: 14px; font-weight: 700; color: #D40511; margin-top: 12px;">Read</span>
+            </button>
+            <button onClick="{{ openDoc1 }}" style="{{ docCardBtn }}" style-hover="border-color: #1A1A1A">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em;">Spec 01</span>
+              <span style="font-size: 19px; font-weight: 700; line-height: 1.35; margin-top: 4px;">Booking queue architecture</span>
+              <span style="font-size: 14px; color: #4A4A4A; margin-top: 8px; text-wrap: pretty;">Why the last seat is a conditional update, not a read then a write.</span>
+              <span style="font-size: 14px; font-weight: 700; color: #D40511; margin-top: 12px;">Read</span>
+            </button>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Links out</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">Three places to look when this page is not enough</p>
+            </div>
+            <button onClick="{{ goLinks }}" style="{{ tertiaryBtn }}" style-hover="background: #FDE7E8; color: #A80410">See more</button>
+          </div>
+          <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));">
+            <a href="#" style="{{ linkCard }}" style-hover="border-color: #1A1A1A; color: #1A1A1A">
+              <div style="font-size: 17px; font-weight: 700;">OpenShift console</div>
+              <div style="font-size: 14px; color: #4A4A4A; margin-top: 2px;">Workloads, routes and quota</div>
+            </a>
+            <a href="#" style="{{ linkCard }}" style-hover="border-color: #1A1A1A; color: #1A1A1A">
+              <div style="font-size: 17px; font-weight: 700;">Dynatrace tenant</div>
+              <div style="font-size: 14px; color: #4A4A4A; margin-top: 2px;">Traces through the gate. Trial, may have expired.</div>
+            </a>
+            <a href="#" style="{{ linkCard }}" style-hover="border-color: #1A1A1A; color: #1A1A1A">
+              <div style="font-size: 17px; font-weight: 700;">Splunk stack</div>
+              <div style="font-size: 14px; color: #4A4A4A; margin-top: 2px;">Structured logs and the audit trail. Trial, may have expired.</div>
+            </a>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isVisitor }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 32px;">
+
+        <sc-if value="{{ noDrop }}" hint-placeholder-val="{{ false }}">
+          <section style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+            <div style="height: 4px; background: #FFCC00;"></div>
+            <div style="padding: 32px 24px; display: flex; flex-direction: column; gap: 20px;">
+              <div>
+                <h1 style="margin: 0 0 12px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Your sandbox</h1>
+                <p style="margin: 0; font-size: 17px; color: #4A4A4A; max-width: 64ch; text-wrap: pretty;">A drop of your own: its own slot row of 250 seats, its own ticket counter, its own admission window. Nothing you do here touches slot 1 or anyone else looking at this page, and starting again is free.</p>
+              </div>
+              <ol style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; max-width: 64ch;">
+                <li>Start a drop, which seeds a slot and a counter in about a second.</li>
+                <li>Open it, then send two hundred customers at it at once.</li>
+                <li>Push the admission rate up until the connection pool gives out, and watch oversold stay at zero.</li>
+              </ol>
+              <div>
+                <button onClick="{{ createDrop }}" style="{{ primaryBtn }}" style-hover="background: #A80410; color: #FFFFFF">Start a drop</button>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ hasDrop }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 32px;">
+
+            <section style="display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid #D9D9D9; padding-bottom: 16px;">
+              <div style="min-width: 0;">
+                <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;">
+                  <h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Your drop</h1>
+                  <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 17px; letter-spacing: .06em;">{{ dropId }}</span>
+                  <span style="{{ dropChip }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ dropState }}</span>
+                </div>
+                <p style="margin: 4px 0 0; font-size: 14px; color: #767676;">slot {{ slotId }}, seeded for you. Swept 30 minutes after your last request.</p>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <button onClick="{{ createDrop }}" style="{{ secondaryBtn }}" style-hover="background: #1A1A1A; color: #FFFFFF">Fresh drop</button>
+                <button onClick="{{ toggleDrop }}" style="{{ primaryBtn }}" style-hover="background: #A80410; color: #FFFFFF">{{ toggleLabel }}</button>
+              </div>
+            </section>
+
+            <sc-if value="{{ hasBanner }}" hint-placeholder-val="{{ false }}">
+              <div style="display: grid; grid-template-columns: 4px 1fr; gap: 16px; border-radius: 4px; overflow: hidden; background: {{ bannerBg }};">
+                <div style="background: {{ bannerBar }};"></div>
+                <div style="padding: 16px 16px 16px 0; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;">
+                  <div style="flex: 1 1 260px; min-width: 0;">
+                    <div style="font-weight: 700; font-size: 14px;">{{ bannerTitle }}</div>
+                    <div style="font-size: 14px; color: #4A4A4A; margin-top: 2px; max-width: 70ch; text-wrap: pretty;">{{ bannerText }}</div>
+                  </div>
+                  <button onClick="{{ bannerAction }}" style="{{ secondaryBtn }}" style-hover="background: #1A1A1A; color: #FFFFFF">{{ bannerActionLabel }}</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <section style="display: flex; flex-wrap: wrap; gap: 16px;">
+              <div style="flex: 2 1 320px; min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline;">
+                  <div style="font-size: 14px; font-weight: 700;">Seats taken</div>
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">capacity {{ capacity }}</div>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 8px; margin: 12px 0 16px;">
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 44px; font-weight: 700; line-height: 1;">{{ seats }}</div>
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 17px; color: #767676;">/ {{ capacity }}</div>
+                </div>
+                <div style="height: 8px; background: #EEECE8; border-radius: 2px; overflow: hidden;">
+                  <div style="height: 100%; background: #1A1A1A; width: {{ seatsPct }}%; transition: width 180ms cubic-bezier(.2,0,.2,1);"></div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">
+                  <span>{{ admitted }} admitted</span>
+                  <span>{{ refused }} refused</span>
+                </div>
+              </div>
+              <div style="flex: 1 1 240px; min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+                <div style="font-size: 14px; font-weight: 700;">Queue depth</div>
+                <div style="display: flex; align-items: baseline; gap: 8px; margin: 12px 0 16px;">
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 44px; font-weight: 700; line-height: 1;">{{ queue }}</div>
+                  <div style="font-size: 14px; color: #767676;">waiting</div>
+                </div>
+                <div style="height: 8px; background: #EEECE8; border-radius: 2px; overflow: hidden;">
+                  <div style="height: 100%; background: #00558C; width: {{ queuePct }}%; transition: width 180ms cubic-bezier(.2,0,.2,1);"></div>
+                </div>
+                <div style="margin-top: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">admitting {{ admitRate }} per second</div>
+              </div>
+              <div style="flex: 1 1 240px; min-width: 0; background: #1A1A1A; border-radius: 4px; padding: 24px; color: #FFFFFF;">
+                <div style="font-size: 14px; font-weight: 700;">Oversold</div>
+                <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 56px; font-weight: 700; line-height: 1; margin: 10px 0;">0</div>
+                <div style="font-size: 14px; color: #CFCFCF; text-wrap: pretty;">The claim, on your own data, whatever you do to it.</div>
+              </div>
+            </section>
+
+            <section style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); align-items: start;">
+
+              <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                  <div style="font-size: 19px; font-weight: 700;">Admission rate</div>
+                  <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">How fast the gate lets holders reach the database.</p>
+                </div>
+                <div style="display: flex; gap: 24px; border-bottom: 1px solid #D9D9D9; overflow-x: auto;">
+                  <sc-for list="{{ rates }}" as="r" hint-placeholder-count="3">
+                    <button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button>
+                  </sc-for>
+                </div>
+                <p style="margin: 0; font-size: 15px; text-wrap: pretty;">{{ rateNote }}</p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <div>
+                    <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 14px; margin-bottom: 6px;"><span>Connection pool</span><span style="font-family: ui-monospace, Menlo, Consolas, monospace; color: #4A4A4A;">{{ pool }} / 20 active</span></div>
+                    <div style="height: 8px; background: #EEECE8; border-radius: 2px; overflow: hidden;"><div style="height: 100%; background: {{ poolColor }}; width: {{ poolPct }}%; transition: width 180ms cubic-bezier(.2,0,.2,1);"></div></div>
+                  </div>
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .04em;">{{ poolNote }}</div>
+                </div>
+              </div>
+
+              <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                <div>
+                  <div style="font-size: 19px; font-weight: 700;">Send customers</div>
+                  <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">A k6 Job inside the cluster, so you do not need anything installed.</p>
+                </div>
+                <div style="display: flex; gap: 24px; border-bottom: 1px solid #D9D9D9; overflow-x: auto;">
+                  <sc-for list="{{ vuOptions }}" as="v" hint-placeholder-count="3">
+                    <button onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="overflow-x: auto;">
+                  <table style="border-collapse: collapse; width: 100%; min-width: 260px;">
+                    <thead>
+                      <tr>
+                        <th style="{{ thLeft }}">Offered</th>
+                        <th style="{{ thRight }}">Arrives</th>
+                        <th style="{{ thRight }}">Shed at the edge</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <sc-for list="{{ ladder }}" as="row" hint-placeholder-count="3">
+                        <tr style="{{ row.rowStyle }}">
+                          <td style="{{ tdMono }}">{{ row.offered }}</td>
+                          <td style="{{ tdMonoRight }}">{{ row.arrived }}</td>
+                          <td style="{{ tdMonoRight }}">{{ row.failed }}</td>
+                        </tr>
+                      </sc-for>
+                    </tbody>
+                  </table>
+                </div>
+                <p style="margin: 0; font-size: 14px; color: #4A4A4A; text-wrap: pretty;">{{ vuNote }}</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                  <button onClick="{{ sendLoad }}" disabled="{{ sendDisabled }}" style="{{ sendBtnStyle }}">{{ sendLabel }}</button>
+                  <span style="font-size: 14px; color: #767676; flex: 1 1 160px; min-width: 0;">{{ jobHint }}</span>
+                </div>
+              </div>
+            </section>
+
+            <section style="display: flex; flex-direction: column; gap: 16px;">
+              <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+                <div style="min-width: 0;">
+                  <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Constraints</h2>
+                  <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">What the cluster will and will not give you, live</p>
+                </div>
+              </div>
+              <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); align-items: start;">
+                <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline; margin-bottom: 14px;">
+                    <div style="font-size: 17px; font-weight: 700;">Namespace CPU</div>
+                    <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: #4A4A4A;">{{ usedCpu }}m / 3000m</div>
+                  </div>
+                  <div style="height: 10px; background: #EEECE8; border-radius: 2px; overflow: hidden; display: flex;">
+                    <div style="height: 100%; background: #1A1A1A; width: {{ baseCpuPct }}%;"></div>
+                    <div style="height: 100%; background: #00558C; width: {{ jobCpuPct }}%;"></div>
+                  </div>
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+                    <sc-for list="{{ cpuRows }}" as="c" hint-placeholder-count="4">
+                      <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 14px;">
+                        <span style="min-width: 0; overflow-wrap: anywhere;">{{ c.name }}</span>
+                        <span style="font-family: ui-monospace, Menlo, Consolas, monospace; color: #4A4A4A; flex: none;">{{ c.cpu }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+                  <div style="font-size: 17px; font-weight: 700;">Autoscalers and pool</div>
+                  <sc-for list="{{ hpaRows }}" as="h" hint-placeholder-count="3">
+                    <div>
+                      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 14px; margin-bottom: 6px;">
+                        <span style="font-family: ui-monospace, Menlo, Consolas, monospace;">{{ h.name }}</span>
+                        <span style="font-family: ui-monospace, Menlo, Consolas, monospace; color: #4A4A4A;">{{ h.detail }}</span>
+                      </div>
+                      <div style="height: 8px; background: #EEECE8; border-radius: 2px; overflow: hidden;"><div style="height: 100%; background: {{ h.color }}; width: {{ h.pct }}%; transition: width 180ms cubic-bezier(.2,0,.2,1);"></div></div>
+                      <div style="margin-top: 4px; font-size: 12px; color: #767676;">{{ h.note }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <p style="margin: 0; font-size: 14px; color: #4A4A4A; max-width: 74ch; text-wrap: pretty;">Load generated inside the cluster skips the public Route, so this exercises the queue, the admission rate and the invariant, but not the ingress path. Offering more than two hundred users is how you see the edge shed connections instead.</p>
+            </section>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isOps }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 32px;">
+
+        <section style="display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-start; justify-content: space-between;">
+          <div style="min-width: 0;">
+            <h1 style="margin: 0 0 8px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Operations</h1>
+            <p style="margin: 0; font-size: 16px; color: #4A4A4A; max-width: 66ch; text-wrap: pretty;">Global actions, gated on your own key. A fixed list of named operations, each mapping to one Kubernetes call or one parameterised statement. No command box, no SQL from the browser.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 12px 16px;">
+            <span style="width: 32px; height: 32px; border-radius: 999px; background: #1A1A1A; color: #FFFFFF; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none;">HK</span>
+            <div style="min-width: 0;">
+              <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px;">key/hkamal</div>
+              <div style="font-size: 12px; color: #767676;">operator tier, expires 02 Oct</div>
+            </div>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em;">Cluster</h2>
+          <div style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+            <sc-for list="{{ ops }}" as="op" hint-placeholder-count="5">
+              <div style="{{ op.rowStyle }}">
+                <div style="flex: 1 1 260px; min-width: 0;">
+                  <div style="font-size: 17px; font-weight: 700;">{{ op.name }}</div>
+                  <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: #4A4A4A; margin-top: 2px; overflow-wrap: anywhere;">{{ op.impl }}</div>
+                  <div style="font-size: 14px; color: #767676; margin-top: 4px; text-wrap: pretty;">{{ op.why }}</div>
+                </div>
+                <button onClick="{{ op.run }}" style="{{ op.btnStyle }}" style-hover="background: #1A1A1A; color: #FFFFFF">{{ op.action }}</button>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em;">Canonical slot</h2>
+          <div style="display: grid; grid-template-columns: 4px 1fr; gap: 16px; border-radius: 4px; background: #FDE7E8; overflow: hidden;">
+            <div style="background: #D40511;"></div>
+            <div style="padding: 16px 16px 16px 0;">
+              <div style="font-weight: 700; font-size: 14px;">This one is not a sandbox</div>
+              <div style="font-size: 14px; color: #4A4A4A; margin-top: 2px; max-width: 70ch; text-wrap: pretty;">Slot 1 is what the public page reads. Resetting it is the only action here with a blast radius outside your own session, so name the slot before it runs.</div>
+            </div>
+          </div>
+          <div style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+            <div>
+              <div style="font-size: 17px; font-weight: 700;">Reset seats on slot 1</div>
+              <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: #4A4A4A; margin-top: 2px; overflow-wrap: anywhere;">UPDATE booking.slots SET seats_taken = 0 WHERE slot_id = ?</div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;">
+              <div style="display: grid; gap: 8px; flex: 1 1 240px; min-width: 0;">
+                <label for="slotconfirm" style="font-size: 14px; font-weight: 700;">Slot id</label>
+                <input id="slotconfirm" value="{{ confirmText }}" onChange="{{ onConfirmChange }}" placeholder="slot 1" style="{{ inputStyle }}" />
+                <span style="{{ hintStyle }}">{{ hintText }}</span>
+              </div>
+              <button onClick="{{ resetSeats }}" disabled="{{ resetDisabled }}" style="{{ resetBtnStyle }}">Reset seats</button>
+            </div>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; border-bottom: 1px solid #D9D9D9; padding-bottom: 12px;">
+            <div style="min-width: 0;">
+              <h2 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.35;">Audit trail</h2>
+              <p style="margin: 2px 0 0; font-size: 14px; color: #767676; text-wrap: pretty;">One structured line per action, carrying the key that ran it</p>
+            </div>
+          </div>
+          <div style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; max-height: 300px; overflow-y: auto;">
+            <sc-for list="{{ auditLog }}" as="line" hint-placeholder-count="3">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;">
+                <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: #767676; flex: none; letter-spacing: .04em;">{{ line.time }}</span>
+                <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: #4A4A4A; flex: none;">{{ line.key }}</span>
+                <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere;">{{ line.op }}</span>
+                <span style="{{ line.chipStyle }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ line.outcome }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isPods }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #767676;">
+          <button onClick="{{ goHome }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Public</button>
+          <span>/</span>
+          <span style="color: #1A1A1A;">Pod health</span>
+        </div>
+        <div>
+          <h1 style="margin: 0 0 8px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Pod health</h1>
+          <p style="margin: 0; font-size: 16px; color: #4A4A4A; max-width: 66ch; text-wrap: pretty;">Read through the Kubernetes API with a ServiceAccount scoped to this namespace and no access to Secrets.</p>
+        </div>
+        <div style="overflow-x: auto; border: 1px solid #D9D9D9; border-radius: 4px; background: #FFFFFF;">
+          <table style="border-collapse: collapse; width: 100%; min-width: 640px;">
+            <thead>
+              <tr>
+                <th style="{{ thLeft }}">Workload</th>
+                <th style="{{ thLeft }}">Ready</th>
+                <th style="{{ thRight }}">CPU request</th>
+                <th style="{{ thRight }}">Restarts</th>
+                <th style="{{ thRight }}">Age</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ podRows }}" as="pod" hint-placeholder-count="4">
+                <tr>
+                  <td style="{{ tdMono }}">{{ pod.name }}</td>
+                  <td style="{{ td }}"><span style="{{ okChip }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ pod.ready }}</span></td>
+                  <td style="{{ tdMonoRight }}">{{ pod.cpu }}</td>
+                  <td style="{{ tdMonoRight }}">{{ pod.restarts }}</td>
+                  <td style="{{ tdMonoRight }}">{{ pod.age }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px;">
+          <div style="font-size: 19px; font-weight: 700; margin-bottom: 8px;">Why the budget matters here</div>
+          <p style="margin: 0; font-size: 15px; color: #4A4A4A; max-width: 70ch; text-wrap: pretty;">Every visitor load run asks the scheduler for CPU out of the same 3000m. When there is not enough, the Job sits Pending and the console says which limit stopped it and what is holding the budget, rather than reporting a generic failure. That is the same panel a visitor sees on their own drop.</p>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDeploys }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #767676;">
+          <button onClick="{{ goHome }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Public</button>
+          <span>/</span>
+          <span style="color: #1A1A1A;">Deploy history</span>
+        </div>
+        <div>
+          <h1 style="margin: 0 0 8px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Deploy history</h1>
+          <p style="margin: 0; font-size: 16px; color: #4A4A4A; max-width: 66ch; text-wrap: pretty;">Read from the Deployments' own annotations rather than a table the console maintains, so it cannot disagree with what is actually running.</p>
+        </div>
+        <div style="overflow-x: auto; border: 1px solid #D9D9D9; border-radius: 4px; background: #FFFFFF;">
+          <table style="border-collapse: collapse; width: 100%; min-width: 700px;">
+            <thead>
+              <tr>
+                <th style="{{ thLeft }}">Tag</th>
+                <th style="{{ thLeft }}">Commit</th>
+                <th style="{{ thLeft }}">Actor</th>
+                <th style="{{ thLeft }}">When</th>
+                <th style="{{ thRight }}">Rollout</th>
+                <th style="{{ thLeft }}">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ deployRows }}" as="row" hint-placeholder-count="6">
+                <tr>
+                  <td style="{{ tdMono }}">{{ row.tag }}</td>
+                  <td style="{{ tdMonoMuted }}">{{ row.commit }}</td>
+                  <td style="{{ tdMonoMuted }}">{{ row.actor }}</td>
+                  <td style="{{ tdMonoMuted }}">{{ row.when }}</td>
+                  <td style="{{ tdMonoRight }}">{{ row.rollout }}</td>
+                  <td style="{{ td }}"><span style="{{ row.chipStyle }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ row.result }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 0; font-size: 15px; color: #4A4A4A; max-width: 74ch; text-wrap: pretty;">The rollback in the record is real. A bad tag times out, each service returns to its own previous tag, delivery re verifies and exits non zero, and the site serves 200 throughout. Deploy and rollback stay operator tier because they affect everyone, not because they are dangerous.</p>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDocs }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #767676;">
+          <button onClick="{{ goHome }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Public</button>
+          <span>/</span>
+          <span style="color: #1A1A1A;">Documentation</span>
+        </div>
+        <div>
+          <h1 style="margin: 0 0 8px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Documentation</h1>
+          <p style="margin: 0; font-size: 16px; color: #4A4A4A; max-width: 66ch; text-wrap: pretty;">Seven specs, nine build notes, five plans, rendered from Markdown baked into the image. The written record is the part most likely to be read.</p>
+        </div>
+        <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); align-items: start;">
+          <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+            <div style="padding: 16px; font-size: 17px; font-weight: 700; border-bottom: 1px solid #D9D9D9;">Specs</div>
+            <button onClick="{{ openDoc1 }}" style="{{ docRowBtn }}" style-hover="background: #FFF3C4">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em; flex: none;">01</span>
+              <span style="font-size: 14px; font-weight: 700; min-width: 0;">Booking queue architecture</span>
+              <span style="margin-left: auto; font-size: 14px; font-weight: 700; color: #D40511; flex: none;">Read</span>
+            </button>
+            <button onClick="{{ openDoc2 }}" style="{{ docRowBtn }}" style-hover="background: #FFF3C4">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em; flex: none;">04</span>
+              <span style="font-size: 14px; font-weight: 700; min-width: 0;">Continuous delivery</span>
+              <span style="margin-left: auto; font-size: 14px; font-weight: 700; color: #D40511; flex: none;">Read</span>
+            </button>
+            <button onClick="{{ openDoc6 }}" style="{{ docRowBtn }}" style-hover="background: #FFF3C4">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em; flex: none;">06</span>
+              <span style="font-size: 14px; font-weight: 700; min-width: 0;">Observability</span>
+              <span style="margin-left: auto; font-size: 14px; font-weight: 700; color: #D40511; flex: none;">Read</span>
+            </button>
+            <button onClick="{{ openDoc7 }}" style="{{ docRowBtn }}" style-hover="background: #FFF3C4">
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em; flex: none;">07</span>
+              <span style="font-size: 14px; font-weight: 700; min-width: 0;">Demo console</span>
+              <span style="margin-left: auto; font-size: 14px; font-weight: 700; color: #D40511; flex: none;">Read</span>
+            </button>
+          </div>
+          <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+            <div style="padding: 16px; font-size: 17px; font-weight: 700; border-bottom: 1px solid #D9D9D9;">Build notes</div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">04 Sep</span><span style="font-size: 14px;">Router ceiling, 600 to 800 connections</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">03 Sep</span><span style="font-size: 14px;">Why the automation platforms came out</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">01 Sep</span><span style="font-size: 14px;">Serialising the last seat</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">29 Aug</span><span style="font-size: 14px;">Redis as a fairness device</span></div>
+            <div style="padding: 12px 16px; font-size: 14px; color: #767676;">Five more in the index.</div>
+          </div>
+          <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+            <div style="padding: 16px; font-size: 17px; font-weight: 700; border-bottom: 1px solid #D9D9D9;">Plans</div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">P5</span><span style="font-size: 14px;">Interview walkthrough, 11 September</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">P4</span><span style="font-size: 14px;">Delivery order, riskiest change first</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #EDEDED;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">P3</span><span style="font-size: 14px;">Sandbox expiry and sweeping</span></div>
+            <div style="display: flex; gap: 12px; padding: 12px 16px;"><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; flex: none;">P2</span><span style="font-size: 14px;">Load profiles and what each proves</span></div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDoc }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: #767676;">
+          <button onClick="{{ goHome }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Public</button>
+          <span>/</span>
+          <button onClick="{{ goDocs }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Documentation</button>
+          <span>/</span>
+          <span style="color: #1A1A1A;">{{ docTitle }}</span>
+        </div>
+        <article style="background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden; max-width: 78ch;">
+          <div style="height: 4px; background: #FFCC00;"></div>
+          <div style="padding: 32px 24px;">
+            <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #767676; letter-spacing: .06em;">{{ docMeta }}</div>
+            <h1 style="margin: 8px 0 20px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">{{ docTitle }}</h1>
+            <div style="display: flex; flex-direction: column; gap: 16px; font-size: 16px; max-width: 66ch;">
+              <sc-for list="{{ docBody }}" as="para" hint-placeholder-count="4">
+                <p style="margin: 0; text-wrap: pretty;">{{ para.text }}</p>
+              </sc-for>
+            </div>
+            <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #EDEDED; display: flex; flex-wrap: wrap; gap: 12px;">
+              <button onClick="{{ goDocs }}" style="{{ secondaryBtn }}" style-hover="background: #1A1A1A; color: #FFFFFF">Back to documentation</button>
+              <button onClick="{{ startFromHome }}" style="{{ tertiaryBtn }}" style-hover="background: #FDE7E8; color: #A80410">Start a drop instead</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLinks }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #767676;">
+          <button onClick="{{ goHome }}" style="{{ crumbBtn }}" style-hover="color: #A80410">Public</button>
+          <span>/</span>
+          <span style="color: #1A1A1A;">Links out</span>
+        </div>
+        <div>
+          <h1 style="margin: 0 0 8px; font-size: 32px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.15;">Links out</h1>
+          <p style="margin: 0; font-size: 16px; color: #4A4A4A; max-width: 66ch; text-wrap: pretty;">Where to look when this page is not enough.</p>
+        </div>
+        <div style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); align-items: start;">
+          <sc-for list="{{ linkRows }}" as="l" hint-placeholder-count="3">
+            <div style="min-width: 0; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; overflow: hidden;">
+              <div style="height: 4px; background: #FFCC00;"></div>
+              <div style="padding: 24px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;">
+                  <div style="font-size: 19px; font-weight: 700;">{{ l.name }}</div>
+                  <span style="{{ l.chipStyle }}"><span style="width: 7px; height: 7px; border-radius: 50%; background: currentColor;"></span>{{ l.status }}</span>
+                </div>
+                <p style="margin: 8px 0 16px; font-size: 14px; color: #4A4A4A; text-wrap: pretty;">{{ l.text }}</p>
+                <a href="#" style="font-size: 14px; font-weight: 700;">{{ l.action }}</a>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <footer style="border-top: 1px solid #D9D9D9; padding-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; font-size: 14px; color: #767676;">
+      <span>Rembayung booking queue, phase 7. A console a stranger can drive.</span>
+      <span style="font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .04em;">sandbox expires 02 Oct 2026</span>
+    </footer>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultSurface&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Public&quot;,&quot;Visitor&quot;,&quot;Operator&quot;],&quot;default&quot;:&quot;Public&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Console&quot;},&quot;pollSeconds&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1,&quot;min&quot;:1,&quot;max&quot;:5,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Console&quot;},&quot;seatCapacity&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:250,&quot;min&quot;:50,&quot;max&quot;:1000,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Console&quot;}}">
+class Component extends DCLogic {
+  state = {
+    tier: null,
+    page: "home",
+    docId: "7",
+    dropId: null,
+    slotId: 1042,
+    dropOpen: false,
+    seats: 0,
+    queue: 0,
+    admitted: 0,
+    refused: 0,
+    admitRate: 8,
+    pool: 4,
+    vus: 200,
+    job: { status: "idle", vus: 200, elapsed: 0, arrived: 0, failed: 0 },
+    gateReplicas: 2,
+    bookingReplicas: 2,
+    confirm: "",
+    log: [
+      { t: "08:41:02", key: "key/hkamal", op: "deploy.tag v0.7.2", ok: true },
+      { t: "08:39:55", key: "key/hiring-manager-acme", op: "drop.create d-4b12c8", ok: true },
+      { t: "08:22:10", key: "key/hkamal", op: "deploy.tag v0.7.1", ok: false }
+    ]
+  };
+
+  get capacity() { return this.props.seatCapacity ?? 250; }
+  get poll() { return this.props.pollSeconds ?? 1; }
+  get tier() {
+    if (this.state.tier) return this.state.tier;
+    const d = this.props.defaultSurface;
+    return d === "Visitor" ? "visitor" : d === "Operator" ? "ops" : "public";
+  }
+
+  componentDidMount() { this.timer = setInterval(() => this.tick(), Math.max(1, this.poll) * 1000); }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  jobCost(vus) { return { 200: 200, 1000: 400, 3000: 800 }[vus]; }
+  ladderFor(vus) { return { 200: { a: 200, f: 0 }, 1000: { a: 662, f: 338 }, 3000: { a: 818, f: 2182 } }[vus]; }
+  baseCpu(s) { return 200 + s.bookingReplicas * 200 + s.gateReplicas * 150; }
+
+  tick() {
+    this.setState(s => {
+      const cap = this.capacity;
+      let { queue, seats, admitted, refused, pool, job } = s;
+      const secs = 4;
+
+      if (job.status === "pending") {
+        const free = 3000 - this.baseCpu(s);
+        if (this.jobCost(job.vus) <= free) job = Object.assign({}, job, { status: "running" });
+      }
+
+      if (job.status === "running") {
+        const table = this.ladderFor(job.vus);
+        const elapsed = job.elapsed + 1;
+        const arrived = Math.round(table.a * Math.min(1, elapsed / secs));
+        const failed = Math.round(table.f * Math.min(1, elapsed / secs));
+        queue += arrived - job.arrived;
+        job = Object.assign({}, job, { elapsed, arrived, failed, status: elapsed >= secs ? "complete" : "running" });
+      }
+
+      if (s.dropOpen) {
+        const adm = Math.min(s.admitRate, queue);
+        queue -= adm;
+        admitted += adm;
+        const sold = Math.min(adm, cap - seats);
+        seats += sold;
+        refused += adm - sold;
+      }
+
+      pool = !s.dropOpen ? 4 : s.admitRate >= 200 ? 20 : s.admitRate >= 8 ? 9 : 4;
+      const cpuPct = !s.dropOpen ? 8 : s.admitRate >= 200 ? 88 : s.admitRate >= 8 ? 34 : 12;
+      const bookingReplicas = cpuPct > 60 ? 4 : 2;
+
+      return { queue, seats, admitted, refused, pool, job, bookingReplicas, cpuPct };
+    });
+  }
+
+  stamp() {
+    const d = new Date();
+    const p = n => String(n).padStart(2, "0");
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  record(op, ok, key) {
+    this.setState(s => ({ log: [{ t: this.stamp(), key: key || "key/hkamal", op, ok: ok !== false }, ...s.log].slice(0, 14) }));
+  }
+
+  chip(bg, fg) {
+    return "display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; white-space: nowrap; background: " + bg + "; color: " + fg + ";";
+  }
+
+  newDropId() {
+    const hex = "0123456789abcdef";
+    let id = "d-";
+    for (let i = 0; i < 6; i++) id += hex[Math.floor(Math.random() * 16)];
+    return id;
+  }
+
+  renderVals() {
+    const cap = this.capacity;
+    const s = this.state;
+    const tier = this.tier;
+    const page = s.page;
+    const visitorKey = "key/hiring-manager-acme";
+
+    const btnBase = "display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-size: 14px; font-weight: 700; padding: 0 24px; min-height: 44px; border-radius: 4px; cursor: pointer; flex: none; transition: background 120ms cubic-bezier(.2,0,.2,1), color 120ms cubic-bezier(.2,0,.2,1), border-color 120ms cubic-bezier(.2,0,.2,1);";
+    const primaryBtn = btnBase + " background: #D40511; color: #FFFFFF; border: 2px solid transparent;";
+    const secondaryBtn = btnBase + " background: transparent; color: #1A1A1A; border: 2px solid #1A1A1A;";
+    const disabledBtn = btnBase + " background: #EEECE8; color: #9A9A9A; border: 2px solid transparent; cursor: not-allowed;";
+    const tertiaryBtn = "background: transparent; border: 0; color: #D40511; font: inherit; font-size: 14px; font-weight: 700; padding: 4px 8px; border-radius: 4px; cursor: pointer;";
+    const crumbBtn = "background: none; border: 0; padding: 0; font: inherit; font-size: 14px; font-weight: 700; color: #D40511; cursor: pointer;";
+    const opRow = "display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 16px; border-bottom: 1px solid #EDEDED;";
+    const docCardBtn = "display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 24px; font: inherit; color: #1A1A1A; cursor: pointer; min-width: 0; transition: border-color 120ms cubic-bezier(.2,0,.2,1);";
+    const docRowBtn = "display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 16px; background: #FFFFFF; border: 0; border-bottom: 1px solid #EDEDED; font: inherit; color: #1A1A1A; text-align: left; cursor: pointer; min-height: 44px;";
+    const linkCard = "min-width: 0; display: block; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 4px; padding: 16px; color: #1A1A1A; text-decoration: none;";
+
+    const thBase = "font-size: 12px; font-weight: 700; color: #4A4A4A; padding: 12px 16px; background: #F7F6F4; border-bottom: 2px solid #1A1A1A; white-space: nowrap;";
+    const thLeft = "text-align: left; " + thBase;
+    const thRight = "text-align: right; " + thBase;
+    const td = "padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #EDEDED;";
+    const tdMono = td + " font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .04em; white-space: nowrap;";
+    const tdMonoMuted = tdMono + " color: #4A4A4A;";
+    const tdMonoRight = tdMono + " color: #4A4A4A; text-align: right;";
+
+    const okChip = this.chip("#E4F2E9", "#007A33");
+    const badChip = this.chip("#FDE7E8", "#D40511");
+    const warnChip = this.chip("#FCF0DC", "#B36A00");
+    const infoChip = this.chip("#E2EEF6", "#00558C");
+    const neutralChip = this.chip("#EEECE8", "#4A4A4A");
+
+    const navTab = (on) => "background: none; border: 0; border-bottom: 3px solid " + (on ? "#1A1A1A" : "transparent") +
+      "; padding: 6px 0; font: inherit; font-size: 14px; font-weight: 700; color: #1A1A1A; cursor: pointer; opacity: " + (on ? "1" : ".7") + ";";
+    const underlineTab = (on) => "background: none; border: 0; border-bottom: 3px solid " + (on ? "#D40511" : "transparent") +
+      "; padding: 12px 0; font: inherit; font-size: 14px; font-weight: 700; white-space: nowrap; cursor: pointer; color: " + (on ? "#1A1A1A" : "#4A4A4A") + ";";
+
+    const go = (p) => () => { this.setState({ page: p }); if (window.scrollTo) window.scrollTo(0, 0); };
+    const openDoc = (id) => () => { this.setState({ page: "doc", docId: id }); if (window.scrollTo) window.scrollTo(0, 0); };
+
+    const createDrop = () => {
+      const id = this.newDropId();
+      this.setState({
+        tier: "visitor", dropId: id, slotId: 1000 + Math.floor(Math.random() * 900),
+        dropOpen: false, seats: 0, queue: 0, admitted: 0, refused: 0, admitRate: 8, pool: 4,
+        job: { status: "idle", vus: s.vus, elapsed: 0, arrived: 0, failed: 0 }
+      });
+      this.record("drop.create " + id, true, visitorKey);
+    };
+
+    const usedCpu = this.baseCpu(s) + (s.job.status === "running" ? this.jobCost(s.job.vus) : 0);
+    const freeCpu = 3000 - this.baseCpu(s);
+    const cost = this.jobCost(s.vus);
+    const soldOut = s.seats >= cap;
+    const poolExhausted = s.pool >= 20;
+
+    const rates = [
+      { v: 1, label: "1 per second", note: "One holder a second. The queue barely moves, and nothing is under strain. Good for seeing the mechanism before you stress it." },
+      { v: 8, label: "8 per second", note: "The production setting. The pool sits around nine of twenty connections and the queue drains steadily." },
+      { v: 200, label: "200 per second", note: "More than the database can absorb. The pool exhausts, the service starts refusing with 503 and Retry-After, and oversold stays at zero anyway. That last part is the whole point." }
+    ];
+    const currentRate = rates.filter(r => r.v === s.admitRate)[0] || rates[1];
+
+    const vuOptions = [200, 1000, 3000].map(v => ({
+      label: v + " customers",
+      select: () => this.setState({ vus: v }),
+      style: underlineTab(s.vus === v)
+    }));
+
+    const ladder = [200, 1000, 3000].map(v => {
+      const t = this.ladderFor(v);
+      const on = s.vus === v;
+      return {
+        offered: String(v),
+        arrived: String(t.a),
+        failed: Math.round((t.f / v) * 100) + "%",
+        rowStyle: on ? "background: #FFF3C4;" : ""
+      };
+    });
+
+    const vuNote = s.vus === 200
+      ? "Two hundred is the measured ceiling of usefulness. Every customer arrives, so what you watch is the queue and the invariant."
+      : s.vus === 1000
+        ? "Roughly a third of these never arrive. The sandbox router sheds connections above two hundred, so the losses are edge behaviour, not the application failing."
+        : "Most of these never arrive. That is the router shedding at the edge, and it is a real finding rather than a bug in the booking path.";
+
+    let jobHint, sendLabel, sendDisabled = false, sendStyle = primaryBtn;
+    if (!s.dropId) { jobHint = "Start a drop first."; sendLabel = "Send customers"; sendDisabled = true; sendStyle = disabledBtn; }
+    else if (s.job.status === "pending") {
+      jobHint = "Pending: insufficient cpu. Free " + freeCpu + "m, this job wants " + cost + "m. Scale the gate back to two and it schedules itself.";
+      sendLabel = "Pending"; sendDisabled = true; sendStyle = disabledBtn;
+    } else if (s.job.status === "running") {
+      jobHint = "Running: " + s.job.arrived + " arrived, " + s.job.failed + " shed, " + s.job.elapsed + "s elapsed.";
+      sendLabel = "Running"; sendDisabled = true; sendStyle = disabledBtn;
+    } else if (s.job.status === "complete") {
+      jobHint = s.job.arrived + " arrived, " + s.job.failed + " shed at the edge. Send another when you like.";
+      sendLabel = "Send " + s.vus + " again";
+    } else {
+      jobHint = cost + "m of the 3000m budget, one running job per drop.";
+      sendLabel = "Send " + s.vus + " customers";
+    }
+
+    const sendLoad = () => {
+      if (!s.dropId) return;
+      const pending = cost > freeCpu;
+      this.setState({
+        dropOpen: true,
+        job: { status: pending ? "pending" : "running", vus: s.vus, elapsed: 0, arrived: 0, failed: 0 }
+      });
+      this.record("load.run vus=" + s.vus + " drop=" + s.dropId, !pending, visitorKey);
+    };
+
+    let banner = null;
+    if (s.job.status === "pending") {
+      banner = {
+        bg: "#FCF0DC", bar: "#B36A00",
+        title: "Your load job cannot schedule yet",
+        text: "The namespace has " + freeCpu + "m free and this job asks for " + cost + "m. Nothing is broken: the scheduler is telling you the truth about a 3000m budget. Send two hundred instead, or wait for the gate to scale back.",
+        actionLabel: "Send 200 instead",
+        action: () => { this.setState({ vus: 200 }); }
+      };
+    } else if (soldOut) {
+      banner = {
+        bg: "#E2EEF6", bar: "#00558C",
+        title: "Sold out at " + cap + " of " + cap + ", oversold still zero",
+        text: s.refused + " holders were refused after the last seat went. That refusal is the invariant working, not an error. Start again on fresh data whenever you like.",
+        actionLabel: "Fresh drop",
+        action: createDrop
+      };
+    } else if (poolExhausted) {
+      banner = {
+        bg: "#FDE7E8", bar: "#D40511",
+        title: "Connection pool exhausted at 200 per second",
+        text: "The service is refusing with 503 and Retry-After while the pool is full. Seats keep being claimed one at a time, and oversold has not moved off zero. Drop back to eight per second to see it recover.",
+        actionLabel: "Back to 8 per second",
+        action: () => { this.setState({ admitRate: 8 }); this.record("drop.admitRate 8", true, visitorKey); }
+      };
+    }
+
+    const cpuRows = [
+      { name: "booking-service, " + s.bookingReplicas + " replicas", cpu: s.bookingReplicas * 200 + "m" },
+      { name: "queue-gate, " + s.gateReplicas + " replicas", cpu: s.gateReplicas * 150 + "m" },
+      { name: "console and redis", cpu: "200m" },
+      { name: s.job.status === "running" ? "your load job" : "free", cpu: s.job.status === "running" ? cost + "m" : (3000 - usedCpu) + "m" }
+    ];
+
+    const cpuPct = s.cpuPct ?? 8;
+    const hpaRows = [
+      {
+        name: "hpa/booking-service", detail: s.bookingReplicas + " / 4 replicas",
+        pct: Math.min(100, Math.round((cpuPct / 60) * 100)), color: cpuPct > 60 ? "#B36A00" : "#00558C",
+        note: "cpu " + cpuPct + "% of a 60% target"
+      },
+      {
+        name: "hpa/queue-gate", detail: s.gateReplicas + " / 10 replicas",
+        pct: Math.min(100, Math.round((cpuPct / 90) * 100)), color: "#00558C",
+        note: s.gateReplicas > 2
+          ? "pre scaled by an operator, holding " + s.gateReplicas * 150 + "m of the budget"
+          : "gate work is cheap, so it rarely scales on its own"
+      },
+      {
+        name: "oracle pool", detail: s.pool + " / 20 connections",
+        pct: Math.round((s.pool / 20) * 100), color: s.pool >= 20 ? "#D40511" : "#00558C",
+        note: s.pool >= 20 ? "full, refusing with 503 and Retry-After" : s.bookingReplicas + " replicas at five connections each"
+      }
+    ];
+
+    const deployData = [
+      ["v0.7.2", "4f1ac9d", "rembayung-cd", "05 Sep · 08:14", "42s", true],
+      ["v0.7.1", "b8e0c31", "rembayung-cd", "04 Sep · 21:02", "2m18s", false],
+      ["v0.7.0", "7d2f004", "rembayung-cd", "04 Sep · 17:41", "51s", true],
+      ["v0.6.4", "1c93aa7", "rembayung-cd", "03 Sep · 11:20", "47s", true],
+      ["v0.6.3", "a44b7e2", "rembayung-cd", "02 Sep · 19:55", "49s", true],
+      ["v0.6.2", "e07c519", "rembayung-cd", "02 Sep · 14:07", "1m04s", true]
+    ].map(r => ({
+      tag: r[0], commit: r[1], actor: r[2], when: r[3], rollout: r[4],
+      result: r[5] ? "Rolled out" : "Rolled back", chipStyle: r[5] ? okChip : badChip
+    }));
+
+    const podRows = [
+      { name: "booking-service", ready: s.bookingReplicas + "/" + s.bookingReplicas, cpu: s.bookingReplicas * 200 + "m", restarts: "0", age: "3d" },
+      { name: "queue-gate", ready: s.gateReplicas + "/" + s.gateReplicas, cpu: s.gateReplicas * 150 + "m", restarts: "0", age: "3d" },
+      { name: "redis", ready: "1/1", cpu: "100m", restarts: "0", age: "9d" },
+      { name: "console-api", ready: "1/1", cpu: "100m", restarts: "1", age: "4h" }
+    ];
+
+    const mkOp = (name, impl, why, action, fn) => ({ name, impl, why, action, run: fn, rowStyle: opRow, btnStyle: secondaryBtn });
+
+    const docs = {
+      "1": {
+        title: "Booking queue architecture",
+        meta: "Spec 01 · 02 Sep 2026 · accepted",
+        body: [
+          "The system sells a fixed number of seats for a single moment in time. Demand arrives synchronised, because everyone is watching the same clock, so the interesting failure is not slow response. It is two people being sold the same seat.",
+          "Redis holds an ordered queue of holders and issues admission tokens at a bounded rate. The booking service claims seats inside a single transaction. The gate refuses arrivals it cannot admit rather than queueing them in memory.",
+          "Seat allocation is a conditional update, not a read followed by a write. If the update affects zero rows the caller is sold out. The invariant is enforced by the database rather than by application ordering.",
+          "A booking system with exactly one possible drop was always a demo artefact. Per drop keys and windows, added in phase 7, make it closer to a model of the domain."
+        ]
+      },
+      "2": {
+        title: "Continuous delivery",
+        meta: "Spec 04 · 03 Sep 2026 · accepted",
+        body: [
+          "Delivery runs as a workflow with a ServiceAccount scoped to this namespace. It can patch Deployments and read their status. It cannot read Secrets, which was verified rather than assumed.",
+          "A deploy is a tag. A rollback is the same workflow with a previous tag, so there is no separate rollback path to keep working.",
+          "A bad tag times out, each service returns to its own previous tag, the workflow re verifies and exits non zero, and the site serves 200 throughout. Deploy something broken and watch it heal is the strongest thing this project can show."
+        ]
+      },
+      "6": {
+        title: "Observability",
+        meta: "Spec 06 · 04 Sep 2026 · accepted",
+        body: [
+          "Every service emits structured JSON on one line per event, with fields chosen so a query can group by drop, by outcome and by key without parsing text.",
+          "Two state providers compute the numbers this project is about. One owns seats and oversold. One owns queue depth and admission rate. Both were written here and deliberately not exposed over HTTP, so a later surface could not fork the computation.",
+          "That restraint is what makes the console honest. It reads one implementation of the truth rather than producing a second one that agrees most of the time."
+        ]
+      },
+      "7": {
+        title: "Demo console",
+        meta: "Spec 07 · 05 Sep 2026 · draft",
+        body: [
+          "The first draft of this spec gated every control behind OpenShift OAuth. That was wrong for the goal: it gates on cluster identity, which a hiring manager opening a link will never have.",
+          "The console is rebuilt around issued keys and per visitor sandboxes. A visitor gets a drop of their own: an identifier, its own slot row, its own ticket counter, its own window held in Redis. Reset stops being destructive, because it means a new drop rather than a delete.",
+          "That costs real work in the gate, which today has one global ticket counter and a window read from environment variables at startup. Namespacing the keys and moving the window into data is contained, and it improves the design.",
+          "The governing principle is that constraints are content. When a load job cannot schedule, the console names the limit and what is holding the budget. A visitor who sees a real quota decision has learned more than one who sees a green tick.",
+          "Load runs in the cluster because a stranger cannot run k6 on a laptop. Two hundred users is the default because it is the measured ceiling above which the sandbox router sheds connections. Larger runs are offered rather than forbidden, and labelled as edge shedding, since hiding the option would hide the lesson."
+        ]
+      }
+    };
+    const doc = docs[s.docId] || docs["7"];
+
+    const typed = s.confirm.trim();
+    const confirmOk = typed.toLowerCase() === "slot 1";
+    const errored = typed.length > 0 && !confirmOk;
+
+    return {
+      isHome: tier === "public" && page === "home",
+      isPods: tier === "public" && page === "pods",
+      isDeploys: tier === "public" && page === "deploys",
+      isDocs: tier === "public" && page === "docs",
+      isDoc: tier === "public" && page === "doc",
+      isLinks: tier === "public" && page === "links",
+      isVisitor: tier === "visitor",
+      isOps: tier === "ops",
+      noDrop: tier === "visitor" && !s.dropId,
+      hasDrop: tier === "visitor" && !!s.dropId,
+
+      showPublic: () => this.setState({ tier: "public", page: "home" }),
+      showVisitor: () => this.setState({ tier: "visitor" }),
+      showOps: () => this.setState({ tier: "ops" }),
+      publicTabStyle: navTab(tier === "public"),
+      visitorTabStyle: navTab(tier === "visitor"),
+      opsTabStyle: navTab(tier === "ops"),
+      keyLabel: tier === "public" ? "no key, read only" : tier === "visitor" ? visitorKey : "key/hkamal",
+      pollLabel: this.poll + "s",
+
+      goHome: go("home"), goPods: go("pods"), goDeploys: go("deploys"), goDocs: go("docs"), goLinks: go("links"),
+      openDoc1: openDoc("1"), openDoc2: openDoc("2"), openDoc6: openDoc("6"), openDoc7: openDoc("7"),
+      docTitle: doc.title, docMeta: doc.meta, docBody: doc.body.map(t => ({ text: t })),
+      startFromHome: () => { if (!s.dropId) createDrop(); else this.setState({ tier: "visitor" }); },
+
+      primaryBtn, secondaryBtn, tertiaryBtn, crumbBtn, docCardBtn, docRowBtn, linkCard,
+      thLeft, thRight, td, tdMono, tdMonoMuted, tdMonoRight, okChip,
+
+      capacity: cap,
+      canonSeats: 202,
+      canonPct: Math.round((202 / cap) * 100),
+      seats: s.seats,
+      seatsPct: Math.round((s.seats / cap) * 1000) / 10,
+      queue: s.queue,
+      queuePct: Math.min(100, Math.round((s.queue / 300) * 100)),
+      admitted: s.admitted,
+      refused: s.refused,
+      admitRate: s.admitRate,
+      pool: s.pool,
+      poolPct: Math.round((s.pool / 20) * 100),
+      poolColor: s.pool >= 20 ? "#D40511" : "#00558C",
+      poolNote: s.pool >= 20 ? "full: further claims get 503 with Retry-After" : "Oracle caps this around twenty connections",
+      rateNote: currentRate.note,
+      rates: rates.map(r => ({
+        label: r.label,
+        select: () => { this.setState({ admitRate: r.v, dropOpen: true }); this.record("drop.admitRate " + r.v, true, visitorKey); },
+        style: underlineTab(s.admitRate === r.v)
+      })),
+
+      dropId: s.dropId,
+      slotId: s.slotId,
+      dropState: s.dropOpen ? "Open" : "Closed",
+      dropChip: s.dropOpen ? okChip : neutralChip,
+      toggleLabel: s.dropOpen ? "Close the drop" : "Open the drop",
+      toggleDrop: () => {
+        this.setState({ dropOpen: !s.dropOpen });
+        this.record(s.dropOpen ? "drop.close " + s.dropId : "drop.open " + s.dropId, true, visitorKey);
+      },
+      createDrop,
+
+      vuOptions, ladder, vuNote,
+      sendLoad, sendLabel, sendDisabled, sendBtnStyle: sendStyle, jobHint,
+
+      hasBanner: !!banner,
+      bannerBg: banner ? banner.bg : "#FFFFFF",
+      bannerBar: banner ? banner.bar : "#FFFFFF",
+      bannerTitle: banner ? banner.title : "",
+      bannerText: banner ? banner.text : "",
+      bannerActionLabel: banner ? banner.actionLabel : "",
+      bannerAction: banner ? banner.action : () => {},
+
+      usedCpu,
+      baseCpuPct: Math.round((this.baseCpu(s) / 3000) * 100),
+      jobCpuPct: s.job.status === "running" ? Math.round((cost / 3000) * 100) : 0,
+      cpuRows, hpaRows,
+
+      podCards: podRows.map(p => ({ name: p.name, ready: p.ready })),
+      podRows,
+      deployRows: deployData,
+      deployRowsShort: deployData.slice(0, 4),
+      linkRows: [
+        { name: "OpenShift console", status: "Live", chipStyle: okChip, text: "Workloads, routes, events and the quota this namespace runs against.", action: "Open console" },
+        { name: "Dynatrace tenant", status: "Trial", chipStyle: warnChip, text: "Traces through the gate into the booking service, where the second of contention goes.", action: "Open tenant" },
+        { name: "Splunk stack", status: "Trial", chipStyle: warnChip, text: "Structured logs from every service, including the audit trail with key ids.", action: "Open search" }
+      ],
+
+      ops: [
+        mkOp("Deploy a tag", "trigger rembayung-cd workflow", "Safe to show: a bad tag rolls itself back and the site keeps serving 200.", "Deploy", () => this.record("deploy.tag v0.7.3")),
+        mkOp("Roll back", "trigger rembayung-cd with previous tag", "The same workflow with an earlier tag. No separate path to maintain.", "Roll back", () => this.record("deploy.rollback v0.7.2")),
+        mkOp("Pre scale the gate", "scale deployment/queue-gate to 10", "Takes 1200m of the budget, which is how visitor load jobs end up Pending.", "Scale to 10", () => { this.setState({ gateReplicas: 10 }); this.record("gate.scale replicas=10"); }),
+        mkOp("Scale back", "scale deployment/queue-gate to 2", "Returns the budget. Any Pending load job schedules on the next poll.", "Scale to 2", () => { this.setState({ gateReplicas: 2 }); this.record("gate.scale replicas=2"); }),
+        mkOp("Keepalive job", "trigger cronjob/oracle-keepalive", "Keeps the Always Free database from idling out between demos.", "Run", () => this.record("keepalive.run"))
+      ],
+
+      confirmText: s.confirm,
+      onConfirmChange: (e) => this.setState({ confirm: e.target.value }),
+      inputStyle: "font: inherit; font-size: 16px; min-height: 44px; padding: 0 12px; width: 100%; background: #FFFFFF; color: #1A1A1A; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .06em; border: " +
+        (errored ? "2px solid #D40511" : "1px solid #767676") + ";",
+      hintStyle: "font-size: 12px; color: " + (errored ? "#D40511" : "#767676") + "; font-weight: " + (errored ? "700" : "400") + ";",
+      hintText: errored ? "That is not the canonical slot. Type slot 1 exactly." : "Sandbox drops need no confirmation. This one does.",
+      resetDisabled: !confirmOk,
+      resetBtnStyle: confirmOk ? primaryBtn : disabledBtn,
+      resetSeats: () => {
+        if (!confirmOk) return;
+        this.setState({ confirm: "" });
+        this.record("slots.reset slot_id=1");
+      },
+
+      auditLog: s.log.map(l => ({
+        time: l.t, key: l.key, op: l.op,
+        outcome: l.ok ? "Applied" : "Refused",
+        chipStyle: l.ok ? okChip : badChip
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
