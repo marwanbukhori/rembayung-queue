@@ -6,7 +6,7 @@
 
 **Architecture:** The gate gains a Redis-backed drop registry so many drops can exist at once; tokens carry their own drop id, so only `POST /queue` changes shape. A new `console` service serves a public read-only view, renders the repository's Markdown, and — behind issued access keys — creates drops, launches bounded k6 Jobs, and exposes cluster state including the quotas that constrain it.
 
-**Tech Stack:** Spring Boot 4.1.1, Redis, Kubernetes API via fabric8, k6 as a Job, server-rendered HTML with vanilla JS polling
+**Tech Stack:** Spring Boot 4.1.1, Redis, Kubernetes API via fabric8, k6 as a Job, Angular 20 built into the image in a multi-stage Docker build
 
 **Spec:** [`docs/superpowers/specs/2026-09-05-demo-console-design.md`](../specs/2026-09-05-demo-console-design.md)
 
@@ -69,9 +69,14 @@ console/                               NEW SERVICE
     │   ├── ops/DeployOps.java          operator tier: deploy, roll back, scale
     │   └── web/                        controllers
     └── resources/
-        ├── static/console.js           polling, rendering
-        ├── templates/                  server-rendered shell
+        ├── static/                     Angular build output, copied in at image build
         └── docs/                       Markdown copied in at build time
+
+console/design/demo-console-v3.html     the owner's design — the source of truth for layout
+console/ui/                             NEW — Angular workspace
+├── src/app/                            standalone components, one per design section
+├── src/app/api/                        typed clients for /api/state, /api/docs, /api/cluster
+└── angular.json, package.json
 
 deploy/base/console/                    NEW — Deployment, Service, Route, SA, Role
 ```
@@ -874,11 +879,42 @@ public record DemoState(
 
 `ConsoleApplication.java` is a bare `@SpringBootApplication`. `StateController` exposes `GET /api/state?drop={id}`, calling both internal endpoints with a `RestClient`, a 2-second timeout, and a 1-second cache so viewer count cannot amplify load onto the services. On any failure it returns `DemoState.unavailable(...)` with the reason — **never a 500**.
 
-- [ ] **Step 7: Write the page**
+- [ ] **Step 7: Scaffold the Angular workspace from the existing design**
 
-`index.html` plus `console.js`: poll `/api/state` every 2 seconds and render seats, queue, oversold and pod counts. No framework, no build step. **`oversold` is the largest number on the page** — it is the claim the project makes.
+**The design at `console/design/demo-console-v3.html` is already Angular** — 155
+`{{ }}` interpolations and 24 `ng-` attributes. It is the source of truth for
+layout, and its sections map directly onto this plan: a Public / Visitor /
+Operator tier switcher, *Your sandbox*, *Constraints*, *Operations*, *Cluster*,
+*Audit trail*, *Documentation*, *Deploy history*, *Links out*. Its palette is
+DHL's — `#D40511` red, `#A80410` dark red, and the grey ramp `#1A1A1A`,
+`#4A4A4A`, `#767676`, `#D9D9D9`, `#EDEDED`.
 
-When `available` is false, render the `detail` string in place of the numbers rather than blanking the page.
+```bash
+cd console && npx --yes @angular/cli@20 new ui --routing=false --style=css \
+  --skip-git --skip-tests --standalone --package-manager=npm
+```
+
+Then port the design's markup into standalone components, one per section, and
+lift its inline CSS into `styles.css` **keeping the hex values exactly** — the
+palette is the part that makes it look deliberate rather than defaulted.
+
+Bind the templates to a `StateService` that polls `/api/state` every 2 seconds.
+**`oversold` is the largest number on the page** — it is the claim the project
+makes. When `available` is false, render `detail` in place of the numbers rather
+than blanking the page.
+
+Node 25.6.0 and npm 11.8.0 are installed locally; `ubuntu-latest` ships node, so
+CI needs no extra setup beyond the build step Task 8 adds.
+
+- [ ] **Step 7a: Make the Dockerfile multi-stage**
+
+`console/Dockerfile` gets a node stage that runs `npm ci && npm run build`, and
+the JRE stage copies `ui/dist/ui/browser/` into `/app/static/`. Spring Boot
+serves it as static content, so there is no second container and no separate
+Route.
+
+This is the first multi-language build in the project, and it is worth doing
+properly: the node stage must not appear in the final image.
 
 - [ ] **Step 8: Run it locally and see it**
 
@@ -1158,7 +1194,13 @@ One replica, `100m`/`256Mi` requested. Liveness and readiness on the management 
 
 - [ ] **Step 3: Add to CI**
 
-Extend `.github/workflows/ci.yml` to build and push `ghcr.io/marwanbukhori/console` alongside the other two, tagged with the same commit SHA.
+Extend `.github/workflows/ci.yml` to build and push `ghcr.io/marwanbukhori/console`
+alongside the other two, tagged with the same commit SHA. The Angular build runs
+inside the Dockerfile's node stage, so the workflow needs no `setup-node` step —
+keeping the CI change to one more `docker/build-push-action` block.
+
+Note this makes the pipeline multi-language: Java tests, then a node build, then
+two image builds. Worth a sentence in Task 9's note.
 
 - [ ] **Step 4: Deploy and verify from outside**
 
