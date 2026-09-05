@@ -37,13 +37,10 @@ import { StateService } from './state.service';
                 <div class="of">/ {{ d.capacity }}</div>
               </div>
               <!--
-                The seat map is the bar, so the bar goes when the map is here.
-                Two drawings of one number, stacked, was the page saying the
-                same thing twice.
+                No bar when the room is drawn below: the seat map is the bar,
+                and two drawings of one number was the page repeating itself.
               -->
-              @if (withSeatMap()) {
-                <rb-seat-map />
-              } @else {
+              @if (!withSeatMap()) {
                 <div class="bar"><span [style.width.%]="seatsPct()"></span></div>
               }
               <div class="footnote">
@@ -93,6 +90,15 @@ import { StateService } from './state.service';
           }
           <div class="note">{{ oversoldNote }}</div>
         </div>
+
+        <!--
+          A direct child of the row, which is what lets it take a line of its
+          own. Nested inside the seats card it inherited that card's column and
+          drew 250 seats eleven wide and twenty-three deep.
+        -->
+        @if (withSeatMap()) {
+          <rb-seat-map />
+        }
       </div>
     </section>
   `,
@@ -103,14 +109,23 @@ import { StateService } from './state.service';
       way - only the framing moves, so neither page duplicates the figures.
     */
     .cards.merged {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+      /*
+        Flex, not grid. grid-column: 1 / -1 on the seat map did not span - it
+        stayed in the first column and drew 250 seats eleven wide and twenty-
+        three deep. flex-basis: 100% puts it on its own full-width line with no
+        ambiguity about what a "column" is.
+      */
+      display: flex;
+      flex-wrap: wrap;
       gap: 20px 32px;
       background: var(--white);
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 24px;
     }
+    .cards.merged > .card,
+    .cards.merged > .oversold { flex: 1 1 200px; }
+    .cards.merged > rb-seat-map { flex: 1 1 100%; display: block; width: 100%; }
     /* The children stop being cards; the container is the card now. */
     .cards.merged > .card,
     .cards.merged > .oversold {
@@ -120,7 +135,6 @@ import { StateService } from './state.service';
       padding: 0;
       color: inherit;
     }
-    .cards.merged rb-seat-map { grid-column: 1 / -1; }
     /* Oversold keeps its weight without a dark slab mid-card. */
     .cards.merged .oversold .figure-claim { color: var(--chip-ok-fg); }
     .cards.merged .oversold .note { color: var(--muted); }

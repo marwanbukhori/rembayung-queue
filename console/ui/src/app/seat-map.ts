@@ -32,7 +32,8 @@ import { StateService } from './state.service';
     </div>
   `,
   styles: `
-    .wrap { display: flex; flex-direction: column; gap: 10px; }
+    :host { display: block; width: 100%; }
+    .wrap { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 
     .legend {
       display: flex;
