@@ -1,7 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 
-/** What POST /api/drops returns: a slot, a drop bound to it, and its rate. */
+/**
+ * What POST /api/drops returns: a slot, a session bound to it, and its rate.
+ *
+ * The wire calls it a drop and so does the code; the page calls it a simulation,
+ * because that is the word a first-time reader has.
+ */
 export interface Sandbox {
   dropId: string;
   slotId: number;
@@ -9,15 +14,16 @@ export interface Sandbox {
 }
 
 /**
- * The visitor's own drop, held for as long as the page is open.
+ * The visitor's own simulation, held for as long as the page is open.
  *
  * It lives in a service rather than in the component because the surfaces are
- * swapped out when you switch tabs: a sandbox kept in the component would be
- * forgotten the moment someone looked at the pod list, and they would come back
- * to a "Start a drop" button and no way to reach the drop they already had.
+ * swapped out when you switch sections: a sandbox kept in the component would be
+ * forgotten the moment someone looked at the cluster list, and they would come
+ * back to a "Start a simulation" button and no way to reach the one they already
+ * had.
  *
  * The drop id is the whole session — there is nothing else to keep, no account
- * and no ownership record, and both halves expire on their own: the drop with
+ * and no ownership record, and both halves expire on their own: the session with
  * its Redis key after thirty idle minutes, the slot with the sweeper.
  */
 @Injectable({ providedIn: 'root' })
@@ -52,5 +58,5 @@ function describe(err: unknown): string {
   }
   // Spring's error body calls it "message"; a ProblemDetail calls it "detail".
   const body = (err as { error?: { message?: string; detail?: string } })?.error;
-  return body?.message || body?.detail || 'the console could not start a sandbox just now';
+  return body?.message || body?.detail || 'the console could not start a simulation just now';
 }

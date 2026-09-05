@@ -1,55 +1,75 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
 import { DocsPage } from './docs-page';
 import { Operations } from './operations';
-import { PodsPage } from './pods-page';
 import { PublicHome } from './public-home';
 import { StateService } from './state.service';
 import { Visitor } from './visitor';
 import { hasConsoleKey } from './key';
 
-/** Which surface is on screen. Tiers, then pages within the public tier. */
-type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
+/** Which surface is on screen. */
+type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
 
 /**
- * The shell: the DHL bar, the tier switcher, and whichever surface is showing.
+ * The shell: a persistent navbar, and whichever surface is showing.
  *
- * Ported from console/design/demo-console-v3.html, which was already written as
- * Angular. The layout, the copy and the palette are the design's; the wiring is
- * this task's.
+ * <h2>Why the navbar is its own band</h2>
+ * The section switcher used to be three quiet buttons inside the brand strip,
+ * which read as part of the page rather than as navigation — someone landing
+ * cold could not tell where they were or how to get back. It is now a bar of its
+ * own under the brand, sticky, with the current section marked, so the answer to
+ * "where am I" is on screen at every scroll position.
+ *
+ * The palette and the brand strip are from console/design/demo-console-v3.html,
+ * which is the repository owner's design and the source of truth for this page.
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, PodsPage, DocsPage, DocPage, Visitor, Operations],
+  imports: [PublicHome, ClusterPage, DocsPage, DocPage, Visitor, Operations],
   template: `
-    <header class="bar">
-      <div class="bar-inner">
-        <div class="brand">
-          <div class="wordmark">Rembayung</div>
-          <div class="ns">ns/{{ namespace() }}</div>
-        </div>
-        <div style="flex: 1 1 20px;"></div>
-        <div class="bar-right">
-          <nav class="tabs">
-            <button class="nav-tab" [class.on]="isPublic()" (click)="show('home')">Public</button>
-            <button class="nav-tab" [class.on]="surface() === 'visitor'" (click)="show('visitor')">Visitor</button>
-            <button class="nav-tab" [class.on]="surface() === 'ops'" (click)="show('ops')">Operator</button>
-          </nav>
-          <div class="live">
-            <span class="pulse"></span>
-            <span>{{ keyLabel() }}</span>
+    <header class="navbar">
+      <div class="brandband">
+        <div class="inner">
+          <button class="brand" (click)="show('home')" title="Back to the overview">
+            <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+              <rect width="24" height="24" rx="3" fill="#1A1A1A" />
+              <path d="M4 8h13M4 12h16M4 16h9" stroke="#FFCC00" stroke-width="2.2" stroke-linecap="round" />
+            </svg>
+            <span class="wordmark">Rembayung</span>
+            <span class="tagline">booking queue simulation</span>
+          </button>
+          <div style="flex: 1 1 20px;"></div>
+          <div class="badges">
+            <div class="badge mono">ns/{{ namespace() }}</div>
+            <div class="badge mono">
+              <span class="pulse"></span>
+              <span>{{ keyLabel() }}</span>
+            </div>
           </div>
         </div>
       </div>
+
+      <nav class="sections" aria-label="Sections">
+        <div class="inner">
+          @for (link of links; track link.surface) {
+            <button
+              class="nav-link"
+              [class.on]="link.surface === current()"
+              [attr.aria-current]="link.surface === current() ? 'page' : null"
+              (click)="show(link.surface)">{{ link.label }}</button>
+          }
+        </div>
+      </nav>
     </header>
 
     <main>
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (pods)="show('pods')" (visitor)="show('visitor')" (docs)="show('docs')" (open)="openDoc($event)" />
+          <rb-public-home (cluster)="show('cluster')" (visitor)="show('visitor')" (docs)="show('docs')" (open)="openDoc($event)" />
         }
-        @case ('pods') {
-          <rb-pods-page (home)="show('home')" />
+        @case ('cluster') {
+          <rb-cluster-page (home)="show('home')" />
         }
         @case ('docs') {
           <rb-docs-page (home)="show('home')" (open)="openDoc($event)" />
@@ -58,7 +78,7 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
           <rb-doc-page [id]="selectedDocId()!" (home)="show('home')" (docs)="show('docs')" (visitor)="show('visitor')" />
         }
         @case ('visitor') {
-          <rb-visitor />
+          <rb-visitor (home)="show('home')" (docs)="show('docs')" />
         }
         @case ('ops') {
           <rb-operations />
@@ -72,37 +92,40 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
     </main>
   `,
   styles: `
-    .bar { background: #FFCC00; border-bottom: 1px solid #E6B800; }
-    .bar-inner {
+    .navbar { position: sticky; top: 0; z-index: 20; }
+    .brandband { background: #FFCC00; border-bottom: 1px solid #E6B800; }
+    .inner {
       max-width: 1120px;
       margin: 0 auto;
-      padding: 10px 16px;
+      padding: 0 16px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px 24px;
-      min-height: 64px;
+      gap: 8px 24px;
     }
-    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brandband .inner { padding-top: 8px; padding-bottom: 8px; min-height: 56px; }
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+    }
+    .mark { align-self: center; flex: none; border-radius: 3px; }
     .wordmark { font-size: 19px; font-weight: 800; letter-spacing: -0.015em; white-space: nowrap; }
-    .ns {
-      font-family: var(--mono);
-      font-size: 12px;
-      background: rgba(0, 0, 0, .08);
-      border-radius: 2px;
-      padding: 2px 8px;
-      white-space: nowrap;
-      letter-spacing: .04em;
-    }
-    .bar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
-    .tabs { display: flex; gap: 24px; }
-    .live {
+    .tagline { font-size: 13px; color: #4A4A4A; white-space: nowrap; }
+    .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .badge {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-family: var(--mono);
       font-size: 12px;
-      letter-spacing: .04em;
       background: rgba(0, 0, 0, .08);
       border-radius: 2px;
       padding: 3px 8px;
@@ -115,6 +138,26 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
       background: var(--ink);
       animation: livePulse 2s ease-in-out infinite;
     }
+
+    .sections { background: var(--white); border-bottom: 1px solid var(--line); }
+    .sections .inner { gap: 0 8px; flex-wrap: nowrap; overflow-x: auto; }
+    .nav-link {
+      background: none;
+      border: 0;
+      border-bottom: 3px solid transparent;
+      padding: 12px 12px 9px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      cursor: pointer;
+      white-space: nowrap;
+      flex: none;
+      transition: color 120ms var(--ease), border-color 120ms var(--ease);
+    }
+    .nav-link:hover { color: var(--ink); background: var(--rule); }
+    .nav-link.on { color: var(--dhl-red); border-bottom-color: var(--dhl-red); }
+
     main {
       max-width: 1120px;
       margin: 0 auto;
@@ -138,6 +181,15 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
 export class App {
   private readonly state = inject(StateService);
 
+  /** The persistent navigation. Order is the order a first-time reader needs them in. */
+  readonly links: { surface: Surface; label: string }[] = [
+    { surface: 'home', label: 'Overview' },
+    { surface: 'visitor', label: 'Run a simulation' },
+    { surface: 'cluster', label: 'Cluster' },
+    { surface: 'docs', label: 'Documentation' },
+    { surface: 'ops', label: 'Operator' }
+  ];
+
   /**
    * Whatever namespace the API says it read from, or a dash until it answers.
    *
@@ -152,11 +204,8 @@ export class App {
   readonly surface = signal<Surface>('home');
   readonly selectedDocId = signal<string | null>(null);
 
-  private static readonly PUBLIC_SURFACES: Surface[] = ['home', 'pods', 'docs', 'doc'];
-
-  isPublic(): boolean {
-    return App.PUBLIC_SURFACES.includes(this.surface());
-  }
+  /** Reading a document is still being in Documentation, so the nav says so. */
+  readonly current = computed<Surface>(() => (this.surface() === 'doc' ? 'docs' : this.surface()));
 
   /**
    * One key opens the whole console — there are no tiers and no read-only
@@ -169,11 +218,11 @@ export class App {
     return this.state.transportError()?.includes('key') ? 'key refused' : 'keyed';
   });
 
-  /** Which drop and slot are actually on screen, named by the services. */
+  /** Which session and slot are actually on screen, named by the services. */
   readonly readingLabel = computed(() => {
     const drop = this.state.view()?.drop;
     return drop && drop.available
-      ? `reading slot ${drop.slotId} and drop ${drop.dropId}`
+      ? `reading slot ${drop.slotId} of session ${drop.dropId}`
       : 'nothing read yet';
   });
 

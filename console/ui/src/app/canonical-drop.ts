@@ -2,7 +2,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { StateService } from './state.service';
 
 /**
- * The canonical drop, read from the services that own the data.
+ * The live seat and queue numbers, read from the services that own the data.
  *
  * Nothing is computed here beyond a percentage for a bar. Seats, remaining and
  * oversold arrive already calculated by SlotStateProvider, which is also what
@@ -118,17 +118,17 @@ import { StateService } from './state.service';
 export class CanonicalDrop {
   private readonly state = inject(StateService);
 
-  /** "Your drop" on the visitor page; the canonical one everywhere else. */
-  readonly heading = input('The canonical drop');
-  readonly oversoldNote = 'Across every drop this cluster has run.';
+  /** The visitor's own session names itself; everywhere else this is the shared one. */
+  readonly heading = input('The public simulation');
+  readonly oversoldNote = 'Across every simulation this cluster has run.';
 
   readonly drop = computed(() => this.state.view()?.drop ?? null);
 
   /**
    * The slot is named rather than assumed. It used to read "Slot 1" whatever
-   * was on screen, which was right for the canonical drop and wrong for every
-   * sandbox — the gate now says which slot a drop sells, so the page can say it
-   * too.
+   * was on screen, which was right for the shared session and wrong for every
+   * sandbox — the gate now says which slot a session sells, so the page can say
+   * it too.
    */
   readonly subheading = computed(() => {
     const d = this.drop();

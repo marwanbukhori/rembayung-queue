@@ -1,29 +1,29 @@
 import { Component, output } from '@angular/core';
-import { PodHealthPanel } from './pod-health';
+import { ClusterResources } from './cluster-resources';
 
 @Component({
-  selector: 'rb-pods-page',
-  imports: [PodHealthPanel],
+  selector: 'rb-cluster-page',
+  imports: [ClusterResources],
   template: `
     <div class="stack-24">
       <div class="crumbs">
-        <button class="btn-crumb" (click)="home.emit()">Public</button>
+        <button class="btn-crumb" (click)="home.emit()">Overview</button>
         <span>/</span>
-        <span style="color: var(--ink);">Pod health</span>
+        <span style="color: var(--ink);">Cluster resources</span>
       </div>
       <div>
-        <h1>Pod health</h1>
+        <h1>Cluster resources</h1>
         <p class="lede">
-          Read through the Kubernetes API with a ServiceAccount scoped to this namespace and no
-          access to Secrets.
+          Every workload behind the simulation, read live through the Kubernetes API with a
+          ServiceAccount scoped to this namespace and no access to Secrets.
         </p>
       </div>
-      <rb-pod-health [full]="true" />
+      <rb-cluster-resources [full]="true" />
       <div class="card">
         <div class="why">Why the budget matters here</div>
         <p style="margin: 0; font-size: 15px; color: var(--ink-soft); max-width: 70ch; text-wrap: pretty;">
-          Every visitor load run asks the scheduler for CPU out of the same 3000m. When there is not
-          enough, the Job sits Pending and the console says which limit stopped it and what is
+          Every simulation's load run asks the scheduler for CPU out of the same 3000m. When there is
+          not enough, the Job sits Pending and the console says which limit stopped it and what is
           holding the budget, rather than reporting a generic failure.
         </p>
       </div>
@@ -35,6 +35,6 @@ import { PodHealthPanel } from './pod-health';
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
   `
 })
-export class PodsPage {
+export class ClusterPage {
   readonly home = output<void>();
 }

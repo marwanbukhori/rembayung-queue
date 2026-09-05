@@ -151,7 +151,7 @@ export class LoadControl {
 
   readonly rateNote = computed(() =>
     this.rates.find((rate) => rate.value === this.admitRate())?.note
-    ?? 'This drop was created with a rate the console does not offer as a preset.');
+    ?? 'This simulation was created with a rate the console does not offer as a preset.');
 
   readonly vuNote = computed(() => {
     const chosen = this.vus();

@@ -28,6 +28,18 @@ class DocsControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("observability")));
     }
 
+    // The notes are written in GFM and lean on pipe tables. Without the tables
+    // extension commonmark emits them as a paragraph of literal pipes, which is
+    // what a reader saw first on the busiest page of the record.
+    @Test
+    void pipeTablesRenderAsTables() throws Exception {
+        mvc.perform(get("/api/docs/03-how-this-runs").header(KEY_HEADER, KEY))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("<table>")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("|---|---|---|"))));
+    }
+
     // Path traversal: the id is used to open a file, so it is the one place a
     // string from the browser touches the filesystem.
     @Test

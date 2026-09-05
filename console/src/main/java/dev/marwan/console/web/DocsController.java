@@ -1,5 +1,7 @@
 package dev.marwan.console.web;
 
+import org.commonmark.Extension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 import org.springframework.core.io.Resource;
@@ -36,9 +38,16 @@ import java.util.Map;
 @RequestMapping("/api/docs")
 public class DocsController {
 
+    /**
+     * GFM pipe tables. Plain commonmark has no notion of them, so every table in
+     * the notes and specs rendered as a literal row of pipes; the written record
+     * uses them heavily enough that that was the first thing a reader saw.
+     */
+    private static final List<Extension> EXTENSIONS = List.of(TablesExtension.create());
+
     private final Map<String, Doc> docs;
-    private final Parser parser = Parser.builder().build();
-    private final HtmlRenderer renderer = HtmlRenderer.builder().build();
+    private final Parser parser = Parser.builder().extensions(EXTENSIONS).build();
+    private final HtmlRenderer renderer = HtmlRenderer.builder().extensions(EXTENSIONS).build();
 
     public DocsController() throws IOException {
         this.docs = load();
