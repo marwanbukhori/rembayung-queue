@@ -117,12 +117,12 @@ import { StateService } from './state.service';
       seat grid auto-fills, so it simply uses fewer seats per row in a narrower
       column rather than overflowing.
     */
-    .glance {
-      display: grid;
-      gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
-      align-items: start;
-    }
+    /*
+      Stacked, each full width. Side by side halved both: the sitting became a
+      ribbon too narrow to read as a room, and the cluster rows had to wrap.
+      Seats on top, because the seats are what the cluster is working for.
+    */
+    .glance { display: flex; flex-direction: column; gap: 16px; }
 
     .exit {
       border-top: 1px solid var(--line);

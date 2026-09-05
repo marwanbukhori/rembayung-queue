@@ -356,11 +356,26 @@ export class PodPulse {
       byOwner.set(owner, glyphs);
     }
 
-    return [...byOwner.entries()]
+    // Every load Job is the same thing wearing a different drop id, and their
+    // pods linger after the run. Eight rows of them says nothing that one row
+    // does not; the CPU is still counted, because they are still spending it.
+    const collapsed = new Map<string, PodGlyph[]>();
+    for (const [owner, glyphs] of byOwner) {
+      const key = owner.startsWith('load-') ? 'load generator' : owner;
+      collapsed.set(key, [...(collapsed.get(key) ?? []), ...glyphs]);
+    }
+
+    return [...collapsed.entries()]
       .sort((a, b) => b[1].length - a[1].length)
       .map(([name, glyphs]) => {
         const hpa = cluster?.autoscalers.find((a) => a.name === name) ?? null;
-        const spend = cluster?.consumers.find((c) => c.name === name) ?? null;
+        const spend = name === 'load generator'
+          ? {
+              millis: (cluster?.consumers ?? [])
+                .filter((c) => c.name.startsWith('load-'))
+                .reduce((sum, c) => sum + c.millis, 0)
+            }
+          : cluster?.consumers.find((c) => c.name === name) ?? null;
         return {
           name,
           pods: glyphs,

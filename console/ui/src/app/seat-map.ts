@@ -55,13 +55,16 @@ import { StateService } from './state.service';
     .caption { margin-left: auto; color: var(--ink-soft); }
 
     /*
-      auto-fill rather than a fixed 25 columns: the row length follows the width
-      it is given, so the block reflows instead of overflowing on a narrow page.
+      25 to a row, capped, so it reads as a seating plan rather than a ribbon.
+      This was auto-fill, which was right while the card had half the width and
+      wrong once it had all of it: ninety seats on a line is not a shape anybody
+      recognises as a room. The squares shrink on a narrow page instead.
     */
     .seats {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(12px, 1fr));
-      gap: 3px;
+      grid-template-columns: repeat(25, minmax(0, 1fr));
+      gap: 4px;
+      max-width: 720px;
     }
     .seat {
       aspect-ratio: 1;
