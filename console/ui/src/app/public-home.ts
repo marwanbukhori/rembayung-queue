@@ -2,6 +2,7 @@ import { Component, OnInit, computed, effect, inject, output } from '@angular/co
 import { CanonicalDrop } from './canonical-drop';
 import { ClusterResources } from './cluster-resources';
 import { DocsService, GROUP_LABELS } from './docs.service';
+import { ArchitectureDiagram } from './architecture-diagram';
 import { FlowDiagram } from './flow-diagram';
 import { Placeholder } from './placeholder';
 import { StateService } from './state.service';
@@ -28,16 +29,27 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [CanonicalDrop, ClusterResources, FlowDiagram, Placeholder],
+  imports: [ArchitectureDiagram, CanonicalDrop, ClusterResources, FlowDiagram, Placeholder],
   template: `
     <div class="stack">
       <section class="panel">
         <div class="accent-top"></div>
 
+        <!--
+          Bands down the page, each one thing, each read across. The hero used to
+          be two tall columns side by side, which meant the pitch and the diagram
+          were both narrow and neither finished on one screen.
+        -->
         <div class="hero">
-          <div class="hero-left">
+          <div class="hero-lead">
             <span class="tag eyebrow">Simulation — not a real booking site</span>
             <h1 class="headline">Watch a restaurant's 9pm booking rush, on demand</h1>
+            <div class="hero-actions">
+              <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
+              <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
+            </div>
+          </div>
+          <div class="hero-say">
             <p class="hero-lede">
               Rembayung takes reservations for one sitting a night, and bookings open at
               <strong>21:00 every day except Friday</strong>. The rush is not a surprise, it is
@@ -45,49 +57,44 @@ interface Outward {
               seats. This console runs that minute on demand, so you can watch what the queue does
               instead of being told.
             </p>
-            <div class="hero-actions">
-              <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
-              <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
-            </div>
             <p class="hero-note">
               Starting one seeds a fresh 250-seat slot of your own and opens it immediately, so you
               can see what 21:00 looks like without waiting for 21:00.
             </p>
-
-            <div class="moves">
-              <div>
-                <div class="moves-head">Three moves to try to break it</div>
-                <p class="moves-sub">Nothing to install, nothing shared with anyone else on this page</p>
-              </div>
-              <div class="move-list">
-                @for (move of moves; track move.name; let i = $index) {
-                  <div class="move">
-                    <div class="move-num mono">{{ i + 1 }}</div>
-                    <div style="min-width: 0;">
-                      <div class="move-name">{{ move.name }}</div>
-                      <div class="move-note">{{ move.note }}</div>
-                    </div>
-                  </div>
-                }
-              </div>
-            </div>
           </div>
+        </div>
 
-          <!--
-            Drawn, not described. This used to be five paragraphs explaining that
-            a flood arrives and a trickle leaves; the diagram shows the same
-            thing in the ratio between two lanes of moving dots, and the reader
-            gets it before finishing the headline.
-          -->
-          <div class="hero-right">
-            <div class="path-head">
-              <div class="path-title">The path one customer takes</div>
-              <div class="path-count mono">live</div>
-            </div>
-            <rb-flow-diagram />
-            <p class="path-foot">
-              Numbers are read from the running cluster. Dashes mean no simulation is open.
-            </p>
+        <div class="band">
+          <div class="band-head-row">
+            <div class="band-head eyebrow">The path one customer takes</div>
+            <div class="band-aside mono">read live from the cluster</div>
+          </div>
+          <rb-flow-diagram />
+        </div>
+
+        <div class="band">
+          <div class="band-head-row">
+            <div class="band-head eyebrow">What runs it</div>
+            <div class="band-aside mono">pod counts are live</div>
+          </div>
+          <rb-architecture-diagram />
+        </div>
+
+        <div class="band">
+          <div class="band-head-row">
+            <div class="band-head eyebrow">Three moves to try to break it</div>
+            <div class="band-aside mono">nothing to install</div>
+          </div>
+          <div class="moves">
+            @for (move of moves; track move.name; let i = $index) {
+              <div class="move">
+                <div class="move-num mono">{{ i + 1 }}</div>
+                <div style="min-width: 0;">
+                  <div class="move-name">{{ move.name }}</div>
+                  <div class="move-note">{{ move.note }}</div>
+                </div>
+              </div>
+            }
           </div>
         </div>
 
@@ -245,51 +252,19 @@ interface Outward {
   `,
   styles: `
     /*
-      auto-fit with a 360px floor rather than a media query: the two columns sit
-      side by side wherever there is room for both and stack wherever there is
-      not, including inside the narrow viewport the docs drawer leaves behind.
+      Headline and actions on the left, the explanation on the right, both on one
+      line above the fold. Two columns here and nowhere else: this is the only
+      place on the page where two things are genuinely read together.
     */
     .hero {
-      padding: 36px 24px 32px;
+      padding: 36px 24px 30px;
       display: grid;
-      gap: 40px;
-      grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+      gap: 20px 48px;
+      grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
       align-items: start;
     }
-    .hero-left { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
-    .hero-right { min-width: 0; }
-
-    .moves { border-top: 1px solid var(--rule); padding-top: 22px; display: flex; flex-direction: column; gap: 14px; width: 100%; }
-    .moves-head { font-size: 17px; font-weight: 700; }
-    .moves-sub { margin: 2px 0 0; font-size: 14px; color: var(--muted); text-wrap: pretty; }
-    .move-list { display: flex; flex-direction: column; gap: 12px; }
-    .move { display: flex; gap: 12px; align-items: flex-start; }
-    .move-num {
-      flex: none;
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      background: var(--dhl-yellow);
-      display: grid;
-      place-items: center;
-      font-size: 13px;
-      font-weight: 700;
-    }
-    .move-name { font-size: 15px; font-weight: 700; }
-    .move-note { font-size: 14px; color: var(--ink-soft); text-wrap: pretty; }
-
-    .path-head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 4px 12px;
-      margin-bottom: 18px;
-    }
-    .path-title { font-size: 17px; font-weight: 700; }
-    .path-count { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
-    .path-foot { margin: 14px 0 0; font-size: 12px; color: var(--muted); text-wrap: pretty; }
-
+    .hero-lead { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+    .hero-say { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
     .tag {
       color: var(--chip-info-fg);
       background: var(--chip-info-bg);
@@ -302,12 +277,45 @@ interface Outward {
       font-weight: 800;
       letter-spacing: -0.02em;
       line-height: 1.1;
-      max-width: 22ch;
+      max-width: 19ch;
       text-wrap: balance;
     }
-    .hero-lede { margin: 0; font-size: 17px; color: var(--ink-soft); max-width: 56ch; text-wrap: pretty; }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 4px; }
-    .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; text-wrap: pretty; }
+    .hero-lede { margin: 0; font-size: 16px; color: var(--ink-soft); max-width: 62ch; text-wrap: pretty; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+
+    /* A band's title on the left, its one-line qualifier on the right. */
+    .band-head-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 4px 16px;
+      margin-bottom: 16px;
+    }
+    .band-head-row .band-head { margin-bottom: 0; }
+    .band-aside { font-size: 11px; letter-spacing: .04em; color: var(--muted); }
+
+    /* Three across, and one under the other only when there is no room. */
+    .moves {
+      display: grid;
+      gap: 20px 32px;
+      grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    }
+    .move { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+    .move-num {
+      flex: none;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: var(--dhl-yellow);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .move-name { font-size: 15px; font-weight: 700; }
+    .move-note { font-size: 14px; color: var(--ink-soft); margin-top: 2px; text-wrap: pretty; }
 
     .band { border-top: 1px solid var(--rule); padding: 24px; }
     .band-head { color: var(--muted); margin-bottom: 16px; }
