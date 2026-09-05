@@ -1,6 +1,7 @@
 package dev.marwan.gate.web;
 
 import dev.marwan.gate.queue.AdmissionService;
+import dev.marwan.gate.queue.DropRegistry;
 import dev.marwan.gate.queue.JoinResult;
 import dev.marwan.gate.queue.PositionView;
 import dev.marwan.gate.queue.QueueService;
@@ -20,8 +21,11 @@ public class QueueController {
     }
 
     @PostMapping
-    public JoinResult join() {
-        return queueService.join();
+    public JoinResult join(
+            // Optional so every existing caller, the load test and open-drop.sh
+            // included, keeps working against the canonical drop untouched.
+            @RequestParam(name = "drop", defaultValue = DropRegistry.DEFAULT_ID) String dropId) {
+        return queueService.join(dropId);
     }
 
     @GetMapping("/{token}")

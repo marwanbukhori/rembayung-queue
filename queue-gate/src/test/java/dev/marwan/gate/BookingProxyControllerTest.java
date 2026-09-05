@@ -2,6 +2,7 @@ package dev.marwan.gate;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import dev.marwan.gate.queue.DropRegistry;
 import dev.marwan.gate.queue.JoinResult;
 import dev.marwan.gate.queue.QueueService;
 import org.junit.jupiter.api.AfterAll;
@@ -56,7 +57,7 @@ class BookingProxyControllerTest extends RedisTestBase {
                             {"bookingId":42,"status":"PENDING_DEPOSIT","idempotentReplay":false}
                             """)));
 
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofSeconds(1));
 
         mvc.perform(post("/bookings")
@@ -92,7 +93,7 @@ class BookingProxyControllerTest extends RedisTestBase {
                             {"bookingId":43,"status":"PENDING_DEPOSIT","idempotentReplay":false}
                             """)));
 
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofSeconds(1));
 
         mvc.perform(post("/bookings")
@@ -120,7 +121,7 @@ class BookingProxyControllerTest extends RedisTestBase {
                             {"reason":"SLOT_SOLD_OUT","details":{"slotId":1,"requested":2,"remaining":0}}
                             """)));
 
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofSeconds(1));
 
         mvc.perform(post("/bookings")

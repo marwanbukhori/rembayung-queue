@@ -23,9 +23,9 @@ class AdmissionServiceTest extends RedisTestBase {
     @Test
     void positionShrinksAsAdmissionAdvances() {
         for (int i = 0; i < 149; i++) {
-            queueService.join();
+            queueService.join(DropRegistry.DEFAULT_ID);
         }
-        JoinResult mine = queueService.join();   // ticket 150
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);   // ticket 150
 
         Optional<PositionView> before = admissionService.position(mine.token());
         assertThat(before).isPresent();
@@ -41,7 +41,7 @@ class AdmissionServiceTest extends RedisTestBase {
 
     @Test
     void anAdmittedTokenReportsItsRemainingWindow() {
-        JoinResult mine = queueService.join();   // ticket 1
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);   // ticket 1
         clock().advance(Duration.ofSeconds(1));
 
         PositionView view = admissionService.position(mine.token()).orElseThrow();
@@ -53,7 +53,7 @@ class AdmissionServiceTest extends RedisTestBase {
 
     @Test
     void consumingAnAdmittedTokenSucceedsExactlyOnce() {
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofSeconds(1));
 
         admissionService.consume(mine.token());
@@ -67,9 +67,9 @@ class AdmissionServiceTest extends RedisTestBase {
     @Test
     void aTokenWhoseTurnHasNotComeIsRejected() {
         for (int i = 0; i < 149; i++) {
-            queueService.join();
+            queueService.join(DropRegistry.DEFAULT_ID);
         }
-        JoinResult mine = queueService.join();   // ticket 150, not yet admitted
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);   // ticket 150, not yet admitted
 
         assertThatThrownBy(() -> admissionService.consume(mine.token()))
                 .isInstanceOf(TokenRejectedException.class)
@@ -79,7 +79,7 @@ class AdmissionServiceTest extends RedisTestBase {
 
     @Test
     void aTokenPastItsFiveMinuteWindowIsRejected() {
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofMinutes(6));
 
         assertThatThrownBy(() -> admissionService.consume(mine.token()))

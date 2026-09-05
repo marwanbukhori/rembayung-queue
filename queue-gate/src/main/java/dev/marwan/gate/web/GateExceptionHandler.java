@@ -32,6 +32,17 @@ public class GateExceptionHandler {
                 .body(new GateApiError("SOLD_OUT", Map.of()));
     }
 
+    /**
+     * 404 rather than 400: a drop is a resource that has expired or never
+     * existed, and a visitor returning to a stale bookmark should be told the
+     * drop is gone rather than that their request was malformed.
+     */
+    @ExceptionHandler(UnknownDropException.class)
+    public ResponseEntity<GateApiError> unknownDrop(UnknownDropException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new GateApiError("UNKNOWN_DROP", Map.of()));
+    }
+
     @ExceptionHandler(TokenRejectedException.class)
     public ResponseEntity<GateApiError> tokenRejected(TokenRejectedException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)

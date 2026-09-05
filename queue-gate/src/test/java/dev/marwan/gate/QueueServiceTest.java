@@ -17,7 +17,7 @@ class QueueServiceTest extends RedisTestBase {
     void joiningBeforeTheDropOpensIsRejectedWithACountdown() {
         clock().setNow(OPENS_AT.minusSeconds(120));
 
-        assertThatThrownBy(queueService::join)
+        assertThatThrownBy(() -> queueService.join(DropRegistry.DEFAULT_ID))
                 .isInstanceOf(DropNotOpenException.class)
                 .satisfies(e -> assertThat(((DropNotOpenException) e).getSecondsUntilOpen())
                         .isEqualTo(120));
@@ -27,13 +27,13 @@ class QueueServiceTest extends RedisTestBase {
     void joiningAfterTheDropClosesIsRejected() {
         clock().setNow(OPENS_AT.plus(Duration.ofMinutes(31)));
 
-        assertThatThrownBy(queueService::join).isInstanceOf(DropClosedException.class);
+        assertThatThrownBy(() -> queueService.join(DropRegistry.DEFAULT_ID)).isInstanceOf(DropClosedException.class);
     }
 
     @Test
     void ticketsAreIssuedInOrderFromOne() {
-        JoinResult first = queueService.join();
-        JoinResult second = queueService.join();
+        JoinResult first = queueService.join(DropRegistry.DEFAULT_ID);
+        JoinResult second = queueService.join(DropRegistry.DEFAULT_ID);
 
         assertThat(first.ticket()).isEqualTo(1);
         assertThat(second.ticket()).isEqualTo(2);
@@ -43,11 +43,11 @@ class QueueServiceTest extends RedisTestBase {
     @Test
     void positionAndEtaReflectHowFarAdmissionHasAdvanced() {
         for (int i = 0; i < 149; i++) {
-            queueService.join();
+            queueService.join(DropRegistry.DEFAULT_ID);
         }
         clock().advance(Duration.ofMillis(500));   // 100 admitted at 200/s
 
-        JoinResult result = queueService.join();   // ticket 150
+        JoinResult result = queueService.join(DropRegistry.DEFAULT_ID);   // ticket 150
 
         assertThat(result.ticket()).isEqualTo(150);
         assertThat(result.position()).isEqualTo(50);
@@ -59,7 +59,7 @@ class QueueServiceTest extends RedisTestBase {
     void anAlreadyAdmittedTicketReportsPositionZero() {
         clock().advance(Duration.ofSeconds(1));   // 200 admitted before anyone joins
 
-        JoinResult result = queueService.join();  // ticket 1
+        JoinResult result = queueService.join(DropRegistry.DEFAULT_ID);  // ticket 1
 
         assertThat(result.position()).isZero();
         assertThat(result.admitted()).isTrue();
@@ -68,17 +68,19 @@ class QueueServiceTest extends RedisTestBase {
     @Test
     void ticketsBeyondTheCapAreSoldOut() {
         for (int i = 0; i < 250; i++) {
-            queueService.join();
+            queueService.join(DropRegistry.DEFAULT_ID);
         }
 
-        assertThatThrownBy(queueService::join).isInstanceOf(SoldOutException.class);
+        assertThatThrownBy(() -> queueService.join(DropRegistry.DEFAULT_ID)).isInstanceOf(SoldOutException.class);
     }
 
+    // The stored value now carries the drop alongside the ticket, which is what
+    // lets a token resolve its own drop and keeps GET /queue/{token} unchanged.
     @Test
     void theTicketIsStoredInRedisUnderTheToken() {
-        JoinResult result = queueService.join();
+        JoinResult result = queueService.join(DropRegistry.DEFAULT_ID);
 
         assertThat(redis.opsForValue().get("admit:" + result.token()))
-                .isEqualTo(String.valueOf(result.ticket()));
+                .isEqualTo(DropRegistry.DEFAULT_ID + ":" + result.ticket());
     }
 }

@@ -1,6 +1,5 @@
 package dev.marwan.gate.queue;
 
-import dev.marwan.gate.config.DropProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -13,13 +12,38 @@ import java.util.Optional;
 public class AdmissionService {
 
     private final StringRedisTemplate redis;
-    private final DropProperties drop;
+    private final DropRegistry drops;
     private final Clock clock;
 
-    public AdmissionService(StringRedisTemplate redis, DropProperties drop, Clock clock) {
+    public AdmissionService(StringRedisTemplate redis, DropRegistry drops, Clock clock) {
         this.redis = redis;
-        this.drop = drop;
+        this.drops = drops;
         this.clock = clock;
+    }
+
+    /** A ticket together with the drop whose rules govern it. */
+    private record Held(DropRecord drop, long ticket) { }
+
+    /**
+     * Splits "{dropId}:{ticket}" and loads the drop it names.
+     *
+     * Empty when the value is not in that shape or the drop it names is gone.
+     * A token whose drop has expired is indistinguishable, to a caller, from a
+     * token that never existed, so both resolve to nothing rather than to a
+     * third outcome the caller could not act on differently.
+     */
+    private Optional<Held> resolve(String raw) {
+        int sep = raw.lastIndexOf(':');
+        if (sep < 0) {
+            return Optional.empty();
+        }
+        long ticket;
+        try {
+            ticket = Long.parseLong(raw.substring(sep + 1));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+        return drops.find(raw.substring(0, sep)).map(d -> new Held(d, ticket));
     }
 
     /** Read-only. Returns empty when the token is unknown or has lapsed from Redis. */
@@ -28,7 +52,12 @@ public class AdmissionService {
         if (raw == null) {
             return Optional.empty();
         }
-        long ticket = Long.parseLong(raw);
+        Optional<Held> resolved = resolve(raw);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        DropRecord drop = resolved.get().drop();
+        long ticket = resolved.get().ticket();
         Instant now = clock.instant();
 
         long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
@@ -52,7 +81,9 @@ public class AdmissionService {
         if (raw == null) {
             throw new TokenRejectedException("TOKEN_INVALID");
         }
-        long ticket = Long.parseLong(raw);
+        Held held = resolve(raw).orElseThrow(() -> new TokenRejectedException("TOKEN_INVALID"));
+        DropRecord drop = held.drop();
+        long ticket = held.ticket();
         Instant now = clock.instant();
 
         if (!Admission.isAdmitted(ticket, now, drop.opensAt(), drop.admitRate())) {

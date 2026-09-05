@@ -1,6 +1,5 @@
 package dev.marwan.gate.queue;
 
-import dev.marwan.gate.config.DropProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,20 +11,36 @@ import java.util.UUID;
 @Service
 public class QueueService {
 
-    static final String TICKET_COUNTER = "queue:ticket";
     static final String ADMIT_PREFIX = "admit:";
 
+    /**
+     * The canonical drop's counter, kept as a named constant because the metrics
+     * gauges report on the 21:00 queue rather than on somebody's sandbox.
+     */
+    static final String TICKET_COUNTER = ticketCounter(DropRegistry.DEFAULT_ID);
+
     private final StringRedisTemplate redis;
-    private final DropProperties drop;
+    private final DropRegistry drops;
     private final Clock clock;
 
-    public QueueService(StringRedisTemplate redis, DropProperties drop, Clock clock) {
+    public QueueService(StringRedisTemplate redis, DropRegistry drops, Clock clock) {
         this.redis = redis;
-        this.drop = drop;
+        this.drops = drops;
         this.clock = clock;
     }
 
-    public JoinResult join() {
+    /** One counter per drop, so two drops never share a ticket sequence. */
+    static String ticketCounter(String dropId) {
+        return "queue:" + dropId + ":ticket";
+    }
+
+    /**
+     * Joins a named drop. The old no-argument form is gone: every join belongs
+     * to exactly one drop, and defaulting silently would let a console bug send
+     * a visitor's traffic into the canonical 21:00 queue.
+     */
+    public JoinResult join(String dropId) {
+        DropRecord drop = drops.find(dropId).orElseThrow(() -> new UnknownDropException(dropId));
         Instant now = clock.instant();
 
         if (now.isBefore(drop.opensAt())) {
@@ -35,13 +50,17 @@ public class QueueService {
             throw new DropClosedException();
         }
 
-        Long ticket = redis.opsForValue().increment(TICKET_COUNTER);
+        Long ticket = redis.opsForValue().increment(ticketCounter(dropId));
         if (ticket == null || ticket > drop.ticketCap()) {
             throw new SoldOutException();
         }
 
         String token = UUID.randomUUID().toString();
-        redis.opsForValue().set(ADMIT_PREFIX + token, String.valueOf(ticket), drop.ticketTtl());
+        // The drop id travels with the ticket so the token is self-describing:
+        // position() and consume() resolve the drop without a parameter, which
+        // is what keeps GET /queue/{token} and POST /bookings unchanged.
+        redis.opsForValue().set(ADMIT_PREFIX + token,
+                dropId + ":" + ticket, drop.ticketTtl());
 
         long admitted = Admission.admittedBy(now, drop.opensAt(), drop.admitRate());
         long position = Math.max(0, ticket - admitted);

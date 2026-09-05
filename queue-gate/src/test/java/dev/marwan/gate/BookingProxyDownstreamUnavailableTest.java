@@ -1,5 +1,6 @@
 package dev.marwan.gate;
 
+import dev.marwan.gate.queue.DropRegistry;
 import dev.marwan.gate.queue.JoinResult;
 import dev.marwan.gate.queue.QueueService;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class BookingProxyDownstreamUnavailableTest extends RedisTestBase {
 
     @Test
     void downstreamConnectionFailureReturns503WithRetryAfter() throws Exception {
-        JoinResult mine = queueService.join();
+        JoinResult mine = queueService.join(DropRegistry.DEFAULT_ID);
         clock().advance(Duration.ofSeconds(1));
 
         mvc.perform(post("/bookings")
