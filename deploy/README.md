@@ -294,6 +294,90 @@ not a Dynatrace policy or a Splunk saved search.
 
 ---
 
+## Demo console
+
+A public, self-service view of the whole system, added in Phase 7. It is where
+someone who was sent a link creates their own drop, watches the queue drain,
+sends real load at it from inside the cluster, and reads the constraints that
+stop it. See `docs/notes/09-demo-console.md` for why it is built this way,
+including the measured figures and what it deliberately does not do.
+
+**Route:**
+
+```
+https://console-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com
+```
+
+### Everything is behind one key
+
+There are no accounts and no tiers. A single shared key gates the entire
+`/api/*` surface — reads included — and may be supplied either way:
+
+```bash
+# as a query parameter, which is how the link is shared
+curl "https://console-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com/api/state?key=$CONSOLE_KEY"
+
+# or as a header
+curl -H "X-Console-Key: $CONSOLE_KEY" \
+  https://console-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com/api/state
+```
+
+Without a key, `/api/*` answers **401**. The static page itself is not gated —
+the browser fetches its script and stylesheet without the query string that
+opened the page — but the shell renders nothing on its own; every number on it
+comes from `/api`.
+
+### The key lives in the `console-access` Secret
+
+It is not in git and nothing prints it. Create or rotate it by hand:
+
+```bash
+oc create secret generic console-access --from-literal=key='<a long random string>'
+# to rotate:
+oc create secret generic console-access --from-literal=key='<new key>' \
+  --dry-run=client -o yaml | oc replace -f -
+```
+
+**A rollout restart is required after changing it.** The key is injected as the
+`CONSOLE_ACCESS_KEY` environment variable, and environment variables are read
+once at container start — an updated Secret changes nothing until the pod is
+replaced:
+
+```bash
+oc rollout restart deploy/console
+oc rollout status deploy/console --timeout=180s
+```
+
+The reference is `optional: true`, so a namespace with no `console-access`
+Secret still runs: the Deployment comes up and refuses every `/api` call. That
+is deliberate — an unconfigured console must be shut, not open.
+
+### What the console's ServiceAccount cannot do
+
+The console runs as its own ServiceAccount (`deploy/base/console/rbac.yaml`),
+not `default`, and two omissions from its Role are deliberate:
+
+- **It cannot read Secrets.** The Oracle wallet and database credentials live
+  in this namespace. The console holds exactly one credential — its own access
+  key, handed to it by the kubelet — and has no reason to read another. A
+  public Route whose identity could read Secrets would be one bug away from
+  the wallet.
+- **It cannot patch or scale Deployments.** Deploying, rolling back and scaling
+  go through CD, which runs as `rembayung-cd`. That keeps the identity behind a
+  public page read-mostly: the only object it can create is a load `Job` whose
+  image, command, deadline and CPU budget the console itself decides.
+
+Verify either directly:
+
+```bash
+oc auth can-i get secrets --as=system:serviceaccount:marwanbukhori-dev:console
+oc auth can-i patch deployments --as=system:serviceaccount:marwanbukhori-dev:console
+```
+
+Both must answer `no`.
+
+---
+
 ## Routine Redeploy
 
 After the initial setup, code changes flow through this pipeline:
