@@ -26,3 +26,6 @@ loadtest-output.txt
 
 # Local scratch — commands to hand-run
 RUN-THESE.md
+
+# Playwright MCP scratch output
+.playwright-mcp/

@@ -2,7 +2,10 @@ package dev.marwan.booking;
 
 import dev.marwan.booking.api.BookingRequest;
 import dev.marwan.booking.api.SlotSoldOutException;
+import dev.marwan.booking.domain.Booking;
+import dev.marwan.booking.domain.BookingStatus;
 import dev.marwan.booking.domain.Slot;
+import dev.marwan.booking.repository.BookingRepository;
 import dev.marwan.booking.repository.SlotRepository;
 import dev.marwan.booking.service.BookingService;
 import dev.marwan.booking.service.ExpirySweeper;
@@ -23,6 +26,7 @@ class ConcurrencyInvariantTest extends OracleTestBase {
     @Autowired private BookingService bookingService;
     @Autowired private ExpirySweeper expirySweeper;
     @Autowired private SlotRepository slotRepository;
+    @Autowired private BookingRepository bookingRepository;
 
     @Test
     void neverOversellsUnderConcurrentBooking() throws Exception {
@@ -108,6 +112,34 @@ class ConcurrencyInvariantTest extends OracleTestBase {
         for (Future<?> task : tasks) task.get();   // surface any thrown exception
 
         Slot finalSlot = slotRepository.findById(slotId).orElseThrow();
-        assertThat(finalSlot.getSeatsTaken()).isBetween(0, capacity);
+
+        // The accounting identity, not a range check. `isBetween(0, capacity)`
+        // was the assertion here and it proved nothing: ck_slots_seats already
+        // constrains seats_taken to exactly that range at the database level, so
+        // the check passed for every possible outcome the code could produce —
+        // including the two failures it was written to catch. A booker that
+        // never claimed a seat passes it. A sweeper that released the same hold
+        // twice passes it, because double-releasing drives the counter DOWN.
+        //
+        // What must hold instead is that the counter equals the seats actually
+        // owed: every booking still alive holds its party size, and every
+        // booking the sweeper expired holds nothing. One release too many or too
+        // few breaks this equality, and nothing else in the schema enforces it.
+        int seatsOwed = bookingRepository.findAll().stream()
+                .filter(b -> slotId.equals(b.getSlotId()))
+                .filter(b -> b.getStatus() != BookingStatus.EXPIRED)
+                .mapToInt(Booking::getPartySize)
+                .sum();
+        assertThat(finalSlot.getSeatsTaken()).isEqualTo(seatsOwed);
+
+        // And the race has to have actually been raced. If the sweeper expired
+        // nothing, the identity above holds trivially and the test is green
+        // without ever exercising the interleaving it exists to test.
+        long expired = bookingRepository.findAll().stream()
+                .filter(b -> slotId.equals(b.getSlotId()))
+                .filter(b -> b.getStatus() == BookingStatus.EXPIRED)
+                .count();
+        assertThat(booked.get()).isGreaterThan(0);
+        assertThat(expired).isGreaterThan(0);
     }
 }
