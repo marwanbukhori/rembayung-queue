@@ -39,21 +39,21 @@ import { StateService } from './state.service';
         <rb-run-banner />
         <rb-canonical-drop heading="Your simulation, live" />
         <rb-seat-map />
-        <rb-traffic-log />
         <!--
-          Said plainly, because the panel above appears full of zeros the moment
-          a simulation starts, and a page of zeros reads as broken rather than
-          as waiting for you.
+          The cluster's own reaction, beside the traffic causing it: this is
+          where a visitor sees queue-gate scale out under the rush and the Oracle
+          connection budget fill up. It used to sit below the fold, which is the
+          one place it cannot be watched from.
         -->
+        <rb-constraints />
+        <rb-traffic-log />
         <p class="reason">
-          Every counter above stays at zero until a run from step 2 reaches it. A simulation with
-          no traffic against it is idle, not broken. If the namespace is out of CPU the run sits
-          Pending and the constraints panel says so in the scheduler's own words — that is the
-          demonstration, not a fault.
+          Every counter above stays at zero until a run reaches it. A sitting with no traffic
+          against it is idle, not broken. If the namespace is out of CPU the run sits Pending and
+          the panel above says so in the scheduler's own words — that is the demonstration, not a
+          fault.
         </p>
       }
-
-      <rb-constraints />
 
       <!--
         The way back. Starting a simulation used to be a one-way door: the page

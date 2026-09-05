@@ -1,7 +1,8 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { ClusterService } from './cluster.service';
 import { StateService } from './state.service';
 
-export type EventKind = 'join' | 'admit' | 'seat' | 'open' | 'idle' | 'oversold';
+export type EventKind = 'join' | 'admit' | 'seat' | 'open' | 'idle' | 'oversold' | 'scale';
 
 export interface TrafficEvent {
   /** Monotonic, so the list can track by it without colliding on the clock. */
@@ -33,12 +34,14 @@ export class TrafficService {
   private static readonly KEEP = 60;
 
   private readonly state = inject(StateService);
+  private readonly cluster = inject(ClusterService);
 
   private readonly events = signal<TrafficEvent[]>([]);
   private seq = 0;
 
   /** The last snapshot a line was derived from, per drop. */
   private previous: { dropId: string | null; issued: number; admitted: number; seats: number } | null = null;
+  private readonly replicas = new Map<string, number>();
 
   /** Newest first, because a log you watch is read from the top. */
   readonly feed = this.events.asReadonly();
@@ -50,6 +53,7 @@ export class TrafficService {
   readonly idleSeconds = computed(() => this.events().length);
 
   constructor() {
+    this.watchScaling();
     effect(() => {
       const view = this.state.view();
       const drop = view?.drop;
@@ -106,6 +110,35 @@ export class TrafficService {
         admitted: drop.admitted,
         seats: drop.seatsTaken
       };
+    });
+  }
+
+  /**
+   * Replica counts, logged when they move.
+   *
+   * The panel above shows what the autoscalers are doing now. This says when
+   * they did it, which is the part worth seeing: a rush arrives, and half a
+   * minute later queue-gate goes from two pods to five because of it. A number
+   * that changed while you were reading something else shows nothing.
+   */
+  private watchScaling(): void {
+    effect(() => {
+      const cluster = this.cluster.cluster();
+      if (!cluster?.available) {
+        return;
+      }
+      for (const hpa of cluster.autoscalers) {
+        const seen = this.replicas.get(hpa.name);
+        if (seen === undefined) {
+          this.replicas.set(hpa.name, hpa.current);
+          continue;
+        }
+        if (hpa.current !== seen) {
+          const direction = hpa.current > seen ? 'scaled out' : 'scaled in';
+          this.push('scale', `${hpa.name} ${direction}, ${seen} to ${hpa.current} pods`, 1);
+          this.replicas.set(hpa.name, hpa.current);
+        }
+      }
     });
   }
 

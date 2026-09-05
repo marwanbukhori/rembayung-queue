@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
 import { LatencyStrip } from './latency-strip';
+import { ObservabilityLinks } from './observability-links';
 import { TrafficService } from './traffic.service';
 
 /**
@@ -16,7 +17,7 @@ import { TrafficService } from './traffic.service';
  */
 @Component({
   selector: 'rb-traffic-log',
-  imports: [DatePipe, LatencyStrip],
+  imports: [DatePipe, LatencyStrip, ObservabilityLinks],
   template: `
     <div class="card">
       <div class="head">
@@ -47,6 +48,7 @@ import { TrafficService } from './traffic.service';
           seats will appear here as they occur.
         </p>
       }
+      <rb-observability-links />
     </div>
   `,
   styles: `
@@ -120,6 +122,7 @@ import { TrafficService } from './traffic.service';
     .join .tag { background: var(--chip-info-bg); color: var(--chip-info-fg); }
     .admit .tag { background: var(--highlight); color: var(--ink); }
     .seat .tag { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+    .scale .tag { background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
     /* The one line that should be impossible, so it does not look like the rest. */
     .oversold { background: var(--chip-bad-bg); }
     .oversold .tag { background: var(--dhl-red); color: var(--white); }
@@ -136,6 +139,7 @@ export class TrafficLog {
       case 'join': return 'QUEUE';
       case 'admit': return 'ADMIT';
       case 'seat': return 'BOOK';
+      case 'scale': return 'SCALE';
       case 'oversold': return 'ALERT';
       default: return 'INFO';
     }
