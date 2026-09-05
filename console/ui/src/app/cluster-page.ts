@@ -1,9 +1,10 @@
 import { Component, output } from '@angular/core';
 import { ClusterResources } from './cluster-resources';
+import { ObjectGraph } from './object-graph';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ClusterResources],
+  imports: [ClusterResources, ObjectGraph],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -19,6 +20,15 @@ import { ClusterResources } from './cluster-resources';
         </p>
       </div>
       <rb-cluster-resources [full]="true" />
+      <div class="card">
+        <div class="why">How these objects connect</div>
+        <p class="note">
+          The list above is what is running. This is why: which Route publishes what, which
+          Service fronts which Deployment, and what governs each one. booking-service and redis
+          have no Route — they are reachable only from inside the namespace.
+        </p>
+        <rb-object-graph />
+      </div>
       <div class="card">
         <div class="why">Why the budget matters here</div>
         <p style="margin: 0; font-size: 15px; color: var(--ink-soft); max-width: 70ch; text-wrap: pretty;">

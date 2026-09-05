@@ -59,13 +59,20 @@ class QueueStateProviderTest {
     }
 
     // Admission is a pure function of time and keeps counting past the last
-    // issued ticket. Waiting must not go negative, which would render as a
-    // nonsense queue depth on a dashboard.
+    // issued ticket, so a drop left open drifts arbitrarily far ahead of anyone
+    // who actually joined.
+    //
+    // This test used to assert admitted() > ticketsIssued() - it required the
+    // reported figure to be the runaway one, and so protected the bug rather
+    // than the behaviour. The deployed console read 17 issued against 79,690
+    // admitted, and that figure was the only thing on the page still moving
+    // while every honest counter sat at zero.
     @Test
-    void neverReportsNegativeWaiting() {
+    void reportsNoMoreAdmittedThanEverJoined() {
         QueueState state = providerWith("5", OPENS.plusSeconds(600), 1).current();
 
-        assertThat(state.admitted()).isGreaterThan(state.ticketsIssued());
+        assertThat(state.ticketsIssued()).isEqualTo(5);
+        assertThat(state.admitted()).isEqualTo(5);
         assertThat(state.waiting()).isZero();
     }
 
