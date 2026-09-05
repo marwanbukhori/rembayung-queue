@@ -68,6 +68,25 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>${project.basedir}/src/main/resources</directory>
+      </resource>
+      <!-- The notes and specs are the strongest artefact this project has for
+           someone evaluating it, and they are worth more inside the console
+           than in a repository nobody will clone. Copied at build time so the
+           image is self-contained and no volume or git checkout is needed at
+           run time. -->
+      <resource>
+        <directory>${project.basedir}/../docs</directory>
+        <targetPath>docs</targetPath>
+        <includes>
+          <include>notes/*.md</include>
+          <include>superpowers/specs/*.md</include>
+          <include>superpowers/plans/*.md</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>

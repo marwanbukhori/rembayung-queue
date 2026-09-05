@@ -1,5 +1,6 @@
-import { Component, inject, output } from '@angular/core';
+import { Component, OnInit, computed, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
+import { DocsService } from './docs.service';
 import { PodHealthPanel } from './pod-health';
 import { Placeholder } from './placeholder';
 import { StateService } from './state.service';
@@ -58,9 +59,20 @@ import { StateService } from './state.service';
             <h2>Documentation</h2>
             <p class="sub">Rendered from Markdown baked into the image</p>
           </div>
+          <button class="btn-tertiary" (click)="docs.emit()">See more</button>
         </div>
-        <rb-placeholder
-          note="Not rendered yet. Seven specs, nine build notes and five plans are baked into the image; task 5 renders them here." />
+        @if (featured().length) {
+          <div class="doc-cards">
+            @for (doc of featured(); track doc.id) {
+              <button class="doc-card" (click)="open.emit(doc.id)">
+                <span class="doc-card-title">{{ doc.title }}</span>
+                <span class="doc-card-go">Read</span>
+              </button>
+            }
+          </div>
+        } @else {
+          <rb-placeholder note="Loading the documentation baked into the image." />
+        }
       </section>
 
       <section class="stack-16">
@@ -129,12 +141,44 @@ import { StateService } from './state.service';
     a.link-card:hover { border-color: var(--ink); color: var(--ink); }
     .link-name { font-size: 17px; font-weight: 700; }
     .link-note { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
+    .doc-cards {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+    }
+    .doc-card {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 20px;
+      font: inherit;
+      color: var(--ink);
+      cursor: pointer;
+      gap: 8px;
+    }
+    .doc-card:hover { border-color: var(--ink); }
+    .doc-card-title { font-size: 15px; font-weight: 700; text-wrap: pretty; }
+    .doc-card-go { font-size: 14px; font-weight: 700; color: var(--dhl-red); }
   `
 })
-export class PublicHome {
+export class PublicHome implements OnInit {
   readonly pods = output<void>();
   readonly docs = output<void>();
+  readonly open = output<string>();
   readonly visitor = output<void>();
 
   protected readonly state = inject(StateService);
+  private readonly docsService = inject(DocsService);
+
+  /** Three documents, enough to show the shape of the record without duplicating the full list. */
+  readonly featured = computed(() => (this.docsService.summaries() ?? []).slice(0, 3));
+
+  ngOnInit(): void {
+    this.docsService.load();
+  }
 }

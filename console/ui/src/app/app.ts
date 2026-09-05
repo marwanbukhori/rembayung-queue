@@ -1,11 +1,13 @@
 import { Component, signal } from '@angular/core';
+import { DocPage } from './doc-page';
+import { DocsPage } from './docs-page';
 import { Operations } from './operations';
 import { PodsPage } from './pods-page';
 import { PublicHome } from './public-home';
 import { Visitor } from './visitor';
 
 /** Which surface is on screen. Tiers, then pages within the public tier. */
-type Surface = 'home' | 'pods' | 'visitor' | 'ops';
+type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
 
 /**
  * The shell: the DHL bar, the tier switcher, and whichever surface is showing.
@@ -16,7 +18,7 @@ type Surface = 'home' | 'pods' | 'visitor' | 'ops';
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, PodsPage, Visitor, Operations],
+  imports: [PublicHome, PodsPage, DocsPage, DocPage, Visitor, Operations],
   template: `
     <header class="bar">
       <div class="bar-inner">
@@ -42,10 +44,16 @@ type Surface = 'home' | 'pods' | 'visitor' | 'ops';
     <main>
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (pods)="show('pods')" (visitor)="show('visitor')" (docs)="show('home')" />
+          <rb-public-home (pods)="show('pods')" (visitor)="show('visitor')" (docs)="show('docs')" (open)="openDoc($event)" />
         }
         @case ('pods') {
           <rb-pods-page (home)="show('home')" />
+        }
+        @case ('docs') {
+          <rb-docs-page (home)="show('home')" (open)="openDoc($event)" />
+        }
+        @case ('doc') {
+          <rb-doc-page [id]="selectedDocId()!" (home)="show('home')" (docs)="show('docs')" (visitor)="show('visitor')" />
         }
         @case ('visitor') {
           <rb-visitor />
@@ -127,19 +135,25 @@ type Surface = 'home' | 'pods' | 'visitor' | 'ops';
 })
 export class App {
   readonly surface = signal<Surface>('home');
+  readonly selectedDocId = signal<string | null>(null);
+
+  private static readonly PUBLIC_SURFACES: Surface[] = ['home', 'pods', 'docs', 'doc'];
 
   isPublic(): boolean {
-    return this.surface() === 'home' || this.surface() === 'pods';
+    return App.PUBLIC_SURFACES.includes(this.surface());
   }
 
   keyLabel(): string {
-    return this.surface() === 'home' || this.surface() === 'pods'
-      ? 'no key, read only'
-      : 'no key yet';
+    return this.isPublic() ? 'no key, read only' : 'no key yet';
   }
 
   show(surface: Surface): void {
     this.surface.set(surface);
     window.scrollTo(0, 0);
+  }
+
+  openDoc(id: string): void {
+    this.selectedDocId.set(id);
+    this.show('doc');
   }
 }
