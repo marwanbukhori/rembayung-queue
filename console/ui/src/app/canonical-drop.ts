@@ -53,7 +53,7 @@ import { StateService } from './state.service';
                   of two. Admitted is not repeated - it belongs to the queue,
                   which is the card beside this one.
                 -->
-                <span>{{ half(d.seatsTaken) }} bookings, 2 seats each</span>
+                <span>{{ half(d.seatsTaken) }} {{ half(d.seatsTaken) === 1 ? 'booking' : 'bookings' }}, 2 seats each</span>
                 <span>{{ d.remaining }} remaining</span>
               </div>
             } @else {

@@ -22,9 +22,9 @@ import { StateService } from './state.service';
         <span class="key"><i class="chip taken"></i>taken</span>
         <span class="key"><i class="chip fresh"></i>just booked</span>
         <span class="key"><i class="chip"></i>free</span>
-        <span class="caption">{{ caption() }}</span>
+
       </div>
-      <div class="seats" role="img" [attr.aria-label]="caption()">
+      <div class="seats" role="img" [attr.aria-label]="label()">
         @for (seat of seats(); track seat.i) {
           <i class="seat" [class.taken]="seat.taken" [class.fresh]="seat.fresh"></i>
         }
@@ -52,7 +52,6 @@ import { StateService } from './state.service';
     }
     .chip.taken { background: var(--ink); }
     .chip.fresh { background: var(--dhl-red); }
-    .caption { margin-left: auto; color: var(--ink-soft); }
 
     /*
       25 to a row, capped, so it reads as a seating plan rather than a ribbon.
@@ -130,14 +129,20 @@ export class SeatMap {
     }));
   });
 
-  protected readonly caption = computed(() => {
+  /**
+   * Spoken, not shown.
+   *
+   * The card around this already prints the figure above the grid and the
+   * bookings line below it, so a visible caption here was the same sentence a
+   * third time. A screen reader has neither, so it keeps the whole thing.
+   */
+  protected readonly label = computed(() => {
     const drop = this.drop();
     if (!drop?.available) {
       return 'No sitting open';
     }
-    // Party of two is fixed by the load script, so bookings are always half the
-    // seats. Saying so is the whole reason this caption exists.
     const bookings = Math.floor(drop.seatsTaken / 2);
-    return `${bookings} bookings, 2 seats each — ${drop.seatsTaken} of ${drop.capacity} taken`;
+    const noun = bookings === 1 ? 'booking' : 'bookings';
+    return `${bookings} ${noun}, 2 seats each — ${drop.seatsTaken} of ${drop.capacity} taken`;
   });
 }
