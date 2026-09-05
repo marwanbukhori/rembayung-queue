@@ -3,6 +3,7 @@ import { CanonicalDrop } from './canonical-drop';
 import { Constraints } from './constraints';
 import { RunBanner } from './run-banner';
 import { RunPanel } from './run-panel';
+import { PodPulse } from './pod-pulse';
 import { SeatMap } from './seat-map';
 import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
@@ -24,7 +25,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, Constraints, RunBanner, RunPanel, SeatMap, TrafficLog],
+  imports: [CanonicalDrop, Constraints, PodPulse, RunBanner, RunPanel, SeatMap, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -38,13 +39,15 @@ import { StateService } from './state.service';
       @if (sandbox()) {
         <rb-run-banner />
         <rb-canonical-drop heading="Your simulation, live" />
-        <rb-seat-map />
         <!--
-          The cluster's own reaction, beside the traffic causing it: this is
-          where a visitor sees queue-gate scale out under the rush and the Oracle
-          connection budget fill up. It used to sit below the fold, which is the
-          one place it cannot be watched from.
+          Seats and the cluster side by side, because they are one thought: the
+          room filling up, and what the cluster did to fill it. Reading either
+          alone tells you half of a rush.
         -->
+        <div class="glance">
+          <rb-seat-map />
+          <rb-pod-pulse />
+        </div>
         <rb-constraints />
         <rb-traffic-log />
         <p class="reason">
@@ -107,6 +110,18 @@ import { StateService } from './state.service';
       font-size: 12px;
       font-weight: 700;
       vertical-align: middle;
+    }
+
+    /*
+      Two columns where there is room for both, stacked where there is not. The
+      seat grid auto-fills, so it simply uses fewer seats per row in a narrower
+      column rather than overflowing.
+    */
+    .glance {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+      align-items: start;
     }
 
     .exit {
