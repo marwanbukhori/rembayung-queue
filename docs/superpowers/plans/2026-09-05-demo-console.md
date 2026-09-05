@@ -23,6 +23,15 @@
 
 ### Five things that will bite you
 
+**Spring Boot 4.1.1 uses Jackson 3 — `tools.jackson`, not `com.fasterxml.jackson`.**
+Both are on the classpath, so a Jackson 2 import compiles and then fails at
+runtime on the first `Instant`: `jackson-datatype-jsr310` is absent and
+`findAndRegisterModules()` registers nothing. Verified:
+`tools.jackson.core:jackson-databind:3.1.5` and
+`com.fasterxml.jackson.core:jackson-databind:2.21.5` both appear in
+`dependency:tree`. Use `tools.jackson.databind.ObjectMapper`, which has
+`java.time` built in.
+
 **Read the real signatures before writing tests against them.** Phases 6 and 7 lost hours to seven plan defects, every one a signature or API assumed rather than read — `Slot.getId()` returning a null `Long`, `DropProperties` having 7 constructor args and not 5, logback's `<if>` not working at all, an appender exposing `setLayout` and not `setEncoder`. Open the file first.
 
 **No JDK on `PATH`, no root `mvnw`:**
@@ -213,7 +222,7 @@ public record DropRecord(
 ```java
 package dev.marwan.gate.queue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import dev.marwan.gate.config.DropProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -243,7 +252,12 @@ public class DropRegistry {
     private final StringRedisTemplate redis;
     private final DropProperties properties;
     private final Clock clock;
-    private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+    // tools.jackson (Jackson 3), not com.fasterxml (Jackson 2). Both are on
+    // the classpath under Spring Boot 4.1.1, so the Jackson 2 import COMPILES —
+    // and then fails at runtime on the first Instant, because
+    // jackson-datatype-jsr310 is not a dependency and findAndRegisterModules()
+    // silently finds nothing. Jackson 3 has java.time support built in.
+    private final ObjectMapper json = new ObjectMapper();
 
     public DropRegistry(StringRedisTemplate redis, DropProperties properties, Clock clock) {
         this.redis = redis;
