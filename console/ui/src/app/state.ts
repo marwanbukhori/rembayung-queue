@@ -32,6 +32,8 @@ export interface PodStatus {
 export interface PodHealth {
   available: boolean;
   detail: string | null;
+  /** The namespace the pods were read from. Reported by the API, never assumed here. */
+  namespace: string | null;
   pods: PodStatus[];
 }
 

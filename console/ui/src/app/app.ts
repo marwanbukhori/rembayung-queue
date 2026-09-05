@@ -26,7 +26,7 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
       <div class="bar-inner">
         <div class="brand">
           <div class="wordmark">Rembayung</div>
-          <div class="ns">ns/rembayung</div>
+          <div class="ns">ns/{{ namespace() }}</div>
         </div>
         <div style="flex: 1 1 20px;"></div>
         <div class="bar-right">
@@ -137,6 +137,17 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
 })
 export class App {
   private readonly state = inject(StateService);
+
+  /**
+   * Whatever namespace the API says it read from, or a dash until it answers.
+   *
+   * Deliberately not a constant. The header used to read "ns/rembayung" while
+   * the backend was reading marwanbukhori-dev, so it named a namespace nobody
+   * has — and it looked authoritative while doing it.
+   */
+  namespace(): string {
+    return this.state.view()?.pods?.namespace ?? '—';
+  }
 
   readonly surface = signal<Surface>('home');
   readonly selectedDocId = signal<string | null>(null);

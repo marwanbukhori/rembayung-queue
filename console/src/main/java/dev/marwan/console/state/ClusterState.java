@@ -23,18 +23,27 @@ import java.util.List;
 public record ClusterState(
         boolean available,
         String detail,
+        /**
+         * The namespace these figures were actually read from.
+         *
+         * Reported rather than assumed. The UI previously printed a hardcoded
+         * "ns/rembayung" while the backend read marwanbukhori-dev, so the header
+         * named a namespace that does not exist — a label confidently describing
+         * the wrong cluster is worse than no label.
+         */
+        String namespace,
         Quota quota,
         List<Consumer> consumers,
         List<Autoscaler> autoscalers,
         Pool pool) {
 
-    public static ClusterState of(Quota quota, List<Consumer> consumers,
+    public static ClusterState of(String namespace, Quota quota, List<Consumer> consumers,
                                   List<Autoscaler> autoscalers, Pool pool) {
-        return new ClusterState(true, null, quota, consumers, autoscalers, pool);
+        return new ClusterState(true, null, namespace, quota, consumers, autoscalers, pool);
     }
 
     public static ClusterState unavailable(String detail) {
-        return new ClusterState(false, detail, null, List.of(), List.of(), null);
+        return new ClusterState(false, detail, null, null, List.of(), List.of(), null);
     }
 
     /**

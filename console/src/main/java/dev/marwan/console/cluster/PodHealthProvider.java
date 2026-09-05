@@ -81,7 +81,7 @@ public class PodHealthProvider {
                     .toList();
             lastFailure = null;
             lastFailureDetail = null;
-            return PodHealth.of(pods);
+            return PodHealth.of(properties.namespace(), pods);
         } catch (Throwable e) {
             // Throwable rather than Exception: a missing optional HTTP client on
             // the classpath surfaces as an Error, and the console going down

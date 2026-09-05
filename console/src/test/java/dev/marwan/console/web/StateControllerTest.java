@@ -59,7 +59,7 @@ class StateControllerTest {
     void anUnaskedRequestReadsTheCanonicalDrop() throws Exception {
         given(state.currentFor("default"))
                 .willReturn(new DemoState(true, null, "default", 1, 250, 202, 48, 0, 40, 10, 30));
-        given(pods.current()).willReturn(PodHealth.of(java.util.List.of()));
+        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
 
         mvc.perform(get("/api/state"))
                 .andExpect(status().isOk())
@@ -78,7 +78,7 @@ class StateControllerTest {
     void aNamedDropIsReadWithItsOwnSlot() throws Exception {
         given(state.currentFor("d-abc12345"))
                 .willReturn(new DemoState(true, null, "d-abc12345", 4242, 250, 3, 247, 0, 9, 4, 5));
-        given(pods.current()).willReturn(PodHealth.of(java.util.List.of()));
+        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
 
         mvc.perform(get("/api/state").param("drop", "d-abc12345"))
                 .andExpect(status().isOk())

@@ -98,6 +98,7 @@ public class ClusterStateProvider {
                         "no ResourceQuota named " + properties.quota() + " in " + properties.namespace());
             }
             return ClusterState.of(
+                    properties.namespace(),
                     quotaOf(quota),
                     consumers(pods),
                     hpas.stream().map(this::describe).toList(),

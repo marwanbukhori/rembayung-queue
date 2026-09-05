@@ -45,7 +45,7 @@ class KeyFilterTest {
     void theKeyIsAcceptedInAHeader() throws Exception {
         given(state.currentFor("default"))
                 .willReturn(new DemoState(true, null, "default", 1, 250, 0, 250, 0, 0, 0, 0));
-        given(pods.current()).willReturn(PodHealth.of(java.util.List.of()));
+        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
 
         mvc.perform(get("/api/state").header("X-Console-Key", "s3cret-demo-key"))
                 .andExpect(status().isOk());
@@ -59,7 +59,7 @@ class KeyFilterTest {
     void theKeyIsAcceptedInTheQueryString() throws Exception {
         given(state.currentFor("default"))
                 .willReturn(new DemoState(true, null, "default", 1, 250, 0, 250, 0, 0, 0, 0));
-        given(pods.current()).willReturn(PodHealth.of(java.util.List.of()));
+        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
 
         mvc.perform(get("/api/state").param("key", "s3cret-demo-key"))
                 .andExpect(status().isOk());

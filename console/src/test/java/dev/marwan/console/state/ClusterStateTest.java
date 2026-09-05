@@ -91,7 +91,7 @@ class ClusterStateTest {
 
     @Test
     void anAvailableStateCarriesNoReason() {
-        ClusterState state = ClusterState.of(
+        ClusterState state = ClusterState.of("marwanbukhori-dev", 
                 new ClusterState.Quota("compute-deploy", 700, 3000),
                 List.of(new ClusterState.Consumer("queue-gate", 200, 2)),
                 List.of(),
