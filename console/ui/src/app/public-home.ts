@@ -2,6 +2,7 @@ import { Component, OnInit, computed, effect, inject, output } from '@angular/co
 import { CanonicalDrop } from './canonical-drop';
 import { ClusterResources } from './cluster-resources';
 import { DocsService, GROUP_LABELS } from './docs.service';
+import { FlowDiagram } from './flow-diagram';
 import { Placeholder } from './placeholder';
 import { StateService } from './state.service';
 
@@ -27,7 +28,7 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [CanonicalDrop, ClusterResources, Placeholder],
+  imports: [CanonicalDrop, ClusterResources, FlowDiagram, Placeholder],
   template: `
     <div class="stack">
       <section class="panel">
@@ -73,90 +74,20 @@ interface Outward {
           </div>
 
           <!--
-            The path down the right, not a picture: each box is a component that
-            owns one guarantee, and the label on each hop is what crosses between
-            them. It reads correctly out loud, which a diagram does not.
+            Drawn, not described. This used to be five paragraphs explaining that
+            a flood arrives and a trickle leaves; the diagram shows the same
+            thing in the ratio between two lanes of moving dots, and the reader
+            gets it before finishing the headline.
           -->
           <div class="hero-right">
             <div class="path-head">
               <div class="path-title">The path one customer takes</div>
-              <div class="path-count mono">five hops</div>
+              <div class="path-count mono">live</div>
             </div>
-
-            <div class="path-node">
-              <div class="path-node-head">
-                <span class="path-name mono">Arrivals</span>
-                <span class="path-badge mono">~3,000 in one second</span>
-              </div>
-              <div class="path-note">
-                Everyone presses the same button the moment bookings open. Synchronised by a
-                published time, not spread across an evening.
-              </div>
-            </div>
-
-            <div class="hop"><div class="hop-line" aria-hidden="true"></div><span class="hop-label mono">all of it lands on one Route</span></div>
-
-            <div class="zone">
-              <div class="zone-head mono">OPENSHIFT NAMESPACE · 3000m CPU BUDGET</div>
-
-              <div class="path-node">
-                <div class="path-node-head">
-                  <span class="path-name mono">queue-gate</span>
-                  <span class="path-badge mono">8 a second by default</span>
-                </div>
-                <div class="path-note">
-                  Issues a ticket, holds the line in Redis, and admits at a fixed rate so the
-                  database is never asked to serialise more than it can.
-                </div>
-              </div>
-
-              <div class="hop"><div class="hop-line" aria-hidden="true"></div><span class="hop-label mono">a bounded trickle, in arrival order</span></div>
-
-              <div class="path-node">
-                <div class="path-node-head">
-                  <span class="path-name mono">booking-service</span>
-                  <span class="path-badge mono">20 Oracle sessions at most</span>
-                </div>
-                <div class="path-note">
-                  Takes one seat per confirmed booking, under a lock, idempotently. A retry cannot
-                  claim a second seat.
-                </div>
-              </div>
-            </div>
-
-            <div class="hop"><div class="hop-line strong" aria-hidden="true"></div><span class="hop-label mono">one conditional update per claim</span></div>
-
-            <div class="path-node">
-              <div class="path-node-head">
-                <span class="path-name mono">Oracle</span>
-                <span class="path-badge mono">250 seats, one row</span>
-              </div>
-              <div class="path-note">
-                Zero rows affected means sold out. The limit lives in the database, so no ordering
-                mistake above it can invent a 251st seat.
-              </div>
-            </div>
-
-            <div class="hop"><div class="hop-line strong" aria-hidden="true"></div><span class="hop-label mono">read once by the state provider</span></div>
-
-            <!--
-              Read from the same field the alert rule reads, not a constant. A
-              hard-coded 0 here would be the one number on the page a visitor
-              cannot trust, and it is the number the whole build is about.
-            -->
-            <div class="path-node claim">
-              <div class="path-node-head">
-                <span class="path-name mono">Oversold</span>
-                @if (state.view()?.drop?.available) {
-                  <span class="path-badge mono" [class.badge-good]="oversold() === 0" [class.badge-bad]="oversold() !== 0">{{ oversold() }}</span>
-                } @else {
-                  <span class="path-badge mono">—</span>
-                }
-              </div>
-              <div class="path-note">
-                The dashboard below reads this from the same place the alert would. Try to move it.
-              </div>
-            </div>
+            <rb-flow-diagram />
+            <p class="path-foot">
+              Numbers are read from the running cluster. Dashes mean no simulation is open.
+            </p>
           </div>
         </div>
 
@@ -357,54 +288,8 @@ interface Outward {
     }
     .path-title { font-size: 17px; font-weight: 700; }
     .path-count { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+    .path-foot { margin: 14px 0 0; font-size: 12px; color: var(--muted); text-wrap: pretty; }
 
-    .path-node { background: var(--white); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; }
-    .path-node-head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 4px 12px;
-    }
-    .path-name { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
-    .path-badge {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .04em;
-      background: var(--chip-neutral-bg);
-      color: var(--chip-neutral-fg);
-      border-radius: 2px;
-      padding: 2px 8px;
-      white-space: nowrap;
-    }
-    .path-note { font-size: 13px; color: var(--ink-soft); margin-top: 6px; text-wrap: pretty; }
-
-    .claim { background: var(--ink); border-color: var(--ink); color: var(--white); }
-    .claim .path-note { color: var(--on-dark-soft); }
-    .badge-good { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
-    .badge-bad { background: var(--chip-bad-bg); color: var(--chip-bad-fg); }
-
-    /* The connector between two boxes, and the label for what crosses it. */
-    .hop { display: flex; align-items: stretch; gap: 10px; padding: 8px 0 8px 22px; }
-    .hop-line { position: relative; flex: none; width: 2px; min-height: 26px; background: var(--muted); }
-    .hop-line.strong { background: var(--ink); }
-    .hop-line::after {
-      content: '';
-      position: absolute;
-      left: -4px;
-      bottom: 0;
-      width: 0;
-      height: 0;
-      border-left: 5px solid transparent;
-      border-right: 5px solid transparent;
-      border-top: 7px solid currentColor;
-      color: var(--muted);
-    }
-    .hop-line.strong::after { color: var(--ink); }
-    .hop-label { font-size: 11px; letter-spacing: .04em; color: var(--muted); align-self: center; text-wrap: pretty; }
-
-    .zone { border: 1px dashed var(--muted); border-radius: 4px; padding: 14px; background: var(--white); }
-    .zone-head { font-size: 11px; letter-spacing: .06em; color: var(--muted); margin-bottom: 12px; }
     .tag {
       color: var(--chip-info-fg);
       background: var(--chip-info-bg);
