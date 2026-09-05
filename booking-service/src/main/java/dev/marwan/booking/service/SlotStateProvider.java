@@ -41,6 +41,9 @@ public class SlotStateProvider {
      */
     @Transactional(readOnly = true)
     public List<Long> trackedSlotIds() {
-        return slotRepository.findAll().stream().map(s -> s.getId()).toList();
+        // Permanent slots only. stateFor(id) still answers for ANY slot, so the
+        // console can read a sandbox it owns — it is the gauges, whose label set
+        // must stay bounded, that exclude them.
+        return slotRepository.findPermanentSlotIds();
     }
 }

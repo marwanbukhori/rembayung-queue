@@ -15,6 +15,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByIdempotencyKey(String idempotencyKey);
 
+    @Modifying
+    @Query("delete from Booking b where b.slotId = :slotId")
+    int deleteBySlotId(@Param("slotId") Long slotId);
+
     List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant cutoff);
 
     @Modifying

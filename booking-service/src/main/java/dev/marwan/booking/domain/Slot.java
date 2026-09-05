@@ -1,6 +1,10 @@
 package dev.marwan.booking.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
@@ -26,6 +30,10 @@ public class Slot {
     @Version
     @Column(nullable = false)
     private long version;
+
+    @Column(name = "sandbox_expires_at")
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    private Instant sandboxExpiresAt;
 
     protected Slot() { }
 
@@ -64,6 +72,10 @@ public class Slot {
         }
         this.seatsTaken -= partySize;
     }
+
+    public Instant getSandboxExpiresAt() { return sandboxExpiresAt; }
+
+    public void expireAsSandboxAt(Instant when) { this.sandboxExpiresAt = when; }
 
     public Long getId() { return id; }
     public LocalDate getServiceDate() { return serviceDate; }
