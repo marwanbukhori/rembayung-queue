@@ -27,6 +27,8 @@ export interface PodStatus {
   cpu: string;
   restarts: number;
   age: string;
+  /** Running, Succeeded, Pending or Failed. 0/1 alone cannot tell them apart. */
+  phase: string;
 }
 
 export interface PodHealth {

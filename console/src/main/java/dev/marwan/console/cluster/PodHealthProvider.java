@@ -111,7 +111,15 @@ public class PodHealthProvider {
                 !containers.isEmpty() && ready == containers.size(),
                 cpuRequest(pod),
                 restarts,
-                age(pod));
+                age(pod),
+                phase(pod));
+    }
+
+    /** Running, Succeeded, Pending or Failed. Absent only if the API omits status. */
+    private String phase(Pod pod) {
+        return pod.getStatus() == null || pod.getStatus().getPhase() == null
+                ? "Unknown"
+                : pod.getStatus().getPhase();
     }
 
     /** What the pod asked the scheduler for, which is what the namespace budget is spent on. */

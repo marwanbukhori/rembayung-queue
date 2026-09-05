@@ -31,6 +31,9 @@ function ownerOf(podName: string, known: string[]): string {
 interface PodGlyph {
   name: string;
   healthy: boolean;
+  /** Running but not ready yet - starting up, not broken. */
+  starting: boolean;
+  phase: string;
   cpu: string;
   restarts: number;
   fresh: boolean;
@@ -114,8 +117,10 @@ interface WorkloadRow {
 
               <div class="pods" [class.busy]="row.millis > 0">
                 @for (pod of row.pods; track pod.name) {
-                  <i class="pod" [class.sick]="!pod.healthy" [class.fresh]="pod.fresh"
-                     [title]="pod.name + ' · ' + pod.cpu + ' · ' + pod.restarts + ' restarts'"></i>
+                  <i class="pod" [class.sick]="!pod.healthy && !pod.starting"
+                     [class.starting]="pod.starting" [class.fresh]="pod.fresh"
+                     [title]="pod.name + ' · ' + pod.phase + ' · ' + pod.cpu
+                              + ' · ' + pod.restarts + ' restarts'"></i>
                 }
               </div>
 
@@ -186,7 +191,18 @@ interface WorkloadRow {
       background: var(--ink);
       display: inline-block;
     }
-    .pod.sick { background: var(--chip-warn-fg); }
+    .pod.sick { background: var(--chip-bad-fg); }
+    /*
+      Starting is not sick. A pod coming up during a scale-out or a rollout is
+      the normal case on this page, and colouring it like a fault made a healthy
+      rollout look like an incident.
+    */
+    .pod.starting {
+      background: var(--track);
+      border: 2px solid var(--chip-warn-fg);
+      animation: waking 1.6s ease-in-out infinite;
+    }
+    @keyframes waking { 50% { border-color: var(--chip-ok-fg); } }
     /* A pod that was not here on the last read: the thing worth catching. */
     .pod.fresh { background: var(--chip-ok-fg); animation: pop 900ms var(--ease); }
     @keyframes pop {
@@ -240,6 +256,7 @@ interface WorkloadRow {
     @media (prefers-reduced-motion: reduce) {
       .pod.fresh { animation: none; }
       .pods.busy .pod { animation: none; }
+      .pod.starting { animation: none; }
       .seg { transition: none; }
       .bar span, .row { transition: none; }
     }
@@ -344,11 +361,20 @@ export class PodPulse {
 
     const byOwner = new Map<string, PodGlyph[]>();
     for (const pod of pods.pods) {
+      // A Completed Job pod is history, not a workload. It reports 0/1 exactly
+      // like a crash loop does, so painting it by readiness alone drew every
+      // finished load run as an unhealthy pod - four tan squares implying
+      // trouble where the trouble was that the run had ended successfully.
+      if (pod.phase === 'Succeeded' || pod.phase === 'Failed') {
+        continue;
+      }
       const owner = ownerOf(pod.name, names);
       const glyphs = byOwner.get(owner) ?? [];
       glyphs.push({
         name: pod.name,
         healthy: pod.healthy,
+        starting: !pod.healthy && pod.phase === 'Running',
+        phase: pod.phase,
         cpu: pod.cpu,
         restarts: pod.restarts,
         fresh: seen.size > 0 && !seen.has(pod.name)
