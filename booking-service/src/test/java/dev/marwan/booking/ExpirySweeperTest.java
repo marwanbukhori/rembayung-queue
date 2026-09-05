@@ -98,4 +98,35 @@ class ExpirySweeperTest extends OracleTestBase {
                 .isEqualTo(BookingStatus.EXPIRED);
         assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken()).isZero();
     }
+
+    /**
+     * A sweep takes at most 100 holds, and the rest wait for the next pass.
+     *
+     * The bound is not tidiness. sweepExpired runs the whole batch in one
+     * transaction and locks the slot row inside it, so the row stays locked
+     * until the last booking in the list is done and every booking against that
+     * slot waits behind it. Unbounded, a sold-out slot whose holds lapsed
+     * together would hold that lock - and one of five pooled connections - for
+     * the length of the run.
+     */
+    @Test
+    void oneSweepTakesAtMostAHundredHoldsAndTheNextTakesTheRest() {
+        int capacity = 150;
+        Long slotId = slotRepository.save(
+                new Slot(LocalDate.of(2027, 6, 1), "19:00", capacity)).getId();
+
+        for (int i = 0; i < capacity; i++) {
+            bookingService.book(new BookingRequest(slotId, "+6015" + i, 1, "batch-" + i));
+        }
+        Instant future = Instant.now().plus(1, ChronoUnit.HOURS);
+
+        assertThat(expirySweeper.sweepExpired(future)).isEqualTo(100);
+        // Seats come back with the holds, so the slot is only partly released.
+        assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken())
+                .isEqualTo(capacity - 100);
+
+        // The backlog still drains: rows leave the result set as they expire.
+        assertThat(expirySweeper.sweepExpired(future)).isEqualTo(capacity - 100);
+        assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken()).isZero();
+    }
 }

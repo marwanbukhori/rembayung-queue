@@ -66,11 +66,19 @@ public class ExpirySweeper {
      *
      * Claims each booking atomically: only one sweeper wins each booking's claim
      * via markExpiredIfPending, preventing double-release under concurrency.
+     *
+     * Bounded to 100 a pass, because that lock is held for the whole batch: the
+     * slot row stays locked until this transaction commits, so every booking
+     * against that slot waits for the last row in the list. Unbounded, a full
+     * 250-seat slot whose holds lapsed together would block bookings for the
+     * length of the sweep while occupying one of five connections. A backlog
+     * drains across passes instead, 100 every 30 seconds.
      */
     @Transactional
     public int sweepExpired(Instant now) {
         List<Booking> stale = bookingRepository
-                .findByStatusAndExpiresAtBefore(BookingStatus.PENDING_DEPOSIT, now);
+                .findFirst100ByStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
+                        BookingStatus.PENDING_DEPOSIT, now);
 
         int expired = 0;
         for (Booking booking : stale) {

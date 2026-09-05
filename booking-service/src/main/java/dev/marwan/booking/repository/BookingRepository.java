@@ -19,7 +19,19 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @Query("delete from Booking b where b.slotId = :slotId")
     int deleteBySlotId(@Param("slotId") Long slotId);
 
-    List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant cutoff);
+    /**
+     * One sweep's worth of lapsed holds, oldest first, and bounded on purpose.
+     *
+     * The sweeper runs the whole batch in one transaction and takes the slot's
+     * row lock inside it, so the batch size is how long every booking against
+     * that slot is made to wait. Unbounded, a sold-out 250-seat slot whose holds
+     * all lapse together would hold the lock - and a connection from a pool of
+     * five - for the entire run. 100 every 30 seconds drains far faster than
+     * holds can lapse, and rows leave this result set as they are expired, so a
+     * backlog still makes progress on each pass.
+     */
+    List<Booking> findFirst100ByStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
+            BookingStatus status, Instant cutoff);
 
     @Modifying
     @Query("update Booking b set b.status = dev.marwan.booking.domain.BookingStatus.EXPIRED "

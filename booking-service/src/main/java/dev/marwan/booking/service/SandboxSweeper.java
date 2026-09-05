@@ -55,13 +55,35 @@ public class SandboxSweeper {
         }
     }
 
+    /**
+     * Deletes expired sandbox slots and the bookings that belong to them.
+     *
+     * Takes the slot's row lock first, which the previous version did not, and
+     * bookings.slot_id has a foreign key to slots.id. Without the lock a booking
+     * could land between the two deletes: the bookings for the slot are removed,
+     * a concurrent book() takes the slot lock and inserts a fresh row, and then
+     * the slot delete fails with ORA-02292 and rolls back the whole pass - every
+     * other expired slot in the batch included - leaving nothing reaped until
+     * the next one five minutes later.
+     *
+     * Locking first removes the gap. A booking either commits before the lock is
+     * taken, and is deleted with the rest, or waits for the slot to be gone and
+     * then finds nothing to book, which is a 404 and the honest answer for a
+     * sandbox that has expired.
+     */
     @Transactional
     public int sweepExpired(Instant now) {
         List<Long> expired = slots.findExpiredSandboxIds(now);
+        int removed = 0;
         for (Long slotId : expired) {
+            // Gone already - another replica's sweeper got there first.
+            if (slots.findByIdForUpdate(slotId).isEmpty()) {
+                continue;
+            }
             bookings.deleteBySlotId(slotId);
             slots.deleteById(slotId);
+            removed++;
         }
-        return expired.size();
+        return removed;
     }
 }
