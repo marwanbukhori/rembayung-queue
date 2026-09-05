@@ -110,4 +110,94 @@ class BookingControllerTest extends OracleTestBase {
                 .andExpect(jsonPath("$.reason").value("BOOKING_NOT_FOUND"))
                 .andExpect(jsonPath("$.details.bookingId").value(999999));
     }
+
+    /**
+     * The payloads a hand-written client sends by accident. None of these can
+     * oversell - Slot.takeSeats refuses a non-positive party and the NOT NULL
+     * columns refuse a missing phone - but refusing them as HTTP 500 tells the
+     * caller the server broke when the caller's request was malformed, and puts
+     * a server error on the dashboard for something no server fixed.
+     */
+    @Test
+    void malformedRequestsAreRejectedAsBadRequest() throws Exception {
+        Long slotId = seedSlot(250);
+
+        record Case(String name, String body) { }
+        var cases = java.util.List.of(
+                new Case("party of zero",
+                        """
+                        {"slotId":%d,"phone":"+60122222222","partySize":0,
+                         "idempotencyKey":"bad-zero"}
+                        """.formatted(slotId)),
+                new Case("negative party",
+                        """
+                        {"slotId":%d,"phone":"+60122222223","partySize":-4,
+                         "idempotencyKey":"bad-negative"}
+                        """.formatted(slotId)),
+                new Case("no phone",
+                        """
+                        {"slotId":%d,"partySize":2,"idempotencyKey":"bad-nophone"}
+                        """.formatted(slotId)),
+                new Case("blank phone",
+                        """
+                        {"slotId":%d,"phone":"   ","partySize":2,
+                         "idempotencyKey":"bad-blankphone"}
+                        """.formatted(slotId)),
+                new Case("no idempotency key",
+                        """
+                        {"slotId":%d,"phone":"+60122222224","partySize":2}
+                        """.formatted(slotId)),
+                new Case("no slot",
+                        """
+                        {"phone":"+60122222225","partySize":2,
+                         "idempotencyKey":"bad-noslot"}
+                        """),
+                new Case("party larger than any sitting",
+                        """
+                        {"slotId":%d,"phone":"+60122222226","partySize":5000,
+                         "idempotencyKey":"bad-huge"}
+                        """.formatted(slotId)));
+
+        for (Case bad : cases) {
+            mvc.perform(post("/bookings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(bad.body()))
+                    .andExpect(status().isBadRequest())
+                    // Same envelope as every other error this API returns, so a
+                    // caller parses one shape rather than two.
+                    .andExpect(jsonPath("$.reason").value("INVALID_REQUEST"));
+        }
+    }
+
+    @Test
+    void aRejectionNamesTheFieldThatWasWrong() throws Exception {
+        Long slotId = seedSlot(250);
+
+        mvc.perform(post("/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"slotId":%d,"phone":"","partySize":0,
+                             "idempotencyKey":"bad-two-fields"}
+                            """.formatted(slotId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details.phone").value("phone is required"))
+                .andExpect(jsonPath("$.details.partySize").value("partySize must be at least 1"));
+    }
+
+    @Test
+    void aRejectedRequestTakesNoSeats() throws Exception {
+        Long slotId = seedSlot(10);
+
+        mvc.perform(post("/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"slotId":%d,"phone":"+60123333333","partySize":0,
+                             "idempotencyKey":"bad-takes-nothing"}
+                            """.formatted(slotId)))
+                .andExpect(status().isBadRequest());
+
+        org.assertj.core.api.Assertions
+                .assertThat(slotRepository.findById(slotId).orElseThrow().getSeatsTaken())
+                .isZero();
+    }
 }

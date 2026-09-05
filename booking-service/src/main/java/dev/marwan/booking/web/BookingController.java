@@ -1,5 +1,6 @@
 package dev.marwan.booking.web;
 
+import jakarta.validation.Valid;
 import dev.marwan.booking.api.BookingRequest;
 import dev.marwan.booking.api.BookingResult;
 import dev.marwan.booking.service.BookingService;
@@ -18,7 +19,7 @@ public class BookingController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public BookingResult create(@RequestBody BookingRequest request) {
+    public BookingResult create(@Valid @RequestBody BookingRequest request) {
         return bookingService.book(request);
     }
 

@@ -4,9 +4,12 @@ import dev.marwan.booking.api.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -31,6 +34,27 @@ public class RestExceptionHandler {
     public ResponseEntity<ApiError> bookingMissing(BookingNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiError(
                 "BOOKING_NOT_FOUND", Map.of("bookingId", e.getBookingId())));
+    }
+
+    /**
+     * A request the constraints on BookingRequest refused.
+     *
+     * Mapped here rather than left to Spring's default so a rejected booking
+     * reads like every other error this API returns: the same ApiError shape,
+     * with one entry per field that failed. Without it the caller gets a
+     * ProblemDetail for validation and an ApiError for everything else, and has
+     * to parse both.
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> invalid(MethodArgumentNotValidException e) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        for (FieldError field : e.getBindingResult().getFieldErrors()) {
+            // First message wins: one line per field reads better than a list,
+            // and a field carrying two failures is telling the caller one thing.
+            fields.putIfAbsent(field.getField(), field.getDefaultMessage());
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError("INVALID_REQUEST", fields));
     }
 
     @ExceptionHandler(IllegalStateException.class)
