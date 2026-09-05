@@ -30,7 +30,12 @@ console:
   # this, viewer count multiplies straight into load on the services the console
   # exists to watch.
   cache-ttl: PT1S
-  namespace: ${CONSOLE_NAMESPACE:rembayung}
+  # The real namespace, not a guess. Running the console locally against the
+  # live cluster showed the pods panel reporting "pods is forbidden" because it
+  # was asking about a namespace that does not exist — the Deployment supplies
+  # CONSOLE_NAMESPACE in-cluster, so the wrong default was invisible until
+  # someone ran it on a laptop.
+  namespace: ${CONSOLE_NAMESPACE:marwanbukhori-dev}
   # One key for the whole console, from a Secret. Unset means the API refuses
   # every call: a console nobody configured must be shut, not open.
   access-key: ${CONSOLE_ACCESS_KEY:}
