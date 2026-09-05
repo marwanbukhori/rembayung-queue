@@ -197,14 +197,14 @@ Readiness is about the pod's external dependencies (can it do work right now?).
 
 ---
 
-## Why actuator sits on port 9090; the Service exposes only 8080
+## Why actuator sits on port 9090; the Route publishes only 8080
 
 The application has two ports:
 
 - **8080 (http):** application endpoints (`POST /bookings`, etc.)
 - **9090 (management):** actuator endpoints (`/actuator/health/...`, etc.)
 
-The Kubernetes Service exposes only port 8080:
+The Service carries both, and the Route publishes only 8080:
 
 ```yaml
 # deploy/base/queue-gate/service.yaml
@@ -212,11 +212,22 @@ ports:
   - name: http
     port: 8080
     targetPort: 8080
-# port 9090 is NOT in this list
+  - name: management
+    port: 9090
+    targetPort: 9090
 ```
 
-Traffic from outside the cluster hits the Route, which routes to the Service, which
-forwards only to port 8080.
+The boundary is the Route, not the Service. 9090 has to be on the Service because
+Prometheus scrapes it, and Prometheus runs inside the cluster — a port that no
+Service carries is not reachable by anything, monitoring included. What must not
+happen is 9090 reaching the internet, and the Route is what decides that: it
+forwards to 8080 alone, so JVM internals and request timings stay in-cluster.
+
+An earlier version of this page said the Service exposed only 8080 and printed a
+`ports:` block with a `# port 9090 is NOT in this list` comment. That was never
+true after the observability work added the scrape target, and it named the wrong
+control: reading it, you would look at the Service to check what the internet can
+reach, and the Service is not where that is decided.
 
 **Probes hit port 9090 directly** by name:
 
@@ -503,16 +514,33 @@ The `build-push.sh` script builds both services in a two-stage pipeline:
    docker buildx build --platform linux/amd64 -t ghcr.io/marwanbukhori/queue-gate:${TAG} ./queue-gate
    ```
 
-Each service's `Dockerfile` is minimal:
+The two Java services' Dockerfiles are minimal — this is `queue-gate/Dockerfile`
+with its comments stripped:
 
 ```dockerfile
-FROM eclipse-temurin:25-jre-alpine
-COPY target/queue-gate-0.1.0-SNAPSHOT.jar /app/app.jar
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+FROM eclipse-temurin:25-jre
+LABEL org.opencontainers.image.source=https://github.com/marwanbukhori/rembayung-queue
+WORKDIR /app
+COPY target/*.jar app.jar
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
+EXPOSE 8080
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 ```
 
-The Dockerfile does not compile anything; it only copies the pre-built JAR. This is fast
-and avoids the QEMU tar extraction issue.
+Neither compiles anything; both copy a JAR built on the host, which is fast and
+avoids the QEMU tar extraction issue.
+
+The two differ in one place: booking-service ends at
+`ENTRYPOINT ["java", "-jar", "/app/app.jar"]`, while queue-gate execs the JAR
+through `docker-entrypoint.sh`, which defaults `DROP_OPENS_AT` to thirty seconds
+ago when nothing sets it — so a pod started with no drop configuration comes up
+with its window already open instead of refusing every request.
+
+`console` is the exception and is not minimal in the same way: it is a two-stage
+build, `FROM node:24-alpine AS ui` to compile the Angular bundle and then the
+same JRE base to serve it, because the frontend has to be built somewhere and the
+host toolchain is Maven.
 
 ---
 
@@ -537,15 +565,27 @@ queue-gate:
 
 booking-service:
   requests: { cpu: 200m, memory: 512Mi }
-  limits:   { cpu: 1000m, memory: 1024Mi }
+  limits:   { cpu: 500m, memory: 1Gi }
 
-redis:
+console:
   requests: { cpu: 100m, memory: 256Mi }
   limits:   { cpu: 500m, memory: 512Mi }
+
+redis:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits:   { cpu: 200m, memory: 256Mi }
 ```
 
 Requests reserve resource on the node. Limits cap how much the pod can use. The HPA scales
 based on the request percentage, so if you change requests, scaling behavior changes too.
+
+Those are the application containers. booking-service and queue-gate also run the
+Dynatrace agent as an init container, at `requests: { cpu: 50m, memory: 64Mi }` and
+`limits: { cpu: 500m, memory: 256Mi }`, and those are stated rather than inherited
+for a reason worth knowing: a pod's effective limit is the *maximum* of its init
+container and the *sum* of its app containers, so an init container left to the
+namespace LimitRange's default of 1 CPU / 1000Mi would inflate what the pod charges
+against quota for its whole lifetime — not just while the init container runs.
 
 ---
 

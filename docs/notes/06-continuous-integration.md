@@ -58,7 +58,7 @@ A pipeline that skipped this — substituting H2 or Mockito — would run fast a
 
 But they make the build meaningful. This is worth the cost.
 
-**Note the log confirms zero skipped tests** — `mvn verify` on both services reports all 36 tests for `booking-service` and all 38 for `queue-gate`. If either showed skipped tests, the build would be green but would prove nothing. Watch for that number on every run.
+**Note the log confirms zero skipped tests.** The number that matters on every run is `Skipped: 0`, not the total: if tests are skipped the build is green and proves nothing, which is the failure mode worth watching for. The totals only ever grow — the transcript below records 36 and 38 on run `33831363387`, and both suites are larger now — so pinning them here would just date this page.
 
 ---
 

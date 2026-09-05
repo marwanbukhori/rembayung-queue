@@ -308,22 +308,26 @@ landed in between. `head_sha` is pinned to the run that triggered CD.
 
 ---
 
-## Why the timeout is 40 minutes, not 20
+## Why the timeout is 55 minutes, not 20
 
 The rollout wait in `apply.yml` runs in a per-service loop over
 `rembayung_services`, so each phase of the play costs up to
-`2 × rembayung_rollout_timeout` (2 × 300s = 600s), not one wait of 300s.
+`n × rembayung_rollout_timeout`, not one wait of 300s. `rembayung_services` now
+lists three — booking-service, queue-gate and console — so that ceiling is
+3 × 300s = 900s per phase.
 
-Measured on the live rollback test below: the apply phase's two waits took
-302s and 303s — 605s, against a 600s theoretical ceiling for that phase alone.
-A worst-case run pays that once failing, then again rolling back, plus smoke
-retries on both paths — comfortably past 20 minutes.
+Measured on the live rollback test below, when the list held two: the apply
+phase's waits took 302s and 303s — 605s, against the 600s theoretical ceiling
+for two services. A worst-case run pays a phase once failing, then again rolling
+back, plus smoke retries on both paths.
 
 A 20-minute cap would kill the job mid-rollback on exactly the run where the
 rollback matters: the workflow would be terminated by GitHub before
 `rollback.yml` finished, leaving the cluster in the half-changed state this
-whole phase exists to prevent. `timeout-minutes: 40` is sized off the measured
-number, not a round guess.
+whole phase exists to prevent. `timeout-minutes: 55` in `cd.yml` is sized off
+the measured per-service number against the current service count, not a round
+guess — and it moved from 40 when console became the third service, because the
+ceiling moved with it.
 
 ---
 
