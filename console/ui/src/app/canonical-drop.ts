@@ -23,7 +23,7 @@ import { StateService } from './state.service';
         <span class="meta">refreshes every 2s</span>
       </div>
 
-      <div class="cards" [class.sitting]="withSeatMap()">
+      <div class="cards" [class.merged]="withSeatMap()">
         <div class="card seats">
           <div class="row-baseline">
             <div class="label">Seats taken</div>
@@ -97,9 +97,33 @@ import { StateService } from './state.service';
     </section>
   `,
   styles: `
-    /* With the seat map in it, the seats card takes its own row. */
-    .cards.sitting { flex-wrap: wrap; }
-    .cards.sitting .seats { flex: 1 1 100%; }
+    /*
+      Merged: the three figures are one card with the room drawn underneath,
+      rather than a wide card and two narrow ones under it. Same markup either
+      way - only the framing moves, so neither page duplicates the figures.
+    */
+    .cards.merged {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+      gap: 20px 32px;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 24px;
+    }
+    /* The children stop being cards; the container is the card now. */
+    .cards.merged > .card,
+    .cards.merged > .oversold {
+      background: none;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      color: inherit;
+    }
+    .cards.merged rb-seat-map { grid-column: 1 / -1; }
+    /* Oversold keeps its weight without a dark slab mid-card. */
+    .cards.merged .oversold .figure-claim { color: var(--chip-ok-fg); }
+    .cards.merged .oversold .note { color: var(--muted); }
 
     .cards { display: flex; flex-wrap: wrap; gap: 16px; }
     .seats { flex: 2 1 340px; }

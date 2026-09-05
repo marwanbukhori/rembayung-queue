@@ -54,16 +54,15 @@ import { StateService } from './state.service';
     .chip.fresh { background: var(--dhl-red); }
 
     /*
-      25 to a row, capped, so it reads as a seating plan rather than a ribbon.
-      This was auto-fill, which was right while the card had half the width and
-      wrong once it had all of it: ninety seats on a line is not a shape anybody
-      recognises as a room. The squares shrink on a narrow page instead.
+      Fills the width it is given. A 24px floor is what keeps this a room rather
+      than a ribbon: on a wide card it lays out around fifty a row and five rows
+      deep, and on a narrow one it simply fits fewer per row. The earlier fixed
+      25 columns capped at 720px left half the card empty.
     */
     .seats {
       display: grid;
-      grid-template-columns: repeat(25, minmax(0, 1fr));
-      gap: 4px;
-      max-width: 720px;
+      grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
+      gap: 5px;
     }
     .seat {
       aspect-ratio: 1;
