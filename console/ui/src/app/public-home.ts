@@ -34,23 +34,130 @@ interface Outward {
         <div class="accent-top"></div>
 
         <div class="hero">
-          <span class="tag eyebrow">Simulation — not a real booking site</span>
-          <h1 class="headline">Watch a restaurant's 9pm booking rush, on demand</h1>
-          <p class="hero-lede">
-            Rembayung takes reservations for one sitting a night. Bookings open at
-            <strong>21:00 every day except Friday</strong>, so the rush is not a surprise: it is
-            scheduled, synchronised, and it happens again tomorrow. Thousands of people press the
-            same button in the same second for 250 seats. This console runs that minute against a
-            real cluster, so you can see what the queue does instead of being told.
-          </p>
-          <div class="hero-actions">
-            <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
-            <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
+          <div class="hero-left">
+            <span class="tag eyebrow">Simulation — not a real booking site</span>
+            <h1 class="headline">Watch a restaurant's 9pm booking rush, on demand</h1>
+            <p class="hero-lede">
+              Rembayung takes reservations for one sitting a night, and bookings open at
+              <strong>21:00 every day except Friday</strong>. The rush is not a surprise, it is
+              scheduled: thousands of people press the same button in the same second for 250
+              seats. This console runs that minute on demand, so you can watch what the queue does
+              instead of being told.
+            </p>
+            <div class="hero-actions">
+              <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
+              <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
+            </div>
+            <p class="hero-note">
+              Starting one seeds a fresh 250-seat slot of your own and opens it immediately, so you
+              can see what 21:00 looks like without waiting for 21:00.
+            </p>
+
+            <div class="moves">
+              <div>
+                <div class="moves-head">Three moves to try to break it</div>
+                <p class="moves-sub">Nothing to install, nothing shared with anyone else on this page</p>
+              </div>
+              <div class="move-list">
+                @for (move of moves; track move.name; let i = $index) {
+                  <div class="move">
+                    <div class="move-num mono">{{ i + 1 }}</div>
+                    <div style="min-width: 0;">
+                      <div class="move-name">{{ move.name }}</div>
+                      <div class="move-note">{{ move.note }}</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
           </div>
-          <p class="hero-note">
-            Starting one seeds a fresh 250-seat slot of your own and opens it immediately, so you can
-            watch what 9pm looks like without waiting for 9pm.
-          </p>
+
+          <!--
+            The path down the right, not a picture: each box is a component that
+            owns one guarantee, and the label on each hop is what crosses between
+            them. It reads correctly out loud, which a diagram does not.
+          -->
+          <div class="hero-right">
+            <div class="path-head">
+              <div class="path-title">The path one customer takes</div>
+              <div class="path-count mono">five hops</div>
+            </div>
+
+            <div class="path-node">
+              <div class="path-node-head">
+                <span class="path-name mono">Arrivals</span>
+                <span class="path-badge mono">~3,000 in one second</span>
+              </div>
+              <div class="path-note">
+                Everyone presses the same button the moment bookings open. Synchronised by a
+                published time, not spread across an evening.
+              </div>
+            </div>
+
+            <div class="hop"><div class="hop-line" aria-hidden="true"></div><span class="hop-label mono">all of it lands on one Route</span></div>
+
+            <div class="zone">
+              <div class="zone-head mono">OPENSHIFT NAMESPACE · 3000m CPU BUDGET</div>
+
+              <div class="path-node">
+                <div class="path-node-head">
+                  <span class="path-name mono">queue-gate</span>
+                  <span class="path-badge mono">8 a second by default</span>
+                </div>
+                <div class="path-note">
+                  Issues a ticket, holds the line in Redis, and admits at a fixed rate so the
+                  database is never asked to serialise more than it can.
+                </div>
+              </div>
+
+              <div class="hop"><div class="hop-line" aria-hidden="true"></div><span class="hop-label mono">a bounded trickle, in arrival order</span></div>
+
+              <div class="path-node">
+                <div class="path-node-head">
+                  <span class="path-name mono">booking-service</span>
+                  <span class="path-badge mono">20 Oracle sessions at most</span>
+                </div>
+                <div class="path-note">
+                  Takes one seat per confirmed booking, under a lock, idempotently. A retry cannot
+                  claim a second seat.
+                </div>
+              </div>
+            </div>
+
+            <div class="hop"><div class="hop-line strong" aria-hidden="true"></div><span class="hop-label mono">one conditional update per claim</span></div>
+
+            <div class="path-node">
+              <div class="path-node-head">
+                <span class="path-name mono">Oracle</span>
+                <span class="path-badge mono">250 seats, one row</span>
+              </div>
+              <div class="path-note">
+                Zero rows affected means sold out. The limit lives in the database, so no ordering
+                mistake above it can invent a 251st seat.
+              </div>
+            </div>
+
+            <div class="hop"><div class="hop-line strong" aria-hidden="true"></div><span class="hop-label mono">read once by the state provider</span></div>
+
+            <!--
+              Read from the same field the alert rule reads, not a constant. A
+              hard-coded 0 here would be the one number on the page a visitor
+              cannot trust, and it is the number the whole build is about.
+            -->
+            <div class="path-node claim">
+              <div class="path-node-head">
+                <span class="path-name mono">Oversold</span>
+                @if (state.view()?.drop?.available) {
+                  <span class="path-badge mono" [class.badge-good]="oversold() === 0" [class.badge-bad]="oversold() !== 0">{{ oversold() }}</span>
+                } @else {
+                  <span class="path-badge mono">—</span>
+                }
+              </div>
+              <div class="path-note">
+                The dashboard below reads this from the same place the alert would. Try to move it.
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="band">
@@ -81,45 +188,6 @@ interface Outward {
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="band">
-          <div class="band-head eyebrow">The cluster behind it</div>
-          <!--
-            Four boxes rather than a picture: the point is which component owns
-            which guarantee, and that survives being read out loud.
-          -->
-          <div class="flow">
-            <div class="node">
-              <div class="node-name">Arrivals</div>
-              <div class="node-note">Thousands of customers in the same second.</div>
-            </div>
-            <div class="arrow" aria-hidden="true">→</div>
-            <div class="node">
-              <div class="node-name">queue-gate</div>
-              <div class="node-note">
-                In front of everything. Issues a ticket, holds the line in <strong>Redis</strong>,
-                and admits at a fixed rate.
-              </div>
-            </div>
-            <div class="arrow" aria-hidden="true">→</div>
-            <div class="node">
-              <div class="node-name">booking-service</div>
-              <div class="node-note">
-                Behind the gate. Takes one seat per confirmed booking from <strong>Oracle</strong>,
-                under a lock, idempotently.
-              </div>
-            </div>
-            <div class="arrow" aria-hidden="true">→</div>
-            <div class="node node-claim">
-              <div class="node-name">250 seats</div>
-              <div class="node-note">Never 251. The oversold count below is read from the same place the alert is.</div>
-            </div>
-          </div>
-          <p class="flow-note">
-            Both services run on <strong>OpenShift</strong> in one namespace with a fixed CPU budget,
-            which is why a load run can be told to wait rather than pretending there is room.
-          </p>
         </div>
 
         <div class="band">
@@ -245,7 +313,98 @@ interface Outward {
     </div>
   `,
   styles: `
-    .hero { padding: 36px 24px 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+    /*
+      auto-fit with a 360px floor rather than a media query: the two columns sit
+      side by side wherever there is room for both and stack wherever there is
+      not, including inside the narrow viewport the docs drawer leaves behind.
+    */
+    .hero {
+      padding: 36px 24px 32px;
+      display: grid;
+      gap: 40px;
+      grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+      align-items: start;
+    }
+    .hero-left { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+    .hero-right { min-width: 0; }
+
+    .moves { border-top: 1px solid var(--rule); padding-top: 22px; display: flex; flex-direction: column; gap: 14px; width: 100%; }
+    .moves-head { font-size: 17px; font-weight: 700; }
+    .moves-sub { margin: 2px 0 0; font-size: 14px; color: var(--muted); text-wrap: pretty; }
+    .move-list { display: flex; flex-direction: column; gap: 12px; }
+    .move { display: flex; gap: 12px; align-items: flex-start; }
+    .move-num {
+      flex: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--dhl-yellow);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .move-name { font-size: 15px; font-weight: 700; }
+    .move-note { font-size: 14px; color: var(--ink-soft); text-wrap: pretty; }
+
+    .path-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 4px 12px;
+      margin-bottom: 18px;
+    }
+    .path-title { font-size: 17px; font-weight: 700; }
+    .path-count { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+
+    .path-node { background: var(--white); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; }
+    .path-node-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 4px 12px;
+    }
+    .path-name { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+    .path-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      background: var(--chip-neutral-bg);
+      color: var(--chip-neutral-fg);
+      border-radius: 2px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+    .path-note { font-size: 13px; color: var(--ink-soft); margin-top: 6px; text-wrap: pretty; }
+
+    .claim { background: var(--ink); border-color: var(--ink); color: var(--white); }
+    .claim .path-note { color: var(--on-dark-soft); }
+    .badge-good { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+    .badge-bad { background: var(--chip-bad-bg); color: var(--chip-bad-fg); }
+
+    /* The connector between two boxes, and the label for what crosses it. */
+    .hop { display: flex; align-items: stretch; gap: 10px; padding: 8px 0 8px 22px; }
+    .hop-line { position: relative; flex: none; width: 2px; min-height: 26px; background: var(--muted); }
+    .hop-line.strong { background: var(--ink); }
+    .hop-line::after {
+      content: '';
+      position: absolute;
+      left: -4px;
+      bottom: 0;
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 7px solid currentColor;
+      color: var(--muted);
+    }
+    .hop-line.strong::after { color: var(--ink); }
+    .hop-label { font-size: 11px; letter-spacing: .04em; color: var(--muted); align-self: center; text-wrap: pretty; }
+
+    .zone { border: 1px dashed var(--muted); border-radius: 4px; padding: 14px; background: var(--white); }
+    .zone-head { font-size: 11px; letter-spacing: .06em; color: var(--muted); margin-bottom: 12px; }
     .tag {
       color: var(--chip-info-fg);
       background: var(--chip-info-bg);
@@ -258,12 +417,12 @@ interface Outward {
       font-weight: 800;
       letter-spacing: -0.02em;
       line-height: 1.1;
-      max-width: 20ch;
+      max-width: 22ch;
       text-wrap: balance;
     }
-    .hero-lede { margin: 0; font-size: 17px; color: var(--ink-soft); max-width: 70ch; text-wrap: pretty; }
+    .hero-lede { margin: 0; font-size: 17px; color: var(--ink-soft); max-width: 56ch; text-wrap: pretty; }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 4px; }
-    .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 70ch; text-wrap: pretty; }
+    .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 52ch; text-wrap: pretty; }
 
     .band { border-top: 1px solid var(--rule); padding: 24px; }
     .band-head { color: var(--muted); margin-bottom: 16px; }
@@ -276,22 +435,6 @@ interface Outward {
     .fact-figure { font-size: 30px; font-weight: 700; line-height: 1; }
     .fact-name { font-size: 15px; font-weight: 700; margin-top: 8px; }
     .fact-note { font-size: 14px; color: var(--ink-soft); margin-top: 4px; text-wrap: pretty; }
-
-    .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px 10px; }
-    .node {
-      flex: 1 1 190px;
-      min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      padding: 12px 14px;
-      background: var(--white);
-    }
-    .node-claim { background: var(--ink); border-color: var(--ink); color: var(--white); }
-    .node-claim .node-note { color: var(--on-dark-soft); }
-    .node-name { font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
-    .node-note { font-size: 13px; color: var(--ink-soft); margin-top: 4px; text-wrap: pretty; }
-    .arrow { align-self: center; color: var(--muted); font-size: 18px; flex: none; }
-    .flow-note { margin: 16px 0 0; font-size: 14px; color: var(--ink-soft); max-width: 74ch; text-wrap: pretty; }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .stack-chip {
@@ -400,6 +543,24 @@ export class PublicHome implements OnInit {
   protected readonly docsService = inject(DocsService);
 
   /** Named because a hiring manager reads the list before reading the code. */
+  /** The three things a visitor can actually do, in the order the page offers them. */
+  readonly moves = [
+    {
+      name: 'Start the 21:00 rush',
+      note: 'Seeds a slot row of 250 seats and a ticket counter of your own, then opens it.',
+    },
+    {
+      name: 'Send the crowd',
+      note: 'A load job inside the cluster offers hundreds of customers in the same second.',
+    },
+    {
+      name: 'Push it past breaking',
+      note: 'Raise admission until the connection pool gives out, and watch oversold stay at zero.',
+    },
+  ];
+
+  readonly oversold = computed(() => this.state.view()?.drop.oversold ?? 0);
+
   readonly stack = [
     'Java 25',
     'Spring Boot 4',
