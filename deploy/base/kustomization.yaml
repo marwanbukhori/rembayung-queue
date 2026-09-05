@@ -11,6 +11,7 @@ resources:
   - booking-service/deployment.yaml
   - booking-service/service.yaml
   - booking-service/hpa.yaml
+  - console
   - networkpolicy.yaml
   - observability
   - keepalive

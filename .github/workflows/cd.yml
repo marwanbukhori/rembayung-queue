@@ -48,18 +48,20 @@ jobs:
       name: sandbox
       url: https://queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com
     runs-on: ubuntu-latest
-    # 40 minutes, not 20, and the margin is not padding.
+    # 55 minutes, and the margin is not padding.
     #
     # The rollout wait in apply.yml runs in a per-service loop, so each phase
-    # costs 2 x rembayung_rollout_timeout (300s), not one. The live failure test
-    # measured the apply phase alone at 302s + 303s = 605s. A worst-case failed
-    # deploy is ~600s failing, then ~600s rolling back, plus smoke retries on
-    # both paths — comfortably over 20 minutes.
+    # costs N x rembayung_rollout_timeout (300s), not one. The live failure test
+    # measured the apply phase alone at 302s + 303s = 605s with two services;
+    # the console makes three, so a worst-case failed deploy is ~900s failing,
+    # then ~900s rolling back, plus smoke retries on both paths — around 32
+    # minutes before anything unexpected.
     #
-    # A 20-minute cap would kill the play mid-rollback on the one run where the
-    # safety net matters, leaving exactly the half-changed cluster this phase
-    # exists to prevent.
-    timeout-minutes: 40
+    # A cap that kills the play mid-rollback would leave exactly the
+    # half-changed cluster this phase exists to prevent, so the ceiling is set
+    # from the arithmetic above rather than from how long a good deploy takes
+    # (about three minutes).
+    timeout-minutes: 55
 
     steps:
       - uses: actions/checkout@v4

@@ -11,10 +11,17 @@ rembayung_namespace: marwanbukhori-dev
 rembayung_route_name: queue-gate
 rembayung_registry: ghcr.io/marwanbukhori
 
-# Both Deployments carry their own image tag and can legitimately differ.
+# Each Deployment carries its own image tag and they can legitimately differ.
+#
+# Every name here must already exist in the namespace: discover.yml reads each
+# Deployment before anything is patched, so adding a service to this list before
+# its Deployment has been created fails the play at discovery — safely, with
+# nothing changed, but it does mean a new service is bootstrapped once by hand
+# (`oc apply -k deploy/base/<service>`) before CD can carry it.
 rembayung_services:
   - booking-service
   - queue-gate
+  - console
 
 # A rollout on this cluster takes well under a minute; 300s is slack for a slow
 # image pull, not an expectation.

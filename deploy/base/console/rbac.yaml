@@ -1,0 +1,100 @@
+---
+# The identity the console reads the cluster with.
+#
+# It is a ServiceAccount of its own rather than `default` because `default` is
+# mounted into every pod in the namespace that does not ask for something else:
+# granting it `create jobs` would hand that verb to Redis, to queue-gate and to
+# every load Job the console itself starts.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: console
+  labels:
+    app.kubernetes.io/name: console
+    app.kubernetes.io/component: console
+    app.kubernetes.io/part-of: rembayung-queue
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: console
+  labels:
+    app.kubernetes.io/name: console
+    app.kubernetes.io/component: console
+    app.kubernetes.io/part-of: rembayung-queue
+rules:
+  # The load run. `get` reports whatever run the drop already has, `create`
+  # starts one, `delete` clears a finished one so the drop's name is free for
+  # the next. No `list`: LoadOps only ever looks a Job up by the name it
+  # derives from the drop id, and a console that could enumerate every Job in
+  # the namespace would be reading things it never draws.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create", "delete"]
+  # The k6 script, written out of the console's own image on every run so the
+  # script and the page describing it cannot drift across a deploy.
+  # `createOr(update)` issues a get first, so all three verbs are exercised on
+  # the second run and only two on the first.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+  # Three panels read pods: pod health lists them, the constraints panel sums
+  # their CPU requests to say what is spending the quota, and a load run finds
+  # its own pod by the job-name label to explain why it is Pending.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # The CPU budget the constraints panel is about. compute-deploy is read by
+  # name; the list verb is what makes a wrong name a visible 404 rather than a
+  # 403 that reads as a broken deployment.
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    verbs: ["get", "list"]
+  # Current and desired replicas, and the condition that says why an autoscaler
+  # is not scaling.
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list"]
+  # The half of "why is this run Pending" that is not on any pod. When a quota
+  # refuses the pod outright no pod is ever created, and the only record of
+  # "exceeded quota: compute-deploy, requested: ..." is a FailedCreate Event
+  # about the Job.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list"]
+  # Read-only, for naming what the console links out to. Nothing in the current
+  # code path calls these — the links are built from configuration — so this is
+  # the one rule here that is headroom rather than a verb in use, and it grants
+  # nothing beyond reading two objects whose contents are already public.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list"]
+# Deliberately absent: secrets. The console holds one credential — its own
+# access key, injected as an environment variable by the kubelet — and has no
+# reason to read any other. The Oracle wallet lives in this namespace; a console
+# that could read Secrets would be a public Route one bug away from it.
+#
+# Deliberately absent: deployments, and every write verb on them. Scaling and
+# redeploying go through CD, which is triggered by the GitHub API and runs as
+# `rembayung-cd`. That keeps the account behind a public page read-mostly: the
+# only thing it can create is a Job whose image, command, deadline and budget
+# the console itself decides.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: console
+  labels:
+    app.kubernetes.io/name: console
+    app.kubernetes.io/component: console
+    app.kubernetes.io/part-of: rembayung-queue
+subjects:
+  - kind: ServiceAccount
+    name: console
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: console

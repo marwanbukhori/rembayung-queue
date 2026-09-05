@@ -49,6 +49,15 @@ jobs:
         working-directory: queue-gate
         run: ./mvnw --batch-mode verify
 
+      # No Testcontainers here, and no Angular either: the console's tests are
+      # plain JVM tests against stubbed HTTP and a mocked Kubernetes client, so
+      # this step is seconds where the two above are minutes. The Angular build
+      # is not tested in CI at all — it is compiled inside the image build
+      # below, which is where a broken template fails.
+      - name: Test console
+        working-directory: console
+        run: ./mvnw --batch-mode verify
+
       # The Dockerfiles are single-stage and copy target/*.jar, so the jars must
       # exist before the image build. Locally this exists because building inside
       # an emulated amd64 container fails on Apple Silicon; here it is simply
@@ -58,6 +67,7 @@ jobs:
         run: |
           booking-service/mvnw --batch-mode -f booking-service -DskipTests package
           queue-gate/mvnw     --batch-mode -f queue-gate     -DskipTests package
+          console/mvnw        --batch-mode -f console        -DskipTests package
 
       - name: Log in to ghcr.io
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
@@ -89,6 +99,26 @@ jobs:
           push: true
           tags: ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}
 
+      # The first multi-language image in this pipeline: Java tests, then a
+      # host-built jar, then an Angular build inside the image itself. The node
+      # stage in console/Dockerfile runs `npm ci && npm run build`, so no
+      # setup-node step is needed here and the page can never be built from a
+      # different commit than the API serving it.
+      #
+      # ghcr.io/marwanbukhori/console does not exist yet. Letting this push
+      # create it is deliberate: a package created by hand is owned by the user
+      # who created it and GITHUB_TOKEN cannot write to it, while one a workflow
+      # creates is linked to the repository — which the LABEL
+      # org.opencontainers.image.source in the Dockerfile is what establishes.
+      - name: Build and push console
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./console
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/marwanbukhori/console:${{ github.sha }}
+
       # Native on an x86_64 runner, unlike the arm64 development machine — but
       # asserted anyway. A wrong architecture surfaces on the cluster as a
       # CrashLoopBackOff whose logs say only "exec format error".
@@ -98,7 +128,7 @@ jobs:
           # Without pipefail, a failing imagetools inspect is masked by tee's
           # exit code; the grep below then fails for the wrong reason.
           set -o pipefail
-          for svc in booking-service queue-gate; do
+          for svc in booking-service queue-gate console; do
             image="ghcr.io/marwanbukhori/${svc}:${{ github.sha }}"
             echo "== ${image}"
             docker buildx imagetools inspect "${image}" | tee /tmp/inspect.txt
@@ -115,6 +145,7 @@ jobs:
             echo '```'
             echo "ghcr.io/marwanbukhori/booking-service:${{ github.sha }}"
             echo "ghcr.io/marwanbukhori/queue-gate:${{ github.sha }}"
+            echo "ghcr.io/marwanbukhori/console:${{ github.sha }}"
             echo '```'
             echo
             echo "Deploy with:"

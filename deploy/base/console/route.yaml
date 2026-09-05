@@ -1,0 +1,22 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: console
+  labels:
+    app.kubernetes.io/name: console
+    app.kubernetes.io/component: console
+    app.kubernetes.io/part-of: rembayung-queue
+    app.openshift.io/runtime: spring-boot
+spec:
+  to:
+    kind: Service
+    name: console
+  # http only. The management port carries /actuator/prometheus and the health
+  # groups, and the key filter is registered on the main servlet context alone —
+  # so exposing 9090 here would publish the one part of this service that is not
+  # behind the console key.
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

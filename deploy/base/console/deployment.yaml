@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+  labels:
+    app: console
+    app.kubernetes.io/name: console
+    app.kubernetes.io/component: console
+    app.kubernetes.io/part-of: rembayung-queue
+    app.openshift.io/runtime: spring-boot
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"queue-gate"},{"apiVersion":"apps/v1","kind":"Deployment","name":"booking-service"}]'
+spec:
+  # One replica, and not for want of ambition. The console owns no state and
+  # would scale fine, but every pod here spends the same 3000m CPU budget the
+  # constraints panel exists to explain — and a second console replica would be
+  # 100m taken from the load runs the page is meant to be able to start.
+  replicas: 1
+  # See queue-gate's deployment for the whole story: this namespace caps
+  # ReplicaSets at 30, the default keeps 10 revisions per Deployment, and
+  # rollback re-applies a tag rather than relying on ReplicaSet history.
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Stated rather than inherited, and the values differ from queue-gate's
+      # for a reason: at one replica the API default of 25% rounds maxUnavailable
+      # DOWN TO 0 already, but it also rounds maxSurge down to 1, and relying on
+      # two roundings to land where you want is how a deploy surprises you. With
+      # 0 unavailable the old console keeps serving until the new one is Ready,
+      # so a bad image is a rollout that stalls rather than a page that 503s.
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels: { app: console }
+  template:
+    metadata:
+      labels:
+        app: console
+        app.kubernetes.io/name: console
+        app.kubernetes.io/component: console
+        app.kubernetes.io/part-of: rembayung-queue
+        app.openshift.io/runtime: spring-boot
+    spec:
+      # Not `default`. The token mounted here can create Jobs; see rbac.yaml.
+      serviceAccountName: console
+      containers:
+        - name: console
+          # Untagged on purpose. Two systems own this field — the sandbox
+          # overlay at bootstrap and Phase 5's playbook at deploy time — and a
+          # tag written here would be a third that silently disagrees with both.
+          image: ghcr.io/marwanbukhori/console
+          ports:
+            - name: http
+              containerPort: 8082
+            - name: management
+              containerPort: 9090
+          env:
+            # Stated, never inferred. The console introspects this namespace
+            # for pods, the quota and its own load Jobs, and the default in
+            # application.yml was wrong once — the pods panel reported
+            # "pods is forbidden" against a namespace that does not exist.
+            # The default has since been corrected to match, which is exactly
+            # why it must not be relied on: a correct default is invisible
+            # until the day it is not.
+            - name: CONSOLE_NAMESPACE
+              value: marwanbukhori-dev
+            # ClusterIP Services, not the public Route. The console reads
+            # /internal endpoints that the Route deliberately does not carry,
+            # and GATE_BASE_URL is also the address handed to the k6 Job — so a
+            # public URL here would send every load run back out through the
+            # edge the run is meant to bypass.
+            - name: GATE_BASE_URL
+              value: http://queue-gate:8080
+            - name: BOOKING_BASE_URL
+              value: http://booking-service:8081
+            # The one credential this pod holds. `optional: true` so a missing
+            # Secret degrades to "every /api call is refused" — which is what an
+            # unconfigured console should do — rather than to pods that will not
+            # start at all. Until the Secret exists this Deployment runs and
+            # 401s everything, by design.
+            #
+            # The key is created out of band by the repository owner:
+            #   oc create secret generic console-access --from-literal=key=...
+            # It is not in git and is not printed by anything here.
+            - name: CONSOLE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: console-access, key: key, optional: true }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          # A startupProbe rather than a long initialDelaySeconds, which is the
+          # shape Phase 6 arrived at the hard way: a JVM that took longer to
+          # start than the liveness deadline allowed was killed a second or two
+          # after Spring finished starting, so deploys failed intermittently and
+          # rolled back while the image was perfectly good.
+          #
+          # 40 x 5s = 200s of grace, and none of it is spent once the app
+          # answers: liveness and readiness do not run at all until this
+          # succeeds, and then they run tight. That is why neither of them
+          # carries an initialDelaySeconds — it would be dead configuration.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: management }
+            periodSeconds: 5
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: management }
+            # The liveness group is livenessState only: it touches neither
+            # queue-gate, booking-service nor the Kubernetes API. That asymmetry
+            # is deliberate — a dependency being down is something the console
+            # is supposed to draw, not something it should be restarted over.
+            timeoutSeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: management }
+            # 5s, matching what Phase 6 settled on after a 1s budget failed a
+            # real rollout: a cold JVM with connection pools still initialising
+            # is the worst case, and it is precisely when this probe runs.
+            timeoutSeconds: 5
+            periodSeconds: 5
