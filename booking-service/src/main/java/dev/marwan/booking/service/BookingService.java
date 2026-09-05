@@ -62,18 +62,32 @@ public class BookingService {
         return new BookingResult(booking.getId(), booking.getStatus(), false);
     }
 
+    /**
+     * Confirms a deposit, claiming the booking atomically rather than reading it,
+     * checking it, and writing it back.
+     *
+     * The read-then-write version raced the sweeper: it read PENDING_DEPOSIT,
+     * the sweeper expired the booking and returned its seats to the slot, and
+     * the dirty-check UPDATE then wrote CONFIRMED over EXPIRED. The booking was
+     * confirmed and its seats were back on sale — sold twice — with
+     * rembayung_slot_oversold still reading 0, because seats_taken itself was
+     * never wrong. The invariant this project is built around would have held
+     * while the guest lost their table.
+     */
     @Transactional
     public BookingResult confirmDeposit(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new BookingNotFoundException(bookingId));
-
-        if (booking.getStatus() != BookingStatus.PENDING_DEPOSIT) {
-            throw new IllegalStateException(
-                    "Booking " + bookingId + " is " + booking.getStatus()
-                            + ", expected PENDING_DEPOSIT");
+        if (bookingRepository.markConfirmedIfPending(bookingId) == 1) {
+            return new BookingResult(bookingId, BookingStatus.CONFIRMED, false);
         }
 
-        booking.setStatus(BookingStatus.CONFIRMED);
-        return new BookingResult(booking.getId(), booking.getStatus(), false);
+        // Nothing was claimed. Either the booking is gone, or something else
+        // moved it out of PENDING_DEPOSIT first — usually the sweeper. Re-read to
+        // tell the caller which, since "expired while you were paying" and "no
+        // such booking" need different answers.
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        throw new IllegalStateException(
+                "Booking " + bookingId + " is " + booking.getStatus()
+                        + ", expected PENDING_DEPOSIT");
     }
 }
