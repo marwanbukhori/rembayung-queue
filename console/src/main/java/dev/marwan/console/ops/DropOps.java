@@ -54,9 +54,12 @@ public class DropOps {
      * <ul>
      *   <li><b>1/s</b> — slow enough to watch one person at a time reach the
      *       database.</li>
-     *   <li><b>8/s</b> — the production setting, and a measured one: 20
-     *       connections divided by a 2.7s round trip to an Oracle instance a
-     *       region away.</li>
+     *   <li><b>8/s</b> — what a sandbox drop starts at, and a measured value
+     *       rather than a chosen one: 20 connections at full stretch divided by
+     *       a 2.7s round trip to an Oracle instance a region away. Not the
+     *       canonical 21:00 drop's rate, which queue-gate's configmap sets to 1
+     *       via DROP_ADMIT_RATE; calling this "the production setting" was
+     *       wrong against a file in this repo.</li>
      *   <li><b>200/s</b> — more than the database can absorb. The pool
      *       exhausts, booking-service refuses with 503 and Retry-After, and
      *       <b>oversold stays at zero anyway</b>.</li>

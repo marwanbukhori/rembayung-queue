@@ -46,7 +46,15 @@ export const options = {
 
 // Treat everything below 500 as an expected outcome, so http_req_failed
 // tracks server errors rather than legitimate rejections.
-http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }));
+//
+// 503 is listed with them, and has to be. It is the one status above 499 this
+// system returns on purpose: a saturated connection pool answers 503 with
+// Retry-After instead of holding the request and failing later. The check below
+// already says so. Leaving it out of this list meant the run that demonstrates
+// back-pressure - deliberately admitting faster than the database can absorb -
+// counted every correct refusal against http_req_failed and tripped its own
+// rate<0.01 threshold, reporting the demo's headline result as a failed run.
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }, 503));
 
 const GATE = __ENV.GATE || 'http://localhost:8080';
 const SLOT_ID = __ENV.SLOT_ID || 1;

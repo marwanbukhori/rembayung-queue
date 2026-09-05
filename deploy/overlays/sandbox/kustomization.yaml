@@ -32,8 +32,16 @@ resources:
 #
 #   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
 #     -e image_tag=<sha>
+# All three services, and all three matter. console was missing here while the
+# other two were pinned, and a missing entry is not a missing pin: the base
+# names the image with no tag, so `oc apply -k` resolved it to :latest and
+# deployed whatever had been pushed most recently, next to two services held at
+# an exact SHA. One commit CI has published for every service, so applying this
+# overlay gives a set that ran together.
 images:
   - name: ghcr.io/marwanbukhori/queue-gate
-    newTag: 252efeb7509d814ae201e2c4a39450e4433ad111
+    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b
   - name: ghcr.io/marwanbukhori/booking-service
-    newTag: 252efeb7509d814ae201e2c4a39450e4433ad111
+    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b
+  - name: ghcr.io/marwanbukhori/console
+    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b

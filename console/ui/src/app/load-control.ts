@@ -134,9 +134,9 @@ export class LoadControl {
     {
       value: 8,
       label: '8 per second',
-      note: 'The production setting, and a measured one: twenty connections divided by a 2.7 second '
-        + 'round trip to an Oracle instance a region away. The pool sits around nine of twenty and '
-        + 'the queue drains steadily.'
+      note: 'Where a simulation starts, and a measured value rather than a chosen one: twenty '
+        + 'connections at full stretch divided by a 2.7 second round trip to an Oracle instance a '
+        + 'region away. The pool sits around nine of twenty and the queue drains steadily.'
     },
     {
       value: 200,
