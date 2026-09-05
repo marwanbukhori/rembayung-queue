@@ -19,9 +19,10 @@ class DemoStateTest {
 
     @Test
     void aCompleteStateReportsSeatsAndQueueTogether() {
-        DemoState state = new DemoState(true, null, "d-abc",
+        DemoState state = new DemoState(true, null, "d-abc", 4242,
                 250, 202, 48, 0, 40, 10, 30);
 
+        assertThat(state.slotId()).isEqualTo(4242);
         assertThat(state.capacity()).isEqualTo(250);
         assertThat(state.oversold()).isZero();
         assertThat(state.waiting()).isEqualTo(30);

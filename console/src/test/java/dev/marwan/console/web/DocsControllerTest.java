@@ -9,15 +9,21 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+// The documentation is behind the console key like everything else under
+// /api, so every request here carries one. KeyFilterTest asserts what happens
+// without it.
+@SpringBootTest(properties = "console.access-key=s3cret-demo-key")
 @AutoConfigureMockMvc
 class DocsControllerTest {
+
+    private static final String KEY_HEADER = "X-Console-Key";
+    private static final String KEY = "s3cret-demo-key";
 
     @Autowired private MockMvc mvc;
 
     @Test
     void theNotesAreListed() throws Exception {
-        mvc.perform(get("/api/docs"))
+        mvc.perform(get("/api/docs").header(KEY_HEADER, KEY))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("observability")));
     }
@@ -26,7 +32,7 @@ class DocsControllerTest {
     // string from the browser touches the filesystem.
     @Test
     void aTraversingPathIsRefused() throws Exception {
-        mvc.perform(get("/api/docs/..%2F..%2F..%2Fetc%2Fpasswd"))
+        mvc.perform(get("/api/docs/..%2F..%2F..%2Fetc%2Fpasswd").header(KEY_HEADER, KEY))
                 .andExpect(status().isNotFound());
     }
 }

@@ -1,5 +1,7 @@
 package dev.marwan.booking;
 
+import dev.marwan.booking.domain.Slot;
+import dev.marwan.booking.repository.SlotRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -15,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InternalControllerTest extends OracleTestBase {
 
     @Autowired private MockMvc mvc;
+    @Autowired private SlotRepository slots;
 
     private long seed() throws Exception {
         String body = mvc.perform(post("/internal/slots"))
@@ -44,6 +47,30 @@ class InternalControllerTest extends OracleTestBase {
     @Test
     void anUnknownSlotIsNotFound() throws Exception {
         mvc.perform(get("/internal/slots/999999")).andExpect(status().isNotFound());
+    }
+
+    /**
+     * A seeded slot must carry an expiry, or SandboxSweeper will never see it.
+     *
+     * Console sessions are unlimited by design, so a sandbox row with no expiry
+     * is a permanent row — which is the exact case the sandbox_expires_at column
+     * exists to prevent, and it fails silently: everything works, and the
+     * database fills up.
+     */
+    @Test
+    void aSeededSlotExpiresSoTheSweeperCanReapIt() throws Exception {
+        long slotId = seed();
+
+        Slot slot = slots.findById(slotId).orElseThrow();
+        assertThat(slot.getSandboxExpiresAt())
+                .isNotNull()
+                .isAfter(java.time.Instant.now());
+        assertThat(slots.findExpiredSandboxIds(
+                slot.getSandboxExpiresAt().plusSeconds(1))).contains(slotId);
+        // Sandboxes must stay out of the gauges: they are excluded by having an
+        // expiry at all, so setting one is also what keeps metric cardinality
+        // bounded.
+        assertThat(slots.findPermanentSlotIds()).doesNotContain(slotId);
     }
 
     // slots has a UNIQUE (service_date, service_time), so a seed fixed at one

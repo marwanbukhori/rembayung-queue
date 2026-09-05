@@ -41,9 +41,9 @@ public class DemoStateProvider {
     private static final Logger log = LoggerFactory.getLogger(DemoStateProvider.class);
 
     /**
-     * Cached aggregates are keyed by drop and slot, so one visitor's sandbox
-     * cannot be served another's numbers. Entries this old are dropped wholesale
-     * rather than reused, which bounds the map without a scheduled sweeper.
+     * Cached aggregates are keyed by drop, so one visitor's sandbox cannot be
+     * served another's numbers. Entries this old are dropped wholesale rather
+     * than reused, which bounds the map without a scheduled sweeper.
      */
     private static final Duration ENTRY_MAX_AGE = Duration.ofMinutes(5);
 
@@ -54,7 +54,7 @@ public class DemoStateProvider {
     private final RestClient gate;
     private final ConsoleProperties properties;
     private final Clock clock;
-    private final Map<Key, Cached> cache = new ConcurrentHashMap<>();
+    private final Map<String, Cached> cache = new ConcurrentHashMap<>();
 
     public DemoStateProvider(RestClient bookingClient, RestClient gateClient,
                              ConsoleProperties properties, Clock clock) {
@@ -64,19 +64,44 @@ public class DemoStateProvider {
         this.clock = clock;
     }
 
-    public DemoState currentFor(String dropId, long slotId) {
-        Key key = new Key(dropId, slotId);
+    /**
+     * The slot is not a parameter.
+     *
+     * The gate's drop record names the slot the drop sells, so the console asks
+     * the gate first and then reads that slot. The alternative — letting the
+     * browser say which slot to read — meant defaulting to the canonical one,
+     * which drew every sandbox with the real restaurant's seats.
+     */
+    public DemoState currentFor(String dropId) {
         Instant now = clock.instant();
-        Cached hit = cache.get(key);
+        Cached hit = cache.get(dropId);
         if (hit != null && Duration.between(hit.at(), now).compareTo(properties.cacheTtl()) < 0) {
             return hit.state();
         }
-        DemoState fresh = fetch(dropId, slotId);
-        store(key, new Cached(now, fresh));
+        DemoState fresh = fetch(dropId);
+        store(dropId, new Cached(now, fresh));
         return fresh;
     }
 
-    private DemoState fetch(String dropId, long slotId) {
+    private DemoState fetch(String dropId) {
+        DropState drop;
+        try {
+            drop = gate.get()
+                    .uri("/internal/drops/{dropId}/state", dropId)
+                    .retrieve()
+                    .body(DropState.class);
+        } catch (Exception e) {
+            return unreachable("queue-gate", e);
+        }
+        if (drop == null) {
+            return DemoState.unavailable("queue-gate has no drop " + dropId);
+        }
+
+        // The canonical drop is configuration rather than a stored record and
+        // carries no slot of its own; slot 1 is the restaurant it has always
+        // sold. A sandbox always names its own.
+        long slotId = drop.slotId() == null ? properties.canonicalSlot() : drop.slotId();
+
         SlotState slot;
         try {
             slot = booking.get()
@@ -90,22 +115,9 @@ public class DemoStateProvider {
             return DemoState.unavailable("booking-service has no slot " + slotId);
         }
 
-        QueueState queue;
-        try {
-            queue = gate.get()
-                    .uri("/internal/drops/{dropId}/state", dropId)
-                    .retrieve()
-                    .body(QueueState.class);
-        } catch (Exception e) {
-            return unreachable("queue-gate", e);
-        }
-        if (queue == null) {
-            return DemoState.unavailable("queue-gate has no drop " + dropId);
-        }
-
-        return new DemoState(true, null, dropId,
+        return new DemoState(true, null, dropId, slotId,
                 slot.capacity(), slot.seatsTaken(), slot.remaining(), slot.oversold(),
-                queue.ticketsIssued(), queue.admitted(), queue.waiting());
+                drop.ticketsIssued(), drop.admitted(), drop.waiting());
     }
 
     /**
@@ -124,15 +136,13 @@ public class DemoStateProvider {
         return oneLine.length() <= 160 ? oneLine : oneLine.substring(0, 157) + "...";
     }
 
-    private void store(Key key, Cached entry) {
+    private void store(String key, Cached entry) {
         cache.put(key, entry);
         if (cache.size() > MAX_ENTRIES) {
             cache.entrySet().removeIf(e ->
                     Duration.between(e.getValue().at(), entry.at()).compareTo(ENTRY_MAX_AGE) > 0);
         }
     }
-
-    private record Key(String dropId, long slotId) { }
 
     private record Cached(Instant at, DemoState state) { }
 }

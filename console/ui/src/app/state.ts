@@ -9,6 +9,8 @@ export interface DemoState {
   available: boolean;
   detail: string | null;
   dropId: string | null;
+  /** Which slot the drop sells. The gate says; the page does not assume. */
+  slotId: number;
   capacity: number;
   seatsTaken: number;
   remaining: number;

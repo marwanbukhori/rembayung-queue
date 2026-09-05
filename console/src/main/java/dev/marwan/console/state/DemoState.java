@@ -8,11 +8,16 @@ package dev.marwan.console.state;
  * SlotStateProvider, which is also what the Prometheus gauges and the
  * SlotOversold alert read — so the console cannot show a different answer from
  * the one that would page someone.
+ *
+ * slotId is here because the browser shows it: a visitor watching their own
+ * sandbox should be able to read which slot row their bookings are landing in,
+ * and the console learns it from the gate rather than being told by the page.
  */
 public record DemoState(
         boolean available,
         String detail,
         String dropId,
+        long slotId,
         int capacity,
         int seatsTaken,
         int remaining,
@@ -22,6 +27,6 @@ public record DemoState(
         long waiting) {
 
     public static DemoState unavailable(String detail) {
-        return new DemoState(false, detail, null, 0, 0, 0, 0, 0, 0, 0);
+        return new DemoState(false, detail, null, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 }

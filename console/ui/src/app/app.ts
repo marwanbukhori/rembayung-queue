@@ -1,10 +1,12 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { DocPage } from './doc-page';
 import { DocsPage } from './docs-page';
 import { Operations } from './operations';
 import { PodsPage } from './pods-page';
 import { PublicHome } from './public-home';
+import { StateService } from './state.service';
 import { Visitor } from './visitor';
+import { hasConsoleKey } from './key';
 
 /** Which surface is on screen. Tiers, then pages within the public tier. */
 type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
@@ -65,7 +67,7 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
 
       <footer>
         <span>Rembayung booking queue, phase 7. A console a stranger can drive.</span>
-        <span class="mono">reading slot 1 and drop default</span>
+        <span class="mono">{{ readingLabel() }}</span>
       </footer>
     </main>
   `,
@@ -134,6 +136,8 @@ type Surface = 'home' | 'pods' | 'docs' | 'doc' | 'visitor' | 'ops';
   `
 })
 export class App {
+  private readonly state = inject(StateService);
+
   readonly surface = signal<Surface>('home');
   readonly selectedDocId = signal<string | null>(null);
 
@@ -143,9 +147,24 @@ export class App {
     return App.PUBLIC_SURFACES.includes(this.surface());
   }
 
-  keyLabel(): string {
-    return this.isPublic() ? 'no key, read only' : 'no key yet';
-  }
+  /**
+   * One key opens the whole console — there are no tiers and no read-only
+   * view, so this says whether the page has one and nothing more.
+   */
+  readonly keyLabel = computed(() => {
+    if (!hasConsoleKey()) {
+      return 'no key';
+    }
+    return this.state.transportError()?.includes('key') ? 'key refused' : 'keyed';
+  });
+
+  /** Which drop and slot are actually on screen, named by the services. */
+  readonly readingLabel = computed(() => {
+    const drop = this.state.view()?.drop;
+    return drop && drop.available
+      ? `reading slot ${drop.slotId} and drop ${drop.dropId}`
+      : 'nothing read yet';
+  });
 
   show(surface: Surface): void {
     this.surface.set(surface);

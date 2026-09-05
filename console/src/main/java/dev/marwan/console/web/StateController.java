@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
  * unhappy — so an unreachable service is reported as a reason inside a
  * successful response, never as a failure of the console itself.
  *
- * Tasks 6 and 7 extend this controller with drop creation and load runs.
+ * Every call here is behind the console key; see KeyFilter. With an audience
+ * of two there is no reason to leave a read open, and one rule is easier to
+ * reason about than two.
  */
 @RestController
 public class StateController {
@@ -34,18 +36,14 @@ public class StateController {
 
     /**
      * @param drop which drop to read; the canonical one when unasked, which is
-     *             what the public page shows
-     * @param slot which slot that drop sells. Passed rather than looked up
-     *             because the gate's drop state endpoint returns queue numbers
-     *             only. Task 6 hands the browser the slot id when it creates a
-     *             sandbox, and until then the canonical slot is the answer.
+     *             what the public page shows. There is no slot parameter: the
+     *             gate's drop state names the slot the drop sells, so the
+     *             browser cannot ask for one drop's queue beside another
+     *             drop's seats.
      */
     @GetMapping("/api/state")
-    public ConsoleView state(
-            @RequestParam(name = "drop", required = false) String drop,
-            @RequestParam(name = "slot", required = false) Long slot) {
+    public ConsoleView state(@RequestParam(name = "drop", required = false) String drop) {
         String dropId = drop == null || drop.isBlank() ? properties.canonicalDrop() : drop;
-        long slotId = slot == null ? properties.canonicalSlot() : slot;
-        return new ConsoleView(state.currentFor(dropId, slotId), pods.current());
+        return new ConsoleView(state.currentFor(dropId), pods.current());
     }
 }

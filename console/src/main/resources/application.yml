@@ -11,6 +11,12 @@ spring:
 
 server:
   port: 8082
+  error:
+    # The reason a sandbox could not be started is the useful half of the
+    # response — "queue-gate could not start a sandbox: 404" tells the person
+    # looking at the button what happened. Safe here because every /api path is
+    # behind the console key and the audience is two people.
+    include-message: always
 
 console:
   booking-base-url: ${BOOKING_BASE_URL:http://localhost:8081}
@@ -25,6 +31,9 @@ console:
   # exists to watch.
   cache-ttl: PT1S
   namespace: ${CONSOLE_NAMESPACE:rembayung}
+  # One key for the whole console, from a Secret. Unset means the API refuses
+  # every call: a console nobody configured must be shut, not open.
+  access-key: ${CONSOLE_ACCESS_KEY:}
   static-path: ${CONSOLE_STATIC_PATH:./ui/dist/ui/browser/}
 
 management:

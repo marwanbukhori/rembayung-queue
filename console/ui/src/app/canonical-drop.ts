@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { StateService } from './state.service';
 
 /**
@@ -15,8 +15,8 @@ import { StateService } from './state.service';
     <section class="stack-16">
       <div class="section-head">
         <div style="min-width: 0;">
-          <h2>{{ heading }}</h2>
-          <p class="sub">{{ subheading }}</p>
+          <h2>{{ heading() }}</h2>
+          <p class="sub">{{ subheading() }}</p>
         </div>
         <span class="meta">refreshes every 2s</span>
       </div>
@@ -118,11 +118,24 @@ import { StateService } from './state.service';
 export class CanonicalDrop {
   private readonly state = inject(StateService);
 
-  readonly heading = 'The canonical drop';
-  readonly subheading = 'Slot 1, read from the services that own the data';
+  /** "Your drop" on the visitor page; the canonical one everywhere else. */
+  readonly heading = input('The canonical drop');
   readonly oversoldNote = 'Across every drop this cluster has run.';
 
   readonly drop = computed(() => this.state.view()?.drop ?? null);
+
+  /**
+   * The slot is named rather than assumed. It used to read "Slot 1" whatever
+   * was on screen, which was right for the canonical drop and wrong for every
+   * sandbox — the gate now says which slot a drop sells, so the page can say it
+   * too.
+   */
+  readonly subheading = computed(() => {
+    const d = this.drop();
+    return d && d.available
+      ? `Slot ${d.slotId}, read from the services that own the data`
+      : 'Read from the services that own the data';
+  });
 
   /** Capacity is unknown, not zero, when booking-service could not be read. */
   readonly capacityLabel = computed(() => {

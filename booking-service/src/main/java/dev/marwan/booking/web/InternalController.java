@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -37,6 +39,22 @@ public class InternalController {
 
     private static final int SEED_ATTEMPTS = 5;
 
+    /**
+     * How long a sandbox slot survives before SandboxSweeper deletes it and its
+     * bookings.
+     *
+     * Every seeded slot gets one. A row with no expiry is a permanent row, and
+     * console sessions are unlimited by design — that is the case the
+     * sandbox_expires_at column was added to prevent, and leaving it null here
+     * would quietly fill a free-tier database with abandoned demos.
+     *
+     * Two hours rather than the drop's thirty idle minutes: the Redis record
+     * refreshes its TTL on every read, so a drop someone keeps watching outlives
+     * a fixed thirty minutes, and a slot deleted out from under a live session
+     * would show as seats that vanished.
+     */
+    private static final Duration SANDBOX_LIFETIME = Duration.ofHours(2);
+
     private final SlotStateProvider provider;
     private final SlotRepository slots;
 
@@ -58,14 +76,15 @@ public class InternalController {
     public Map<String, Long> seed() {
         for (int attempt = 1; ; attempt++) {
             try {
-                Slot slot = slots.saveAndFlush(new Slot(
+                Slot slot = new Slot(
                         LocalDate.now().plusDays(
                                 1 + ThreadLocalRandom.current().nextInt(SANDBOX_HORIZON_DAYS)),
                         String.format("%02d:%02d",
                                 ThreadLocalRandom.current().nextInt(24),
                                 ThreadLocalRandom.current().nextInt(60)),
-                        SANDBOX_CAPACITY));
-                return Map.of("slotId", slot.getId());
+                        SANDBOX_CAPACITY);
+                slot.expireAsSandboxAt(Instant.now().plus(SANDBOX_LIFETIME));
+                return Map.of("slotId", slots.saveAndFlush(slot).getId());
             } catch (DataIntegrityViolationException e) {
                 if (attempt == SEED_ATTEMPTS) {
                     throw e;

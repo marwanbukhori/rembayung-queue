@@ -1,15 +1,21 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { CanonicalDrop } from './canonical-drop';
+import { SandboxService } from './sandbox.service';
+import { StateService } from './state.service';
 
 /**
- * Your sandbox.
+ * Your sandbox: a drop of your own, on a slot of your own.
  *
- * The controls are present and disabled rather than absent: the layout the
- * design calls for is here, and the button says plainly that the endpoint
- * behind it does not exist yet. POST /internal/drops arrives with task 6, and
- * the load ladder and constraints panel with task 7.
+ * The drop id is the whole session. There is no account and nothing stored on
+ * the visitor's behalf — whoever is looking at this page is one of two people
+ * who hold the key, and both halves of a sandbox expire by themselves: the drop
+ * with its Redis key after thirty idle minutes, the slot with the sweeper.
+ * Starting again is therefore free, and the button never needs to clean up
+ * after the last attempt.
  */
 @Component({
   selector: 'rb-visitor',
+  imports: [CanonicalDrop],
   template: `
     <div class="stack">
       <section class="panel">
@@ -29,15 +35,30 @@ import { Component } from '@angular/core';
             <li>Push the admission rate up until the connection pool gives out, and watch oversold stay at zero.</li>
           </ol>
           <div>
-            <button class="btn btn-primary" disabled>Start a drop</button>
-            <p class="reason">
-              Not wired yet. Creating a drop needs POST /internal/drops on the gate, which task 6
-              adds; the gate today serves the canonical drop and per-visitor sandboxes read through
-              the same state endpoint the public page uses.
-            </p>
+            <button class="btn btn-primary" [disabled]="starting()" (click)="start()">
+              {{ starting() ? 'Starting…' : sandbox() ? 'Start another drop' : 'Start a drop' }}
+            </button>
+            @if (sandbox(); as s) {
+              <p class="reason">
+                Watching drop <span class="mono">{{ s.dropId }}</span> on slot
+                <span class="mono">{{ s.slotId }}</span>, admitting {{ s.admitRate }} a second.
+                It expires by itself after thirty idle minutes, and so does the slot behind it.
+              </p>
+            } @else if (failure(); as reason) {
+              <p class="reason">{{ reason }}</p>
+            } @else {
+              <p class="reason">
+                Seeds a slot on booking-service and creates a drop bound to it on the gate. Both
+                expire on their own, so there is nothing to tidy up afterwards.
+              </p>
+            }
           </div>
         </div>
       </section>
+
+      @if (sandbox()) {
+        <rb-canonical-drop heading="Your drop" />
+      }
 
       <section class="stack-16">
         <div class="section-head">
@@ -68,4 +89,30 @@ import { Component } from '@angular/core';
     }
   `
 })
-export class Visitor {}
+/**
+ * The poll loop follows this page: while the visitor's own drop is on screen
+ * the console reads that drop, and leaving puts the loop back on the canonical
+ * one. Without that, walking from here to the public page would show a stranger
+ * the visitor's sandbox under the heading "the canonical drop".
+ */
+export class Visitor implements OnInit, OnDestroy {
+  private readonly sandboxes = inject(SandboxService);
+  private readonly state = inject(StateService);
+
+  readonly sandbox = this.sandboxes.sandbox;
+  readonly starting = this.sandboxes.starting;
+  readonly failure = this.sandboxes.failure;
+
+  ngOnInit(): void {
+    this.state.watch(this.sandbox()?.dropId ?? null);
+  }
+
+  ngOnDestroy(): void {
+    this.state.watch(null);
+  }
+
+  start(): void {
+    // The page reads the drop; the slot comes back with it from the gate.
+    this.sandboxes.start((sandbox) => this.state.watch(sandbox.dropId));
+  }
+}

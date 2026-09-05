@@ -26,7 +26,6 @@ export class StateService {
   readonly transportError = signal<string | null>(null);
 
   private dropId: string | null = null;
-  private slotId: number | null = null;
 
   constructor() {
     this.poll();
@@ -34,10 +33,16 @@ export class StateService {
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
 
-  /** Task 6 calls this when a visitor starts a sandbox of their own. */
-  watch(dropId: string | null, slotId: number | null): void {
+  /**
+   * Point the loop at a drop — a visitor's own sandbox, or null for the
+   * canonical one.
+   *
+   * There is no slot to pass. The gate's drop state names the slot the drop
+   * sells and the console reads it from there, so the page cannot ask for one
+   * drop's queue beside another drop's seats.
+   */
+  watch(dropId: string | null): void {
     this.dropId = dropId;
-    this.slotId = slotId;
     this.poll();
   }
 
@@ -45,9 +50,6 @@ export class StateService {
     const params: Record<string, string> = {};
     if (this.dropId) {
       params['drop'] = this.dropId;
-    }
-    if (this.slotId !== null) {
-      params['slot'] = String(this.slotId);
     }
     this.http.get<ConsoleView>('/api/state', { params }).subscribe({
       next: (view) => {
@@ -61,6 +63,9 @@ export class StateService {
 
 function describe(err: unknown): string {
   const status = (err as { status?: number })?.status;
+  if (status === 401) {
+    return 'this console needs a key: open the link you were sent, with ?key= on the end';
+  }
   return status
     ? `the console answered ${status}`
     : 'the console is not answering';

@@ -1,6 +1,10 @@
 package dev.marwan.console;
 
+import dev.marwan.console.auth.AccessKey;
+import dev.marwan.console.auth.KeyFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -39,6 +43,29 @@ public class ConsoleConfiguration {
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .build();
+    }
+
+    @Bean
+    AccessKey accessKey(ConsoleProperties properties) {
+        return new AccessKey(properties.accessKey());
+    }
+
+    /**
+     * The key check, in front of every /api call and nothing else.
+     *
+     * Registered here with an explicit URL pattern rather than as a
+     * {@code @Component}, so the paths it guards are one line in one file
+     * instead of a rule spread across the endpoints that happen to remember it.
+     * Highest precedence: an unkeyed request must not reach a handler, an
+     * interceptor or a request log.
+     */
+    @Bean
+    FilterRegistrationBean<KeyFilter> keyFilter(AccessKey key) {
+        FilterRegistrationBean<KeyFilter> registration =
+                new FilterRegistrationBean<>(new KeyFilter(key));
+        registration.addUrlPatterns("/api/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
     }
 
     /** Injected rather than called statically so cache expiry is testable. */

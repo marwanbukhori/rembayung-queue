@@ -14,6 +14,7 @@ import java.time.Duration;
  * @param timeout         per-request budget against either service
  * @param cacheTtl        how long one aggregate is reused across viewers
  * @param namespace       the namespace pod health is read from
+ * @param accessKey       the one key that opens the console; unset means shut
  */
 @ConfigurationProperties(prefix = "console")
 public record ConsoleProperties(
@@ -23,4 +24,5 @@ public record ConsoleProperties(
         long canonicalSlot,
         Duration timeout,
         Duration cacheTtl,
-        String namespace) { }
+        String namespace,
+        String accessKey) { }
