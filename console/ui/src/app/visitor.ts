@@ -1,6 +1,5 @@
 import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
-import { Constraints } from './constraints';
 import { RunBanner } from './run-banner';
 import { RunPanel } from './run-panel';
 import { PodPulse } from './pod-pulse';
@@ -25,7 +24,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, Constraints, PodPulse, RunBanner, RunPanel, SeatMap, TrafficLog],
+  imports: [CanonicalDrop, PodPulse, RunBanner, RunPanel, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -38,22 +37,26 @@ import { StateService } from './state.service';
 
       @if (sandbox()) {
         <rb-run-banner />
-        <rb-canonical-drop heading="Your simulation, live" />
+
         <!--
-          Seats and the cluster side by side, because they are one thought: the
-          room filling up, and what the cluster did to fill it. Reading either
-          alone tells you half of a rush.
+          The sitting: one figure and the room it fills. The seat map replaces
+          the progress bar rather than sitting under it - two drawings of one
+          number, stacked, was the page saying the same thing twice.
         -->
-        <div class="glance">
-          <rb-seat-map />
-          <rb-pod-pulse />
-        </div>
-        <rb-constraints />
+        <rb-canonical-drop heading="Your simulation, live" [withSeatMap]="true" />
+
+        <!--
+          Live traffic before the cluster card: this is what you watch while a
+          rush is in flight, and the cluster card is what you consult afterwards
+          to explain what you saw.
+        -->
         <rb-traffic-log />
+        <rb-pod-pulse />
+
         <p class="reason">
           Every counter above stays at zero until a run reaches it. A sitting with no traffic
           against it is idle, not broken. If the namespace is out of CPU the run sits Pending and
-          the panel above says so in the scheduler's own words — that is the demonstration, not a
+          the cluster card says so in the scheduler's own words — that is the demonstration, not a
           fault.
         </p>
       }
@@ -117,12 +120,6 @@ import { StateService } from './state.service';
       seat grid auto-fills, so it simply uses fewer seats per row in a narrower
       column rather than overflowing.
     */
-    /*
-      Stacked, each full width. Side by side halved both: the sitting became a
-      ribbon too narrow to read as a room, and the cluster rows had to wrap.
-      Seats on top, because the seats are what the cluster is working for.
-    */
-    .glance { display: flex; flex-direction: column; gap: 16px; }
 
     .exit {
       border-top: 1px solid var(--line);

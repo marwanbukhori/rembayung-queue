@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { ClusterService } from './cluster.service';
+import { LoadService } from './load.service';
 import { StateService } from './state.service';
 
 
@@ -43,9 +44,12 @@ interface WorkloadRow {
   name: string;
   pods: PodGlyph[];
   millis: number;
-  /** Replica bounds, when an autoscaler governs this one. */
-  min: number | null;
+  /** What the autoscaler is allowed and what it currently wants. */
   max: number | null;
+  desired: number | null;
+  currentPercent: number | null;
+  targetPercent: number | null;
+  hasHpa: boolean;
   atCeiling: boolean;
   note: string | null;
   scaled: 'out' | 'in' | null;
@@ -75,6 +79,26 @@ interface WorkloadRow {
         </div>
         <span class="quota mono">{{ quotaLabel() }}</span>
       </div>
+
+      @if (blocked(); as why) {
+        <!--
+          Above the meter, because the meter is the evidence for it: the run
+          cannot be placed, and the next 40px are exactly where the budget went.
+        -->
+        <div class="blocked">
+          <div class="blocked-bar"></div>
+          <div class="blocked-body">
+            <div class="blocked-title">Your load run has not started: {{ why.reason }}</div>
+            <div class="blocked-text mono">{{ why.message }}</div>
+            <div class="blocked-text">
+              It asks for {{ why.cpuMillis }}m, and the meter below is where the budget went.
+              Nothing is broken — the scheduler is refusing to place a pod the namespace cannot
+              pay for, and it will place it by itself as soon as the budget frees up. Choosing
+              fewer customers is what frees it.
+            </div>
+          </div>
+        </div>
+      }
 
       <!--
         One bar for the whole namespace rather than a bar per workload. The
@@ -130,13 +154,41 @@ interface WorkloadRow {
                 <span class="millis mono">{{ row.millis }}m</span>
               </div>
 
-              @if (row.note) { <p class="note">{{ row.note }}</p> }
+              @if (row.hasHpa) {
+                <p class="note">
+                  {{ utilisation(row.currentPercent, row.targetPercent) }}@if (row.desired !== null
+                    && row.desired !== row.pods.length) {, wants {{ row.desired }}}@if (row.note) { — {{ row.note }}}
+                </p>
+              }
             </div>
           }
         </div>
+        @if (pool(); as p) {
+          <div class="pool">
+            <div class="pool-head">
+              <span class="mono">oracle pool</span>
+              <span class="mono muted-fg">{{ p.connections }} / {{ p.cap }} connections</span>
+            </div>
+            <div class="bar">
+              <span [class.info]="!p.saturated" [class.full]="p.saturated"
+                    [style.width.%]="p.percent"></span>
+            </div>
+            <div class="pool-note">
+              Each of {{ p.deployment }}'s pods above holds {{ p.perReplica }} connections, against
+              an Oracle Always Free cap near {{ p.cap }}.
+              {{ p.saturated ? 'Full: further claims get 503 with Retry-After.' : '' }}
+            </div>
+          </div>
+        }
       } @else {
-        <p class="empty">The Kubernetes API is not readable from here just now.</p>
+        <p class="empty">{{ detail() ?? 'The Kubernetes API is not readable from here just now.' }}</p>
       }
+
+      <p class="disclosure">
+        Load generated inside the cluster reaches queue-gate over the internal Service, so it
+        <strong>skips the public Route</strong>. It exercises the queue, the admission rate and the
+        seat invariant; it does not exercise the ingress path.
+      </p>
     </div>
   `,
   styles: `
@@ -240,8 +292,8 @@ interface WorkloadRow {
     @keyframes breathe { 50% { opacity: .55; } }
 
     .cpu { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .bar { flex: 1 1 auto; height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; }
-    .bar span {
+    .cpu .bar { flex: 1 1 auto; height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; }
+    .cpu .bar span {
       display: block;
       height: 100%;
       background: var(--info);
@@ -252,6 +304,37 @@ interface WorkloadRow {
 
     .note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); text-wrap: pretty; }
     .empty { margin: 0; padding: 20px 16px; font-size: 14px; color: var(--muted); }
+
+    /* Carried over with the markup: these were local to the constraints panel. */
+    .blocked { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .blocked-bar { flex: none; width: 4px; border-radius: 999px; background: var(--chip-warn-fg); }
+    .blocked-body { min-width: 0; }
+    .blocked-title { font-size: 15px; font-weight: 700; text-wrap: pretty; }
+    .blocked-text { font-size: 13px; color: var(--ink-soft); margin-top: 4px; text-wrap: pretty; }
+    .blocked-text.mono { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+    .pool { padding: 14px 16px; border-top: 1px solid var(--line); }
+    .pool-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 4px 12px;
+      margin-bottom: 8px;
+    }
+    .pool-note { font-size: 12px; color: var(--muted); margin-top: 8px; text-wrap: pretty; }
+    .muted-fg { color: var(--muted); }
+    /* The pool bar uses the global .bar (8px); only .full is local. */
+    .bar span.full { background: var(--dhl-red); }
+
+    .disclosure {
+      margin: 0;
+      padding: 14px 16px;
+      border-top: 1px solid var(--rule);
+      font-size: 13px;
+      color: var(--ink-soft);
+      text-wrap: pretty;
+    }
 
     @media (prefers-reduced-motion: reduce) {
       .pod.fresh { animation: none; }
@@ -265,6 +348,7 @@ interface WorkloadRow {
 export class PodPulse {
   private readonly state = inject(StateService);
   private readonly cluster = inject(ClusterService);
+  private readonly loads = inject(LoadService);
 
   /** Pod names seen on the previous read, so arrivals can be flashed. */
   private readonly known = signal<Set<string>>(new Set());
@@ -316,7 +400,9 @@ export class PodPulse {
 
   protected readonly quotaLabel = computed(() => {
     const quota = this.cluster.cluster()?.quota;
-    return quota ? `${quota.usedMillis}m of ${quota.hardMillis}m CPU` : 'quota unreadable';
+    return quota
+      ? `${quota.name} · ${quota.usedMillis}m of ${quota.hardMillis}m CPU`
+      : 'quota unreadable';
   });
 
   private readonly hard = computed(() => this.cluster.cluster()?.quota?.hardMillis ?? 3000);
@@ -330,20 +416,58 @@ export class PodPulse {
     return PodPulse.COLOURS[(i < 0 ? 0 : i) % PodPulse.COLOURS.length];
   }
 
-  protected readonly segments = computed(() =>
-    this.rows()
-      .filter((row) => row.millis > 0)
-      .map((row) => ({
-        name: row.name,
-        millis: row.millis,
-        percent: this.share(row.millis),
-        colour: this.colourFor(row.name)
-      })));
+  protected readonly segments = computed(() => {
+    const spending = this.rows().filter((row) => row.millis > 0);
+    const segments = spending.map((row) => ({
+      name: row.name,
+      millis: row.millis,
+      percent: this.share(row.millis),
+      colour: this.colourFor(row.name)
+    }));
+    // The rows only cover workloads with pods on screen, so without this the
+    // meter would not add up to the quota it claims to divide - CPU charged to
+    // something with no visible pod would simply vanish. The panel this
+    // replaced drew one aggregate bar from quota.percent and could not lose it.
+    const used = this.cluster.cluster()?.quota?.usedMillis ?? 0;
+    const accounted = spending.reduce((sum, row) => sum + row.millis, 0);
+    const other = used - accounted;
+    if (other > 0) {
+      // A literal colour: colourFor indexes the rows, and this is not one.
+      segments.push({ name: 'other', millis: other, percent: this.share(other), colour: 'var(--muted)' });
+    }
+    return segments;
+  });
 
   protected readonly freeMillis = computed(() => {
     const quota = this.cluster.cluster()?.quota;
     return quota ? quota.freeMillis : 0;
   });
+
+  /**
+   * A run the scheduler will not place, in the scheduler's own words.
+   *
+   * Constraints are content, not failure: a Pending Job is the namespace budget
+   * doing its job, and the panel that explains it sits with the meter showing
+   * where the budget went rather than on its own elsewhere.
+   */
+  protected readonly blocked = computed(() => {
+    const run = this.loads.run();
+    if (!run || run.phase !== 'PENDING' || !run.message) {
+      return null;
+    }
+    return { reason: run.reason ?? 'Pending', message: run.message, cpuMillis: run.cpuMillis };
+  });
+
+  protected readonly pool = computed(() => this.cluster.cluster()?.pool ?? null);
+  protected readonly detail = computed(() => this.cluster.cluster()?.detail ?? null);
+
+  /** Only meaningful where an autoscaler exists; "no metric yet" is a lie without one. */
+  protected utilisation(current: number | null, target: number | null): string {
+    if (current === null || target === null) {
+      return 'no cpu metric collected yet';
+    }
+    return `cpu ${current}% of a ${target}% target`;
+  }
 
   protected share(millis: number): number {
     return Math.min(100, Math.round((millis / this.hard()) * 100));
@@ -406,9 +530,16 @@ export class PodPulse {
           name,
           pods: glyphs,
           millis: spend?.millis ?? 0,
-          min: hpa?.min ?? null,
           max: hpa?.max ?? null,
-          atCeiling: !!hpa && hpa.current >= hpa.max,
+          desired: hpa?.desired ?? null,
+          currentPercent: hpa?.currentPercent ?? null,
+          targetPercent: hpa?.targetPercent ?? null,
+          hasHpa: !!hpa,
+          // Counted from the squares, not from hpa.current. The two disagree
+          // during a rollout, and a badge saying "at the ceiling" beside nine
+          // squares when the ceiling is ten is the kind of thing that makes a
+          // reader stop trusting the whole panel.
+          atCeiling: !!hpa && glyphs.length >= hpa.max,
           note: hpa?.note ?? null,
           scaled: moved.get(name) ?? null
         };

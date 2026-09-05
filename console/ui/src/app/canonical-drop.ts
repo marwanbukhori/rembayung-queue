@@ -1,4 +1,5 @@
 import { Component, computed, inject, input } from '@angular/core';
+import { SeatMap } from './seat-map';
 import { StateService } from './state.service';
 
 /**
@@ -11,6 +12,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-canonical-drop',
+  imports: [SeatMap],
   template: `
     <section class="stack-16">
       <div class="section-head">
@@ -21,7 +23,7 @@ import { StateService } from './state.service';
         <span class="meta">refreshes every 2s</span>
       </div>
 
-      <div class="cards">
+      <div class="cards" [class.sitting]="withSeatMap()">
         <div class="card seats">
           <div class="row-baseline">
             <div class="label">Seats taken</div>
@@ -34,9 +36,24 @@ import { StateService } from './state.service';
                 <div class="figure">{{ d.seatsTaken }}</div>
                 <div class="of">/ {{ d.capacity }}</div>
               </div>
-              <div class="bar"><span [style.width.%]="seatsPct()"></span></div>
+              <!--
+                The seat map is the bar, so the bar goes when the map is here.
+                Two drawings of one number, stacked, was the page saying the
+                same thing twice.
+              -->
+              @if (withSeatMap()) {
+                <rb-seat-map />
+              } @else {
+                <div class="bar"><span [style.width.%]="seatsPct()"></span></div>
+              }
               <div class="footnote">
-                <span>{{ d.admitted }} admitted</span>
+                <!--
+                  Bookings, not just seats: 120 taken against 60 bookings reads
+                  as a contradiction until somebody says each booking is a party
+                  of two. Admitted is not repeated - it belongs to the queue,
+                  which is the card beside this one.
+                -->
+                <span>{{ half(d.seatsTaken) }} bookings, 2 seats each</span>
                 <span>{{ d.remaining }} remaining</span>
               </div>
             } @else {
@@ -80,6 +97,10 @@ import { StateService } from './state.service';
     </section>
   `,
   styles: `
+    /* With the seat map in it, the seats card takes its own row. */
+    .cards.sitting { flex-wrap: wrap; }
+    .cards.sitting .seats { flex: 1 1 100%; }
+
     .cards { display: flex; flex-wrap: wrap; gap: 16px; }
     .seats { flex: 2 1 340px; }
     .queue { flex: 1 1 250px; }
@@ -120,6 +141,15 @@ export class CanonicalDrop {
 
   /** The visitor's own session names itself; everywhere else this is the shared one. */
   readonly heading = input('The public simulation');
+
+  /**
+   * Draw the sitting as seats rather than as a bar.
+   *
+   * Off by default so the overview page, which also renders this component, is
+   * unchanged: 250 squares are the right amount of detail on the page where a
+   * rush is being run, and too much on the page that only summarises one.
+   */
+  readonly withSeatMap = input(false);
   readonly oversoldNote = 'Across every simulation this cluster has run.';
 
   readonly drop = computed(() => this.state.view()?.drop ?? null);

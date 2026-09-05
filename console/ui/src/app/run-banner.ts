@@ -8,7 +8,9 @@ import { StateService } from './state.service';
  * A run takes about a minute and the interesting part is spread across the page:
  * the controls are at the top, the counters below them, the log below that. Miss
  * the moment it starts and there is nothing telling you a rush is in flight - so
- * this stays put and says so, with the two numbers that change fastest.
+ * this stays put and says so, with what the run itself is doing. It deliberately
+ * does not repeat waiting, admitted or seats: those are the cards immediately
+ * below it, and saying them here made one number appear three times on one page.
  *
  * It renders nothing at all when there is no simulation. A banner that is always
  * on screen stops being read.
@@ -77,11 +79,17 @@ export class RunBanner {
       return null;
     }
     const run = this.loads.run();
-    const counts = [
-      { label: 'waiting', value: drop.waiting },
-      { label: 'admitted', value: drop.admitted },
-      { label: `of ${drop.capacity} seats`, value: drop.seatsTaken }
-    ];
+    // The run, not the sitting. waiting, admitted and seats are the cards
+    // directly beneath this strip - repeating them here made seatsTaken the
+    // third rendering of one number on one page. vus and secondsElapsed are
+    // facts about the run itself, which is the only thing this strip is
+    // uniquely placed to describe, and nothing else on the page shows them.
+    const counts = run && run.phase !== 'NONE'
+      ? [
+          { label: 'customers offered', value: run.vus },
+          { label: 'seconds in', value: run.secondsElapsed }
+        ]
+      : [];
 
     switch (run?.phase) {
       case 'RUNNING':
@@ -93,12 +101,10 @@ export class RunBanner {
       case 'PENDING':
         return {
           tone: 'waiting', live: true, counts,
-          // The scheduler's own words appear in the constraints panel; this only
-          // has to say the run has not started, so a still page is explained.
           title: 'Waiting for the cluster',
-          detail: run?.reason
-            ? `The Job is Pending: ${run.reason}.`
-            : 'The Job is Pending while the scheduler finds room for it.'
+          // The scheduler's verbatim words are in the cluster card's callout;
+          // saying them twice on one page is how the reason got duplicated.
+          detail: 'The Job is Pending. The cluster card below has the scheduler\'s own words.'
         };
       case 'SUCCEEDED':
         return {
