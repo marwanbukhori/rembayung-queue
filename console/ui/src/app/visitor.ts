@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
 import { Constraints } from './constraints';
 import { LoadControl } from './load-control';
+import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
 import { StateService } from './state.service';
@@ -21,7 +22,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, LoadControl, Constraints],
+  imports: [CanonicalDrop, LoadControl, Constraints, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -73,6 +74,7 @@ import { StateService } from './state.service';
       @if (sandbox(); as s) {
         <rb-load-control [startingRate]="s.admitRate" />
         <rb-canonical-drop heading="Your simulation, live" />
+        <rb-traffic-log />
         <!--
           Said plainly, because the panel above appears full of zeros the moment
           a simulation starts, and a page of zeros reads as broken rather than

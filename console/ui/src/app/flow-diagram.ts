@@ -1,5 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { StateService } from './state.service';
+import { TrafficService } from './traffic.service';
 
 /**
  * How a booking is made, drawn rather than described.
@@ -30,7 +31,7 @@ import { StateService } from './state.service';
   selector: 'rb-flow-diagram',
   template: `
     <div class="frame">
-      <svg viewBox="0 0 1000 300" role="img"
+      <svg viewBox="0 0 1000 300" role="img" [class.flowing]="flowing()"
            [attr.aria-label]="summary()">
         <defs>
           <marker id="rb-arrow" viewBox="0 0 10 10" refX="9" refY="5"
@@ -130,6 +131,14 @@ import { StateService } from './state.service';
       text-anchor: middle;
     }
 
+    /*
+      Paused unless traffic is actually moving. The dots used to run forever, so
+      the picture looked identical whether a rush was in flight or nothing had
+      been started - which is precisely the thing that made the page feel like a
+      mock-up rather than an instrument.
+    */
+    .dot { animation-play-state: paused; opacity: .28; }
+    svg.flowing .dot { animation-play-state: running; opacity: 1; }
     .dot.flood { fill: var(--dhl-red); }
     .dot.trickle { fill: var(--ink); }
 
@@ -157,6 +166,10 @@ import { StateService } from './state.service';
 })
 export class FlowDiagram {
   private readonly state = inject(StateService);
+  private readonly traffic = inject(TrafficService);
+
+  /** Dots move when the system does. An idle page that animates is a lie. */
+  protected readonly flowing = computed(() => this.traffic.flowing());
 
   /** Staggered starts, so the dots space themselves along the hop. */
   readonly flood = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
