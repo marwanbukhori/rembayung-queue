@@ -14,8 +14,8 @@
 
 - **Constraints are content.** When an operation cannot run, the console names the limit and what is consuming it — never "something went wrong". A `Pending` Job against a real quota is a demonstration, not a failure to hide.
 - **Enumerated operations only.** No command box, no script path, no SQL from the browser. A console that runs arbitrary `oc` is a remote shell with a login form.
-- **The public surface has no write endpoints in existence** — not disabled ones, absent ones.
-- **Visitor keys are scoped by drop id, checked server-side on every request.** Ownership is never a UI concern.
+- **Everything is behind the one key**, including reads. With two users there is no reason to leave anything open, and one rule is easier to reason about than two.
+- **One key, checked server-side before any handler runs.** Drop ownership is deliberately not enforced — there is nobody to enforce it against.
 - **The console's ServiceAccount cannot read Secrets**, matching the boundary `rembayung-cd` already proves.
 - **Sessions are unlimited.** Create, run, discard, repeat. Idle drops are swept 30 minutes after their last request.
 - **Read state through the Phase 6 providers.** `SlotStateProvider` and `QueueStateProvider` are the single computation of seats, oversold and queue depth. Nothing recomputes them.
@@ -1026,17 +1026,21 @@ git log -1 --format=%B
 
 ---
 
-## Task 6: Access keys and visitor sandboxes
+## Task 6: One access key, and sandbox drops
 
 **Files:**
-- Create: `console/src/main/java/dev/marwan/console/auth/AccessKeys.java`, `auth/KeyFilter.java`, `auth/Tier.java`
+- Create: `console/src/main/java/dev/marwan/console/auth/AccessKey.java`, `auth/KeyFilter.java`
 - Create: `console/src/main/java/dev/marwan/console/ops/DropOps.java`
-- Modify: `console/src/main/java/dev/marwan/console/web/StateController.java`
-- Test: `console/src/test/java/dev/marwan/console/auth/AccessKeysTest.java`
+- Modify: `queue-gate/src/main/java/dev/marwan/gate/web/InternalController.java`
+- Test: `console/src/test/java/dev/marwan/console/auth/AccessKeyTest.java`
 
 **Interfaces:**
-- Consumes: booking-service `POST /internal/slots`, queue-gate's `DropRegistry` via a new `POST /internal/drops` endpoint added in this task.
-- Produces: `Tier` enum `PUBLIC, VISITOR, OPERATOR`; `POST /api/drops` creating a sandbox; `POST /api/drops/{id}/open`.
+- Consumes: booking-service `POST /internal/slots`; queue-gate `POST /internal/drops` added here; `DropRegistry.create` from Task 1.
+- Produces: `POST /api/drops` creating a sandbox, `POST /api/drops/{id}/open`. **Task 7 extends these.**
+
+**There are no tiers.** An earlier draft had three, with per-drop ownership
+checks. The audience is two trusted people, so all of that protected users from
+each other who do not exist. One key, one dashboard, everything visible.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1045,66 +1049,65 @@ package dev.marwan.console.auth;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
-class AccessKeysTest {
+class AccessKeyTest {
 
-    private final AccessKeys keys = new AccessKeys(
-            "visitor-abc:visitor:2026-12-31,ops-xyz:operator:2026-12-31,old-key:visitor:2020-01-01",
-            () -> LocalDate.of(2026, 9, 5));
+    private final AccessKey key = new AccessKey("s3cret-demo-key");
 
     @Test
-    void anAbsentKeyIsPublicRatherThanRejected() {
-        assertThat(keys.tierOf(null)).isEqualTo(Tier.PUBLIC);
-        assertThat(keys.tierOf("")).isEqualTo(Tier.PUBLIC);
+    void theConfiguredKeyIsAccepted() {
+        assertThat(key.accepts("s3cret-demo-key")).isTrue();
     }
 
     @Test
-    void aKeyResolvesToItsTier() {
-        assertThat(keys.tierOf("visitor-abc")).isEqualTo(Tier.VISITOR);
-        assertThat(keys.tierOf("ops-xyz")).isEqualTo(Tier.OPERATOR);
+    void anythingElseIsRejected() {
+        assertThat(key.accepts("wrong")).isFalse();
+        assertThat(key.accepts("")).isFalse();
+        assertThat(key.accepts(null)).isFalse();
     }
 
-    // An expired key must not silently degrade to PUBLIC — that would let a
-    // revoked recipient keep reading while believing they still had access, and
-    // would hide the revocation from the audit log.
+    // Compared in constant time. A dashboard is not a high-value target, but a
+    // string comparison that returns early on the first differing character
+    // leaks the key's prefix to anyone willing to time the responses, and the
+    // fix is one method call.
     @Test
-    void anExpiredKeyIsRejectedRatherThanDowngraded() {
-        assertThat(keys.tierOf("old-key")).isEqualTo(Tier.REJECTED);
-    }
-
-    @Test
-    void anUnrecognisedKeyIsRejected() {
-        assertThat(keys.tierOf("made-up")).isEqualTo(Tier.REJECTED);
+    void comparisonDoesNotShortCircuitOnLength() {
+        assertThat(key.accepts("s3cret-demo-key-longer")).isFalse();
+        assertThat(key.accepts("s3")).isFalse();
     }
 }
 ```
 
 - [ ] **Step 2: Run it, watch it fail, then implement**
 
-`AccessKeys` parses a comma-separated `key:tier:expiry` string supplied by the `CONSOLE_ACCESS_KEYS` environment variable, sourced from a Secret. `Tier` is `PUBLIC, VISITOR, OPERATOR, REJECTED`. `KeyFilter` resolves the tier from the `X-Console-Key` header or a `key` query parameter, stores it on the request, and **rejects with 403 before any handler runs** when the tier is `REJECTED`.
+`AccessKey` wraps the value of `CONSOLE_ACCESS_KEY`, sourced from a Secret, and
+compares with `java.security.MessageDigest.isEqual` on UTF-8 bytes.
+
+`KeyFilter` reads `X-Console-Key` or the `key` query parameter. **It rejects with
+401 before any handler runs.** Read-only `GET /api/state` and `GET /api/docs` are
+also gated — with two users there is no reason to leave anything open, and one
+rule is easier to reason about than two.
 
 - [ ] **Step 3: Add drop creation to the gate**
 
-`POST /internal/drops` on queue-gate, taking `{"admitRate": 8, "slotId": 4242}` and returning the `DropRecord`. It calls `DropRegistry.create`.
+`POST /internal/drops` on queue-gate taking `{"admitRate": 8, "slotId": 4242}`
+and returning the `DropRecord`, delegating to `DropRegistry.create`.
 
-- [ ] **Step 4: Wire the console's DropOps**
+- [ ] **Step 4: Wire DropOps**
 
-`POST /api/drops` requires `VISITOR` or `OPERATOR`. It calls booking-service to seed a slot, then queue-gate to create a drop bound to it, and returns both ids. **The drop id is the visitor's session** — there is nothing else to store.
+`POST /api/drops` seeds a slot on booking-service, creates a drop bound to it on
+queue-gate, and returns both ids. **The drop id is the session** — there is
+nothing else to store, and no ownership to check.
 
-- [ ] **Step 5: Enforce ownership server-side**
-
-Every `/api/drops/{id}/...` route checks that the caller's key created that drop, using a Redis-free in-memory map on the console keyed by drop id. **A visitor naming another visitor's drop gets 403**, and a test must prove it.
-
-- [ ] **Step 6: Run the suites and commit**
+- [ ] **Step 5: Run the suites and commit**
 
 ```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
 ./console/mvnw -f console test > /tmp/c.log 2>&1; echo "exit=$?"
 ./queue-gate/mvnw -f queue-gate test > /tmp/qg.log 2>&1; echo "exit=$?"
 git add console queue-gate
-git commit -m "Let a keyed visitor create a sandbox of their own"
+git commit -m "Gate the console behind one shared key"
 git log -1 --format=%B
 ```
 
@@ -1119,7 +1122,7 @@ git log -1 --format=%B
 - Test: `console/src/test/java/dev/marwan/console/state/ClusterStateTest.java`
 
 **Interfaces:**
-- Consumes: fabric8 `KubernetesClient`; `Tier` from Task 6.
+- Consumes: fabric8 `KubernetesClient`; `AccessKey` and `KeyFilter` from Task 6.
 - Produces: `POST /api/drops/{id}/load` launching a Job; `GET /api/cluster` returning quota, pod and HPA state.
 
 - [ ] **Step 1: Launch k6 as a Job**
@@ -1209,10 +1212,10 @@ ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml -e im
 CONSOLE=https://$(oc get route console -o jsonpath='{.spec.host}')
 curl -s -o /dev/null -w "  /          -> %{http_code}\n" $CONSOLE/
 curl -s -o /dev/null -w "  /api/state -> %{http_code}\n" $CONSOLE/api/state
-curl -s -o /dev/null -w "  POST /api/drops without a key -> %{http_code}\n" -XPOST $CONSOLE/api/drops
+curl -s -o /dev/null -w "  any endpoint without a key -> %{http_code}\n" $CONSOLE/api/state
 ```
 
-Expected: `200`, `200`, and **`403`** for the unkeyed write. If the third returns anything else, stop — the public surface has a write endpoint and that is the one thing this design forbids.
+Expected: the first two `200` only when a key is supplied, and **`401`** without one. If an unkeyed request returns anything but 401, stop — the gate is not closed.
 
 - [ ] **Step 5: Commit**
 
@@ -1250,6 +1253,6 @@ git log -1 --format=%B
 
 **2. Placeholder scan.** Every code step carries real content. Three steps deliberately verify before depending on a value rather than asserting one: Task 1 Step 1 (read `DropProperties` — seven components), Task 4 Step 2 (both new artifacts resolve), and Task 8 Step 1 (the ServiceAccount boundary). All three exist because Phases 6 and 7 lost time to exactly those assumptions.
 
-**3. Type consistency.** `DropRecord` is `(id, opensAt, closesAt, ticketCap, admitRate, admissionWindow, ticketTtl, slotId)` in Task 1 and used with those accessors in Tasks 2, 3 and 6. `DropRegistry.DEFAULT_ID` is referenced identically in Tasks 1, 2 and 3. `DemoState`'s ten components in Task 4 match its test. `Tier` is `PUBLIC, VISITOR, OPERATOR, REJECTED` in Task 6 and used unchanged in Tasks 7 and 8.
+**3. Type consistency.** `DropRecord` is `(id, opensAt, closesAt, ticketCap, admitRate, admissionWindow, ticketTtl, slotId)` in Task 1 and used with those accessors in Tasks 2, 3 and 6. `DropRegistry.DEFAULT_ID` is referenced identically in Tasks 1, 2 and 3. `DemoState`'s ten components in Task 4 match its test. `AccessKey.accepts(String)` is defined in Task 6 and used unchanged in Tasks 7 and 8. There is no tier type; an earlier draft had one and it was removed once the audience turned out to be two trusted people.
 
 **One gap named rather than hidden.** Task 3 requires `QueueStateProvider.currentFor(String dropId)`, which Phase 6 did not build — its provider reads the global counter only. Task 3 Step 5 adds the overload and keeps `current()` delegating to it so the existing gauges and their tests are untouched. Flagged because it is the one place this plan reaches back into a finished phase.

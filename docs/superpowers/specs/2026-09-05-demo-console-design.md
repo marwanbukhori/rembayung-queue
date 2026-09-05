@@ -91,36 +91,40 @@ always a demo artefact rather than a model of the domain.
 
 ## 4. Authentication
 
-**Issued access keys**, not OpenShift OAuth.
+**One shared access key. No tiers.**
 
-You mint a key per recipient — `hiring-manager-acme`, `recruiter-b` — and give it
-out. The console accepts it as a header or a URL fragment, stores nothing about
-the person, and every operator action is logged against the key that performed
-it.
+The audience is two people: the repository owner and a hiring manager. An earlier
+draft of this spec built three tiers — public, visitor, operator — with
+per-request ownership checks and a split between authenticated and
+unauthenticated routes. **That was designed for an audience that does not
+exist.** Two trusted users do not need to be protected from each other.
 
-Why this over the alternatives:
+So: a single key, supplied as `?key=…` in the URL or an `X-Console-Key` header,
+gating the entire dashboard. You send the hiring manager one link with the key in
+it and they are in.
 
-| Option | Verdict |
-|---|---|
-| OpenShift OAuth | **Rejected.** Gates on cluster identity the visitor cannot have — the flaw in the first draft. |
-| One shared password | Workable, but a single revocation revokes everyone and the audit log cannot tell them apart. |
-| **Per-recipient keys** | **Chosen.** Revoke one without disturbing others; the log says who ran what; issuing one is free. |
-| No auth | Rejected. Even sandboxed, this triggers deploys and consumes cluster resources. |
+**It is still gated, and that is not paranoia.** The dashboard is on the public
+internet and its buttons create Kubernetes Jobs, restart Deployments and write to
+a database. An open one would be a stranger's compute budget within a day. One
+key is the smallest thing that prevents that.
 
-Keys live in a Kubernetes Secret as a simple map, so adding or revoking one is a
-`oc patch` and a pod restart — no user store, no password hashing, no session
-database. Expiry is a date in the value; the console refuses a key past it.
+The key lives in a Kubernetes Secret. Rotating it is `oc patch` plus a pod
+restart. There is no user store, no password hashing, and no session database —
+the key *is* the session.
 
-**Three tiers, because not every operation deserves the same trust:**
+**What this removes from the design**, all of it work that existed only to
+separate users from each other:
 
-```
-public      no key     read-only: live state, docs, deploy history
-visitor     a key      own sandbox: create a drop, run load, book, reset
-operator    your key   global: deploy, roll back, scale, edit the canonical slot
-```
+- the `Tier` enum and per-tier route rules
+- per-drop ownership checks on every request
+- a public surface distinct from an authenticated one
+- confirmation dialogs framed as protecting other people's data
 
-A hiring manager gets a **visitor** key. It cannot touch slot 1, cannot deploy,
-cannot scale. It can do everything interesting inside its own sandbox.
+**What it keeps, and why:** per-visitor sandbox drops stay. Not for isolation
+now, but because they are what makes the demo *re-runnable* — "start a fresh
+drop" is a safe, instant, repeatable action, where "reset the shared slot" is a
+destructive one you would hesitate over mid-demonstration. Two people using it at
+once still get their own, which costs nothing extra now that it exists.
 
 ---
 
@@ -210,7 +214,7 @@ between a stranger understanding the system in two minutes and closing the tab.
 
 ## 6. What the console does
 
-### Public — no key
+### The dashboard — one key, everything visible
 
 Live state of the canonical drop, pod health, `oversold = 0`, deploy history read
 from Deployment annotations, links out to OpenShift, Dynatrace and Splunk (with a
@@ -218,7 +222,7 @@ plain note that the last two are trials and may have expired), and the
 documentation — nine notes, seven specs, five plans — rendered from Markdown
 baked into the image.
 
-### Visitor — an issued key
+### Running a drop
 
 ```
   Your drop                                    d-7f3a91
@@ -238,7 +242,7 @@ service starts refusing with `503` and `Retry-After` — **and the invariant sti
 holds at zero.** A visitor discovering that themselves is worth more than any
 paragraph in a README.
 
-### Operator — your key
+### Operations
 
 Deploy a tag, roll back, scale, open the canonical drop, reset slot 1, run the
 keepalive job.
@@ -247,8 +251,8 @@ keepalive job.
 Phase 5 proved the safety net works unattended: a bad tag times out, rolls back
 each service to its own previous tag, re-verifies, and exits non-zero, with the
 site serving `200` throughout. "Deploy something broken and watch it heal" is the
-strongest thing this project can show. It stays operator-tier because it affects
-everyone, not because it is dangerous.
+strongest thing this project can show. It is available to anyone holding the
+key, which is both of you.
 
 ---
 
@@ -256,8 +260,9 @@ everyone, not because it is dangerous.
 
 - **Enumerated operations only.** No command box, no script path, no SQL from the
   browser. A console that runs arbitrary `oc` is a remote shell with a login form.
-- **Visitor keys are scoped by drop id**, checked server-side on every request.
-  A visitor naming someone else's drop is refused; ownership is not a UI concern.
+- **One key, checked server-side on every mutating request.** With two trusted
+  users there is nothing to scope drops against, so drop ownership is not
+  enforced — a deliberate simplification, not an oversight.
 - **The ServiceAccount cannot read Secrets** — the same boundary `rembayung-cd`
   already proved with `oc auth can-i get secrets` → `no`.
 - **SQL is parameterised and enumerated**, and visitor-tier SQL is confined to
@@ -326,7 +331,7 @@ manager running a real drop unaided. Six and seven are for you, and can slip.
 
 | Decision | Chosen | Rationale |
 |---|---|---|
-| Auth | Per-recipient issued keys | OpenShift OAuth gates on cluster identity the visitor cannot have; one shared password cannot be revoked or attributed individually |
+| Auth | One shared key, no tiers | The audience is two trusted people. Tiers, ownership checks and a public/authenticated split were designed for an audience that does not exist. |
 | Isolation | Per-visitor sandbox drops | Turns "reset" from a destructive global action into creating a new object; removes visitor-vs-visitor interference and most confirmation dialogs |
 | Gate change | Namespace Redis keys, move drop windows into Redis | One global counter and restart-only config cannot serve concurrent visitors |
 | Load generation | In-cluster k6 Job, capped at 200 VUs | A stranger cannot run k6 on their laptop. 200 is the measured ceiling above which the router sheds, so the cap costs nothing real |
