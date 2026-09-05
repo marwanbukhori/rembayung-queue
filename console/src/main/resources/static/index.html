@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rembayung console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* Deliberately the design's palette, so even the fallback looks like the
+       same product rather than a stack trace. */
+    body {
+      margin: 0;
+      padding: 48px 16px;
+      background: #F7F6F4;
+      color: #1A1A1A;
+      font-family: 'Source Sans 3', 'Segoe UI', Helvetica, sans-serif;
+      line-height: 1.6;
+    }
+    main { max-width: 60ch; margin: 0 auto; }
+    h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.015em; margin: 0 0 12px; }
+    p { color: #4A4A4A; }
+    code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+    a { color: #D40511; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>The console is running</h1>
+  <p>
+    The Angular page is not on this classpath. It is built by the node stage of
+    <code>console/Dockerfile</code> and served from <code>/app/static</code> in the image; on a
+    laptop, run <code>npm run build</code> in <code>console/ui</code> and this file is superseded.
+  </p>
+  <p>The state the page reads is available regardless: <a href="/api/state">/api/state</a>.</p>
+</main>
+</body>
+</html>

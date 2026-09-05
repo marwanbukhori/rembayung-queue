@@ -1,0 +1,331 @@
+/*
+ * Lifted from console/design/demo-console-v3.html, which is the repository
+ * owner's design and the source of truth for this page.
+ *
+ * The hex values are DHL's and are reproduced exactly. They are the part that
+ * makes the page look deliberate rather than defaulted, so they live here as
+ * named tokens instead of being retyped into components where one of them could
+ * drift a digit.
+ */
+:root {
+  --dhl-red: #D40511;
+  --dhl-red-dark: #A80410;
+  --dhl-yellow: #FFCC00;
+  --dhl-yellow-edge: #E6B800;
+
+  --ink: #1A1A1A;
+  --ink-soft: #4A4A4A;
+  --muted: #767676;
+  --line: #D9D9D9;
+  --rule: #EDEDED;
+  --white: #FFFFFF;
+
+  --canvas: #F7F6F4;
+  --track: #EEECE8;
+  --info: #00558C;
+  --highlight: #FFF3C4;
+
+  --chip-ok-bg: #E4F2E9;
+  --chip-ok-fg: #007A33;
+  --chip-bad-bg: #FDE7E8;
+  --chip-bad-fg: #D40511;
+  --chip-warn-bg: #FCF0DC;
+  --chip-warn-fg: #B36A00;
+  --chip-info-bg: #E2EEF6;
+  --chip-info-fg: #00558C;
+  --chip-neutral-bg: #EEECE8;
+  --chip-neutral-fg: #4A4A4A;
+
+  --disabled-bg: #EEECE8;
+  --disabled-fg: #9A9A9A;
+  --on-dark-soft: #CFCFCF;
+
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.2, 0, .2, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--canvas);
+}
+
+body {
+  color: var(--ink);
+  font-family: 'Delivery', 'DHL Delivery', 'Source Sans 3', 'Segoe UI', 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--dhl-red); text-underline-offset: .15em; }
+a:hover { color: var(--dhl-red-dark); }
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ---- shared shapes ------------------------------------------------------ */
+
+.card {
+  min-width: 0;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 24px;
+}
+
+.panel {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.accent-top { height: 4px; background: var(--dhl-yellow); }
+
+.stack { display: flex; flex-direction: column; gap: 32px; }
+.stack-16 { display: flex; flex-direction: column; gap: 16px; }
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.sub {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.lede {
+  margin: 0;
+  font-size: 16px;
+  color: var(--ink-soft);
+  max-width: 66ch;
+  text-wrap: pretty;
+}
+
+.mono {
+  font-family: var(--mono);
+  letter-spacing: .04em;
+}
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .04em;
+}
+
+/* ---- buttons ------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 24px;
+  min-height: 44px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+  transition: background 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+}
+
+.btn-primary { background: var(--dhl-red); color: var(--white); border: 2px solid transparent; }
+.btn-primary:hover:not(:disabled) { background: var(--dhl-red-dark); color: var(--white); }
+
+.btn-secondary { background: transparent; color: var(--ink); border: 2px solid var(--ink); }
+.btn-secondary:hover:not(:disabled) { background: var(--ink); color: var(--white); }
+
+.btn:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  border: 2px solid transparent;
+  cursor: not-allowed;
+}
+
+.btn-tertiary {
+  background: transparent;
+  border: 0;
+  color: var(--dhl-red);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-tertiary:hover { background: var(--chip-bad-bg); color: var(--dhl-red-dark); }
+
+.btn-crumb {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dhl-red);
+  cursor: pointer;
+}
+.btn-crumb:hover { color: var(--dhl-red-dark); }
+
+.nav-tab {
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  opacity: .7;
+}
+.nav-tab.on { border-bottom-color: var(--ink); opacity: 1; }
+
+/* ---- chips -------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.chip-ok { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+.chip-bad { background: var(--chip-bad-bg); color: var(--chip-bad-fg); }
+.chip-warn { background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
+.chip-info { background: var(--chip-info-bg); color: var(--chip-info-fg); }
+.chip-neutral { background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); }
+
+/* ---- tables ------------------------------------------------------------- */
+
+.scroller {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+}
+
+table { border-collapse: collapse; width: 100%; }
+
+th {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  padding: 12px 16px;
+  background: var(--canvas);
+  border-bottom: 2px solid var(--ink);
+  white-space: nowrap;
+  text-align: left;
+}
+th.right { text-align: right; }
+
+td {
+  padding: 12px 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+td.mono { font-family: var(--mono); letter-spacing: .04em; white-space: nowrap; }
+td.muted { color: var(--ink-soft); }
+td.right { text-align: right; }
+
+/* ---- numbers ------------------------------------------------------------ */
+
+.figure {
+  font-family: var(--mono);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* The claim the whole project makes, so it is the largest number on the page. */
+.figure-claim {
+  font-family: var(--mono);
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 10px 0;
+}
+
+.bar {
+  height: 8px;
+  background: var(--track);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 180ms var(--ease);
+}
+.bar > span.info { background: var(--info); }
+
+/* ---- the unavailable state ---------------------------------------------- */
+
+/*
+ * A dependency being unreachable is ordinary, so this is a normal state of the
+ * page rather than an error screen: the layout holds, and the reason takes the
+ * place of the numbers instead of the page going blank.
+ */
+.unknown {
+  font-family: var(--mono);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--muted);
+}
+.reason {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}

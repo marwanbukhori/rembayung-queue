@@ -1,0 +1,12 @@
+target/*
+!target/*.jar
+.git/
+.gitignore
+*.md
+.mvn/wrapper/maven-wrapper.jar
+# The node stage installs and builds from the manifests, so a host node_modules
+# or a stale dist must not be copied in over it.
+ui/node_modules/
+ui/dist/
+ui/.angular/
+design/

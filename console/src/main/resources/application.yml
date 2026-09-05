@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: console
+  web:
+    resources:
+      # The Angular build first, the classpath second. In the image the node
+      # stage's output lands at /app/static; on a laptop it is ui/dist. The
+      # classpath copy is only the note you get when the UI has not been built,
+      # and it must stay second or it would shadow the real page.
+      static-locations: file:${console.static-path}, classpath:/static/
+
+server:
+  port: 8082
+
+console:
+  booking-base-url: ${BOOKING_BASE_URL:http://localhost:8081}
+  gate-base-url: ${GATE_BASE_URL:http://localhost:8080}
+  canonical-drop: default
+  canonical-slot: 1
+  # Short enough that one wedged service cannot hold a request thread per
+  # viewer per poll.
+  timeout: PT2S
+  # The page polls every 2s and any number of people may have it open. Without
+  # this, viewer count multiplies straight into load on the services the console
+  # exists to watch.
+  cache-ttl: PT1S
+  namespace: ${CONSOLE_NAMESPACE:rembayung}
+  static-path: ${CONSOLE_STATIC_PATH:./ui/dist/ui/browser/}
+
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      exposure:
+        # Management port 9090 only — it is not on the public Route.
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
