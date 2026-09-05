@@ -34,10 +34,13 @@ export class SandboxService {
   readonly starting = signal(false);
   readonly failure = signal<string | null>(null);
 
-  start(onStarted: (sandbox: Sandbox) => void): void {
+  start(admitRate: number, onStarted: (sandbox: Sandbox) => void): void {
     this.starting.set(true);
     this.failure.set(null);
-    this.http.post<Sandbox>('/api/drops', {}).subscribe({
+    // The rate is chosen before the sitting exists, so it is sent with the
+    // request that opens it rather than applied afterwards - otherwise the first
+    // seconds of every run happen at a rate nobody picked.
+    this.http.post<Sandbox>('/api/drops', { admitRate }).subscribe({
       next: (sandbox) => {
         this.sandbox.set(sandbox);
         this.starting.set(false);

@@ -138,6 +138,11 @@ export class CanonicalDrop {
   });
 
   /** Capacity is unknown, not zero, when booking-service could not be read. */
+  /** Each booking is a party of two, fixed by the load script. */
+  protected half(seats: number): number {
+    return Math.floor(seats / 2);
+  }
+
   readonly capacityLabel = computed(() => {
     const d = this.drop();
     return d && d.available ? String(d.capacity) : '—';

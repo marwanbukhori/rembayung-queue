@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
 import { Constraints } from './constraints';
-import { LoadControl } from './load-control';
 import { RunBanner } from './run-banner';
+import { RunPanel } from './run-panel';
+import { SeatMap } from './seat-map';
 import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
@@ -23,7 +24,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, LoadControl, Constraints, RunBanner, TrafficLog],
+  imports: [CanonicalDrop, Constraints, RunBanner, RunPanel, SeatMap, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -32,54 +33,12 @@ import { StateService } from './state.service';
         <span style="color: var(--ink);">Your simulation</span>
       </div>
 
-      <section class="panel">
-        <div class="accent-top"></div>
-        <div class="body">
-          <div>
-            <h1>Your simulation</h1>
-            <p style="margin: 0; font-size: 17px; color: var(--ink-soft); max-width: 66ch; text-wrap: pretty;">
-              A 9pm opening of your own: its own slot row of 250 seats, its own ticket counter, its
-              own admission window. Nothing you do here touches the public slot or anyone else
-              looking at this page, and starting again is free.
-            </p>
-          </div>
-          <div class="start-step" [class.done]="sandbox()">
-            <div class="card-title">
-              <span class="step-num mono" [class.ticked]="sandbox()">{{ sandbox() ? '✓' : '1' }}</span>
-              Start a simulation
-              @if (sandbox()) { <span class="done-tag mono">done</span> }
-            </div>
-            <p class="sub">
-              Seeds a fresh 250-seat slot and a ticket counter of your own, in about a second. This
-              opens an <strong>empty</strong> queue — step 2 below is what puts people into it.
-            </p>
-          </div>
-          <div>
-            <button class="btn btn-primary" [disabled]="starting()" (click)="start()">
-              {{ starting() ? 'Starting…' : sandbox() ? 'Start another simulation' : 'Start a simulation' }}
-            </button>
-            @if (sandbox(); as s) {
-              <p class="reason">
-                Your own sitting of 250 seats is open, admitting {{ s.admitRate }} a second.
-                It clears itself up after thirty idle minutes, and nothing you do here touches
-                anyone else looking at this page.
-              </p>
-            } @else if (failure(); as reason) {
-              <p class="reason">{{ reason }}</p>
-            } @else {
-              <p class="reason">
-                Seeds a slot on booking-service and opens a session bound to it on the gate. Both
-                expire on their own, so there is nothing to tidy up afterwards.
-              </p>
-            }
-          </div>
-        </div>
-      </section>
+      <rb-run-panel />
 
-      @if (sandbox(); as s) {
+      @if (sandbox()) {
         <rb-run-banner />
-        <rb-load-control [startingRate]="s.admitRate" />
         <rb-canonical-drop heading="Your simulation, live" />
+        <rb-seat-map />
         <rb-traffic-log />
         <!--
           Said plainly, because the panel above appears full of zeros the moment
@@ -198,11 +157,4 @@ export class Visitor implements OnInit, OnDestroy {
     this.loads.watch(null);
   }
 
-  start(): void {
-    // The page reads the session; the slot comes back with it from the gate.
-    this.sandboxes.start((sandbox) => {
-      this.state.watch(sandbox.dropId);
-      this.loads.watch(sandbox.dropId, sandbox.admitRate);
-    });
-  }
 }
