@@ -8,13 +8,15 @@ import io.fabric8.kubernetes.api.model.PodCondition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import io.fabric8.kubernetes.api.model.OwnerReference;
+
+import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
@@ -132,27 +134,20 @@ public class ObservabilityProbe {
 
         String endpoint = hostOf(hecUrl);
         try {
-            HttpResponse<String> response = httpClient(trustSelfSigned).send(
-                    HttpRequest.newBuilder(URI.create(trimSlash(hecUrl) + "/services/collector/health"))
-                            .timeout(HTTP_TIMEOUT)
-                            .GET()
-                            .build(),
-                    HttpResponse.BodyHandlers.ofString());
-            boolean healthy = response.statusCode() == 200;
+            Reply reply = askCollector(trimSlash(hecUrl) + "/services/collector/health",
+                    trustSelfSigned);
+            boolean healthy = reply.status() == 200;
             return new ObservabilityStatus.Splunk(endpoint, healthy,
-                    healthy ? "The collector answered: " + oneLine(response.body())
-                            : "The collector answered HTTP " + response.statusCode() + ".",
+                    healthy ? "The collector answered: " + oneLine(reply.body())
+                            : "The collector answered HTTP " + reply.status() + ".",
                     shippers);
         } catch (Exception e) {
-            // Interrupt included: this runs on a request thread and swallowing the
-            // flag would hide a shutdown from everything further up the stack.
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
             return new ObservabilityStatus.Splunk(endpoint, false,
                     "Could not reach the collector: " + KubernetesAccess.summarise(e), shippers);
         }
     }
+
+    private record Reply(int status, String body) { }
 
     // ------------------------------------------------------------- Dynatrace
 
@@ -161,8 +156,12 @@ public class ObservabilityProbe {
             String options = env(container, "JAVA_TOOL_OPTIONS");
             boolean injected = options != null && options.contains(AGENT_MARKER);
             if (!injected) {
+                // redis is a real part of this system and will never carry a Java
+                // agent. Saying "no OneAgent on this JVM" of it read as a fault
+                // rather than as a category, and made the panel look half-broken.
                 return new ObservabilityStatus.Feed(workloadOf(pod), false,
-                        "no OneAgent on this JVM");
+                        options == null ? "not a Java workload - nothing to attach to"
+                                        : "no OneAgent on this JVM");
             }
             // Ready is the half that makes this a measurement rather than a claim:
             // the JVM will not reach it if the agent library is missing or wrong.
@@ -191,13 +190,24 @@ public class ObservabilityProbe {
             if (containers.isEmpty()) {
                 continue;
             }
-            String workload = workloadOf(pod);
-            // Load-test Jobs come and go every run; they are not part of the
-            // system being observed and would churn this list on every poll.
-            if (workload.startsWith("load-")) {
+            // Job pods - load runs and the keepalive CronJob - come and go every
+            // few minutes. They are not part of the system being observed, and
+            // listing them churned this panel on every poll. Read from
+            // ownerReferences rather than the name, because a Job's pod name is
+            // only conventionally related to the Job that made it.
+            if (ownedByJob(pod)) {
                 continue;
             }
-            byWorkload.putIfAbsent(workload, reader.read(pod, containers.getFirst()));
+            // The BEST pod for the workload, not the first one seen.
+            //
+            // queue-gate runs three replicas and the HPA adds more under load, so
+            // the first pod in an arbitrary list order is regularly one that is
+            // still starting - and reporting the whole workload as uninstrumented
+            // because one replica has not finished booting is exactly the false
+            // negative this panel exists to avoid. It reported precisely that on
+            // its first deploy, against three pods that were all Ready.
+            byWorkload.merge(workloadOf(pod), reader.read(pod, containers.getFirst()),
+                    (existing, candidate) -> existing.on() ? existing : candidate);
         }
         List<ObservabilityStatus.Feed> feeds = new ArrayList<>(byWorkload.values());
         feeds.sort((a, b) -> a.service().compareTo(b.service()));
@@ -293,11 +303,75 @@ public class ObservabilityProbe {
      * On a real Splunk stack this becomes a default client with the stack's CA in
      * the container truststore. It is here because a trial stack has no CA to add.
      */
-    private static HttpClient httpClient(boolean trustSelfSigned) throws Exception {
-        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(HTTP_TIMEOUT);
-        if (!trustSelfSigned) {
-            return builder.build();
+    private static boolean ownedByJob(Pod pod) {
+        if (pod.getMetadata() == null || pod.getMetadata().getOwnerReferences() == null) {
+            return false;
         }
+        for (OwnerReference owner : pod.getMetadata().getOwnerReferences()) {
+            if ("Job".equals(owner.getKind())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * One GET to the collector's health endpoint, over a connection that does not
+     * check the certificate when {@code console.splunk.trust-self-signed} says so.
+     *
+     * <h2>Why HttpsURLConnection and not the modern HttpClient</h2>
+     * Because the modern one cannot express this safely. A trust-all
+     * TrustManager stops the chain being validated but java.net.http verifies the
+     * HOSTNAME separately, and honours neither the TrustManager nor
+     * SSLParameters.setEndpointIdentificationAlgorithm(null) for it - both were
+     * measured against this collector and both still failed on "No name matching
+     * prd-p-2d10o.splunkcloud.com found". The only lever java.net.http offers is
+     * the jdk.internal.httpclient.disableHostnameVerification system property,
+     * which is JVM-wide: it would switch hostname verification off for every
+     * other HTTPS client in this console to satisfy one status probe.
+     *
+     * HttpsURLConnection takes a HostnameVerifier per connection. Measured: this
+     * request succeeds while a second connection built without the verifier is
+     * still refused by the same JVM, so the relaxation genuinely stops here.
+     *
+     * <h2>Why relax it at all</h2>
+     * Splunk Cloud trial stacks serve Splunk's own default certificate,
+     * CN=SplunkServerDefaultCert, which matches no hostname by construction. A
+     * verifying client therefore cannot complete the handshake, and this panel
+     * would report a healthy collector as unreachable - a status panel inventing
+     * a false negative, which is worse than not having one.
+     *
+     * The exposure: no token is sent, one fixed health document is read, and it
+     * is truncated and rendered through Angular interpolation. A forged reply can
+     * change what this panel claims and nothing else. On a real Splunk stack this
+     * property goes to false and the stack's CA goes in the container truststore.
+     */
+    private static Reply askCollector(String url, boolean trustSelfSigned) throws Exception {
+        HttpsURLConnection connection =
+                (HttpsURLConnection) URI.create(url).toURL().openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout((int) HTTP_TIMEOUT.toMillis());
+        connection.setReadTimeout((int) HTTP_TIMEOUT.toMillis());
+        if (trustSelfSigned) {
+            connection.setSSLSocketFactory(permissiveContext().getSocketFactory());
+            connection.setHostnameVerifier((host, session) -> true);
+        }
+        try {
+            int status = connection.getResponseCode();
+            var stream = status < 400 ? connection.getInputStream() : connection.getErrorStream();
+            if (stream == null) {
+                return new Reply(status, "");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String first = reader.readLine();
+                return new Reply(status, first == null ? "" : first);
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static SSLContext permissiveContext() throws Exception {
         TrustManager[] trustAll = { new X509TrustManager() {
             @Override public void checkClientTrusted(X509Certificate[] chain, String type) { }
             @Override public void checkServerTrusted(X509Certificate[] chain, String type) { }
@@ -305,6 +379,6 @@ public class ObservabilityProbe {
         } };
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(null, trustAll, new java.security.SecureRandom());
-        return builder.sslContext(context).build();
+        return context;
     }
 }
