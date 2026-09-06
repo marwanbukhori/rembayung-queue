@@ -1,5 +1,7 @@
 package dev.marwan.gate.queue;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -8,8 +10,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
+import static net.logstash.logback.argument.StructuredArguments.kv;
+
 @Service
 public class AdmissionService {
+
+    /**
+     * Refusals are the interesting half. A rush that works looks, in the logs,
+     * like a large number of TOKEN_NOT_YET_ADMITTED refusals steadily giving way
+     * to admissions - that is back-pressure doing its job. A rush that has gone
+     * wrong looks like admissions arriving faster than the rate allows.
+     */
+    private static final Logger log = LoggerFactory.getLogger(AdmissionService.class);
 
     private final StringRedisTemplate redis;
     private final DropRegistry drops;
@@ -96,21 +108,44 @@ public class AdmissionService {
     public DropRecord consume(String token) {
         String raw = redis.opsForValue().getAndDelete(QueueService.ADMIT_PREFIX + token);
         if (raw == null) {
+            log.info("Refused an admission token",
+                    kv("event", "queue.admission.refused"),
+                    kv("reason", "TOKEN_INVALID"));
             throw new TokenRejectedException("TOKEN_INVALID");
         }
-        Held held = resolve(raw).orElseThrow(() -> new TokenRejectedException("TOKEN_INVALID"));
+        Held held = resolve(raw).orElseThrow(() -> {
+            log.info("Refused an admission token",
+                    kv("event", "queue.admission.refused"),
+                    kv("reason", "TOKEN_INVALID"));
+            return new TokenRejectedException("TOKEN_INVALID");
+        });
         DropRecord drop = held.drop();
         long ticket = held.ticket();
         Instant now = clock.instant();
 
         Instant startsAt = drops.admissionStartsAt(drop);
         if (!Admission.isAdmitted(ticket, now, startsAt, drop.admitRate())) {
+            log.info("Refused an admission token, its turn has not come",
+                    kv("event", "queue.admission.refused"),
+                    kv("reason", "TOKEN_NOT_YET_ADMITTED"),
+                    kv("dropId", drop.id()),
+                    kv("ticket", ticket));
             throw new TokenRejectedException("TOKEN_NOT_YET_ADMITTED");
         }
         if (Admission.hasExpired(ticket, now, startsAt,
                                  drop.admitRate(), drop.admissionWindow())) {
+            log.info("Refused an admission token, its window has closed",
+                    kv("event", "queue.admission.refused"),
+                    kv("reason", "TOKEN_EXPIRED"),
+                    kv("dropId", drop.id()),
+                    kv("ticket", ticket));
             throw new TokenRejectedException("TOKEN_EXPIRED");
         }
+
+        log.info("Admitted a ticket through the gate",
+                kv("event", "queue.admitted"),
+                kv("dropId", drop.id()),
+                kv("ticket", ticket));
         // Returns the drop rather than void, so the caller can pin the booking to
         // the slot this token was actually issued for. Without that, slotId is
         // whatever the request body says and a sandbox token books slot 1.

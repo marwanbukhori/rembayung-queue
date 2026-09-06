@@ -6,6 +6,8 @@ import dev.marwan.booking.domain.BookingStatus;
 import dev.marwan.booking.domain.Slot;
 import dev.marwan.booking.repository.BookingRepository;
 import dev.marwan.booking.repository.SlotRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,8 +18,20 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
+import static net.logstash.logback.argument.StructuredArguments.kv;
+
 @Service
 public class BookingService {
+
+    /**
+     * Every line below is a fact about one seat, written as JSON fields rather
+     * than into the message text. The Splunk appender ships them as fields, so
+     * "how long did bookings wait on the row lock during the rush" is a stats
+     * query over lockWaitMs rather than a regex over prose. That question is the
+     * whole reason this service is slow on purpose, and until these lines existed
+     * the log had nothing in it but Spring Boot's own startup chatter.
+     */
+    private static final Logger log = LoggerFactory.getLogger(BookingService.class);
 
     private final SlotRepository slotRepository;
     private final BookingRepository bookingRepository;
@@ -70,7 +84,14 @@ public class BookingService {
             // Only a duplicate key is recoverable here. Any other constraint -
             // ck_slots_seats above all - means something this method believes
             // about the data is wrong, and must keep travelling.
-            return self.replayOf(request.idempotencyKey()).orElseThrow(() -> e);
+            BookingResult replayed = self.replayOf(request.idempotencyKey()).orElseThrow(() -> e);
+            // The idempotency key, not the phone number: the key is a client-generated
+            // UUID and identifies the retry, while the phone number is the guest.
+            log.info("Duplicate booking key, replayed the original booking",
+                    kv("event", "booking.replayed"),
+                    kv("bookingId", replayed.bookingId()),
+                    kv("idempotencyKey", request.idempotencyKey()));
+            return replayed;
         }
     }
 
@@ -92,10 +113,25 @@ public class BookingService {
             return new BookingResult(prior.getId(), prior.getStatus(), true);
         }
 
+        // Measured around the SELECT ... FOR UPDATE, because that wait IS the
+        // capacity limit: every booking for a slot serialises on this one row, so
+        // lockWaitMs is how long this request spent queued behind other bookings
+        // rather than how long Oracle took to answer. Under a rush it climbs, and
+        // that climb is the evidence that the ~1 booking/second ceiling is row
+        // contention and not a slow network or slow code.
+        long lockStartNanos = System.nanoTime();
         Slot slot = slotRepository.findByIdForUpdate(request.slotId())
                 .orElseThrow(() -> new SlotNotFoundException(request.slotId()));
+        long lockWaitMs = (System.nanoTime() - lockStartNanos) / 1_000_000;
 
         if (!slot.canAccommodate(request.partySize())) {
+            log.info("Refused a booking, the slot cannot seat the party",
+                    kv("event", "booking.refused"),
+                    kv("reason", "SLOT_SOLD_OUT"),
+                    kv("slotId", request.slotId()),
+                    kv("partySize", request.partySize()),
+                    kv("seatsLeft", slot.remainingSeats()),
+                    kv("lockWaitMs", lockWaitMs));
             throw new SlotSoldOutException(
                     request.slotId(), request.partySize(), slot.remainingSeats());
         }
@@ -111,6 +147,14 @@ public class BookingService {
                 request.idempotencyKey(),
                 now,
                 now.plus(holdTtl)));
+
+        log.info("Claimed seats for a booking",
+                kv("event", "booking.claimed"),
+                kv("bookingId", booking.getId()),
+                kv("slotId", slot.getId()),
+                kv("partySize", request.partySize()),
+                kv("seatsLeft", slot.remainingSeats()),
+                kv("lockWaitMs", lockWaitMs));
 
         return new BookingResult(booking.getId(), booking.getStatus(), false);
     }

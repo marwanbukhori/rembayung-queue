@@ -1,5 +1,7 @@
 package dev.marwan.gate.queue;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -8,8 +10,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
+import static net.logstash.logback.argument.StructuredArguments.kv;
+
 @Service
 public class QueueService {
+
+    /**
+     * One line per arrival. At three thousand arrivals that is three thousand
+     * lines, which is the point: the shape of the rush is only visible in Splunk
+     * if each arrival is actually recorded. The Splunk appender is async with a
+     * bounded queue that discards when full, so a flood costs latency nowhere on
+     * this path - it costs dropped log lines, which is the right thing to lose.
+     */
+    private static final Logger log = LoggerFactory.getLogger(QueueService.class);
 
     static final String ADMIT_PREFIX = "admit:";
 
@@ -52,6 +65,11 @@ public class QueueService {
 
         Long ticket = redis.opsForValue().increment(ticketCounter(dropId));
         if (ticket == null || ticket > drop.ticketCap()) {
+            log.info("Turned an arrival away, the ticket cap is reached",
+                    kv("event", "queue.arrival.refused"),
+                    kv("reason", "SOLD_OUT"),
+                    kv("dropId", dropId),
+                    kv("ticketCap", drop.ticketCap()));
             throw new SoldOutException();
         }
         if (ticket == 1L) {
@@ -75,6 +93,16 @@ public class QueueService {
 
         long admitted = Admission.admittedBy(now, drops.admissionStartsAt(drop), drop.admitRate());
         long position = Math.max(0, ticket - admitted);
+
+        // The token itself is deliberately absent: it is a bearer credential for
+        // the next hop, and a log everyone on the team can search is the wrong
+        // place for one. The ticket number identifies the arrival just as well.
+        log.info("Issued a queue ticket",
+                kv("event", "queue.arrival"),
+                kv("dropId", dropId),
+                kv("ticket", ticket),
+                kv("position", position),
+                kv("admitted", position == 0));
 
         return new JoinResult(token, ticket, position,
                 (double) position / drop.admitRate(),

@@ -3,14 +3,26 @@ package dev.marwan.gate.web;
 import dev.marwan.gate.queue.AdmissionService;
 import dev.marwan.gate.queue.DropRecord;
 import dev.marwan.gate.queue.TokenRejectedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import static net.logstash.logback.argument.StructuredArguments.kv;
+
 @RestController
 @RequestMapping("/bookings")
 public class BookingProxyController {
+
+    /**
+     * The status the guest actually received, recorded at the only place that
+     * knows it. A 503 here is booking-service shedding load on purpose, and it is
+     * indistinguishable in Splunk from a crash unless this line says which - so
+     * it names the outcome rather than leaving a bare status code to interpret.
+     */
+    private static final Logger log = LoggerFactory.getLogger(BookingProxyController.class);
 
     private final AdmissionService admissionService;
     private final BookingClient bookingClient;
@@ -47,9 +59,36 @@ public class BookingProxyController {
         // which value to try next.
         ResponseEntity<String> downstream =
                 bookingClient.createBooking(withSlotFrom(drop, body));
+
+        int status = downstream.getStatusCode().value();
+        log.info("Forwarded a booking and got an answer",
+                kv("event", "gate.booking.answered"),
+                kv("dropId", drop.id()),
+                kv("status", status),
+                kv("outcome", outcomeOf(status)));
+
         return ResponseEntity.status(downstream.getStatusCode())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(downstream.getBody());
+    }
+
+    /**
+     * Names what the status code meant, so a Splunk search can count shed load
+     * separately from failure. 503 is the deliberate one: booking-service returns
+     * it when the queue in front of Oracle is already as long as it should get,
+     * which is the system working rather than the system breaking.
+     */
+    private static String outcomeOf(int status) {
+        if (status == 201) {
+            return "BOOKED";
+        }
+        if (status == 409) {
+            return "SOLD_OUT";
+        }
+        if (status == 503) {
+            return "SHED_LOAD";
+        }
+        return status >= 500 ? "FAILED" : "REJECTED";
     }
 
     /**
