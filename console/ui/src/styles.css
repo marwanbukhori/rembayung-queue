@@ -469,3 +469,25 @@ td.right { text-align: right; }
 }
 .markdown-body tbody tr:nth-child(even) { background: var(--rule); }
 .markdown-body td code { white-space: nowrap; }
+
+/*
+ * Scroll reveal, used by the rbReveal directive.
+ *
+ * Global rather than per-component because the directive is host-bound and a
+ * component's encapsulated styles cannot reach an element it does not own.
+ * The resting state is visible: rb-reveal only dims and offsets while waiting,
+ * so a page with no JavaScript still reads normally.
+ */
+.rb-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 520ms var(--ease), transform 520ms var(--ease);
+}
+.rb-shown {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-reveal { opacity: 1; transform: none; transition: none; }
+}

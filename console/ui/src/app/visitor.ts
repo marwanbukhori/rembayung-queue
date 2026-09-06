@@ -43,7 +43,7 @@ import { StateService } from './state.service';
           the progress bar rather than sitting under it - two drawings of one
           number, stacked, was the page saying the same thing twice.
         -->
-        <rb-canonical-drop heading="Your simulation, live" [withSeatMap]="true" />
+        <rb-canonical-drop heading="Your simulation, live" />
 
         <!--
           Live traffic before the cluster card: this is what you watch while a

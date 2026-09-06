@@ -23,7 +23,7 @@ import { StateService } from './state.service';
         <span class="meta">refreshes every 2s</span>
       </div>
 
-      <div class="cards" [class.merged]="withSeatMap()">
+      <div class="cards">
         <div class="card seats">
           <div class="row-baseline">
             <div class="label">Seats taken</div>
@@ -36,13 +36,6 @@ import { StateService } from './state.service';
                 <div class="figure">{{ d.seatsTaken }}</div>
                 <div class="of">/ {{ d.capacity }}</div>
               </div>
-              <!--
-                No bar when the room is drawn below: the seat map is the bar,
-                and two drawings of one number was the page repeating itself.
-              -->
-              @if (!withSeatMap()) {
-                <div class="bar"><span [style.width.%]="seatsPct()"></span></div>
-              }
               <div class="footnote">
                 <!--
                   Bookings, not just seats: 120 taken against 60 bookings reads
@@ -96,19 +89,17 @@ import { StateService } from './state.service';
           own. Nested inside the seats card it inherited that card's column and
           drew 250 seats eleven wide and twenty-three deep.
         -->
-        @if (withSeatMap()) {
-          <rb-seat-map />
-        }
+        <rb-seat-map />
       </div>
     </section>
   `,
   styles: `
     /*
-      Merged: the three figures are one card with the room drawn underneath,
-      rather than a wide card and two narrow ones under it. Same markup either
-      way - only the framing moves, so neither page duplicates the figures.
+      Three figures across one card with the room drawn underneath. This was
+      switchable while the overview also rendered this component; the overview
+      no longer does, so the other branch was a layout nothing could reach.
     */
-    .cards.merged {
+    .cards {
       /*
         Flex, not grid. grid-column: 1 / -1 on the seat map did not span - it
         stayed in the first column and drew 250 seats eleven wide and twenty-
@@ -123,12 +114,12 @@ import { StateService } from './state.service';
       border-radius: 4px;
       padding: 24px;
     }
-    .cards.merged > .card,
-    .cards.merged > .oversold { flex: 1 1 200px; }
-    .cards.merged > rb-seat-map { flex: 1 1 100%; display: block; width: 100%; }
+    .cards > .card,
+    .cards > .oversold { flex: 1 1 200px; }
+    .cards > rb-seat-map { flex: 1 1 100%; display: block; width: 100%; }
     /* The children stop being cards; the container is the card now. */
-    .cards.merged > .card,
-    .cards.merged > .oversold {
+    .cards > .card,
+    .cards > .oversold {
       background: none;
       border: 0;
       border-radius: 0;
@@ -136,8 +127,8 @@ import { StateService } from './state.service';
       color: inherit;
     }
     /* Oversold keeps its weight without a dark slab mid-card. */
-    .cards.merged .oversold .figure-claim { color: var(--chip-ok-fg); }
-    .cards.merged .oversold .note { color: var(--muted); }
+    .cards .oversold .figure-claim { color: var(--chip-ok-fg); }
+    .cards .oversold .note { color: var(--muted); }
 
     .cards { display: flex; flex-wrap: wrap; gap: 16px; }
     .seats { flex: 2 1 340px; }
@@ -180,14 +171,6 @@ export class CanonicalDrop {
   /** The visitor's own session names itself; everywhere else this is the shared one. */
   readonly heading = input('The public simulation');
 
-  /**
-   * Draw the sitting as seats rather than as a bar.
-   *
-   * Off by default so the overview page, which also renders this component, is
-   * unchanged: 250 squares are the right amount of detail on the page where a
-   * rush is being run, and too much on the page that only summarises one.
-   */
-  readonly withSeatMap = input(false);
   readonly oversoldNote = 'Across every simulation this cluster has run.';
 
   readonly drop = computed(() => this.state.view()?.drop ?? null);
@@ -216,13 +199,6 @@ export class CanonicalDrop {
     return d && d.available ? String(d.capacity) : '—';
   });
 
-  readonly seatsPct = computed(() => {
-    const d = this.drop();
-    if (!d || !d.available || d.capacity === 0) {
-      return 0;
-    }
-    return Math.min(100, Math.round((d.seatsTaken / d.capacity) * 1000) / 10);
-  });
 
   /** 300 is the design's full-scale mark for a queue, not a limit on it. */
   readonly queuePct = computed(() => {

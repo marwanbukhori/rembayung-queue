@@ -66,7 +66,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
     <main>
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (cluster)="show('cluster')" (visitor)="show('visitor')" (docs)="show('docs')" (open)="openDoc($event)" />
+          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" />
         }
         @case ('cluster') {
           <rb-cluster-page (home)="show('home')" />

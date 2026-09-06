@@ -1,10 +1,7 @@
-import { Component, OnInit, computed, effect, inject, output } from '@angular/core';
-import { CanonicalDrop } from './canonical-drop';
-import { ClusterResources } from './cluster-resources';
-import { DocsService, GROUP_LABELS } from './docs.service';
+import { Component, computed, inject, output } from '@angular/core';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { FlowDiagram } from './flow-diagram';
-import { Placeholder } from './placeholder';
+import { Reveal } from './reveal';
 import { StateService } from './state.service';
 
 /** The three places to look when this page is not enough. */
@@ -29,7 +26,7 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [ArchitectureDiagram, CanonicalDrop, ClusterResources, FlowDiagram, Placeholder],
+  imports: [ArchitectureDiagram, FlowDiagram, Reveal],
   template: `
     <div class="stack">
       <section class="panel">
@@ -48,6 +45,16 @@ interface Outward {
               <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
               <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
             </div>
+            <!--
+              The claim, live, where the claim is made. Read from the same field
+              the alert rule reads, so the hero cannot boast a number the rest
+              of the page would contradict.
+            -->
+            <div class="proof">
+              <span class="proof-pip"></span>
+              <span class="proof-figure mono">{{ oversold() }}</span>
+              <span class="proof-text">seats oversold, across every simulation this cluster has run</span>
+            </div>
           </div>
           <div class="hero-say">
             <p class="hero-lede">
@@ -64,7 +71,7 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band">
+        <div class="band" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">The path one customer takes</div>
             <div class="band-aside mono">read live from the cluster</div>
@@ -72,7 +79,7 @@ interface Outward {
           <rb-flow-diagram />
         </div>
 
-        <div class="band">
+        <div class="band" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">What runs it</div>
             <div class="band-aside mono">pod counts are live</div>
@@ -80,7 +87,7 @@ interface Outward {
           <rb-architecture-diagram />
         </div>
 
-        <div class="band">
+        <div class="band" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">Three moves to try to break it</div>
             <div class="band-aside mono">nothing to install</div>
@@ -98,7 +105,7 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band">
+        <div class="band" [rbReveal]="0">
           <div class="band-head eyebrow">What is being simulated</div>
           <div class="facts">
             <div class="fact">
@@ -128,7 +135,7 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band">
+        <div class="band" [rbReveal]="0">
           <div class="band-head eyebrow">Built with</div>
           <div class="chips">
             @for (item of stack; track item) {
@@ -138,116 +145,6 @@ interface Outward {
         </div>
       </section>
 
-      <rb-canonical-drop />
-
-      <section class="stack-16">
-        <div class="section-head">
-          <div style="min-width: 0;">
-            <h2>Cluster resources</h2>
-            <p class="sub">What is actually running, read live from the Kubernetes API</p>
-          </div>
-          <button class="btn-tertiary" (click)="cluster.emit()">See more</button>
-        </div>
-        <rb-cluster-resources />
-      </section>
-
-      <section class="stack-16">
-        <div class="section-head">
-          <div style="min-width: 0;">
-            <h2>Deploy history</h2>
-            <p class="sub">From the Deployments' own annotations</p>
-          </div>
-        </div>
-        <rb-placeholder
-          note="Not read yet. The rows come from each Deployment's own rollout annotations rather than a table this console keeps, so they arrive with the cluster reader that task 8 wires up." />
-      </section>
-
-      <section class="stack-16">
-        <div class="section-head">
-          <div style="min-width: 0;">
-            <h2>Links out</h2>
-            <p class="sub">Three places to look when this page is not enough</p>
-          </div>
-        </div>
-        <div class="links">
-          @for (link of outward; track link.href) {
-            <a class="link-card" [href]="link.href" target="_blank" rel="noreferrer">
-              <span class="link-mark" [class]="'mark-' + link.mark" aria-hidden="true">
-                @switch (link.mark) {
-                  @case ('openshift') {
-                    <svg viewBox="0 0 24 24" width="18" height="18">
-                      <path d="M12 3.2 19.4 7v10L12 20.8 4.6 17V7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
-                      <circle cx="12" cy="12" r="3" fill="currentColor" />
-                    </svg>
-                  }
-                  @case ('dynatrace') {
-                    <svg viewBox="0 0 24 24" width="18" height="18">
-                      <path d="M12 3.2 19.4 7v10L12 20.8 4.6 17V7Z" fill="currentColor" />
-                      <path d="M8 12h8M12 8v8" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
-                    </svg>
-                  }
-                  @case ('splunk') {
-                    <svg viewBox="0 0 24 24" width="18" height="18">
-                      <path d="M5 5.5 17 12 5 18.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  }
-                }
-              </span>
-              <span class="link-text">
-                <span class="link-name">{{ link.name }}</span>
-                <span class="link-note">{{ link.note }}</span>
-              </span>
-              <svg class="link-out" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="M9 15 19 5M13 5h6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
-            </a>
-          }
-        </div>
-      </section>
-
-      <!--
-        Last on the page on purpose: the written record is what a reader goes to
-        once the live thing above has convinced them there is something to read
-        about.
-      -->
-      <section class="stack-16">
-        <div class="section-head">
-          <div style="min-width: 0;">
-            <h2>Documentation</h2>
-            <p class="sub">
-              {{ total() }} specs, build notes and plans, rendered from Markdown baked into the image
-            </p>
-          </div>
-          <button class="btn-tertiary" (click)="docs.emit()">See all {{ total() }}</button>
-        </div>
-        @if (groups().length) {
-          <div class="doc-groups">
-            @for (group of groups(); track group.key) {
-              <div class="doc-group">
-                <div class="doc-group-head">
-                  <span class="group-chip eyebrow">{{ group.label }}</span>
-                  <span class="group-count">{{ group.count }} in this group</span>
-                </div>
-                @for (doc of group.docs; track doc.id) {
-                  <button class="doc-row" (click)="open.emit(doc.id)">
-                    <span class="doc-title">{{ doc.title }}</span>
-                    <span class="doc-blurb">{{ blurb(doc.id) }}</span>
-                  </button>
-                }
-              </div>
-            }
-          </div>
-        } @else if (docsService.listError(); as problem) {
-          <rb-placeholder [note]="problem" />
-        } @else {
-          <rb-placeholder note="Loading the documentation baked into the image." />
-        }
-      </section>
-
-      @if (state.transportError(); as problem) {
-        <p class="reason">The numbers above may be stale: {{ problem }}.</p>
-      }
     </div>
   `,
   styles: `
@@ -282,6 +179,30 @@ interface Outward {
     }
     .hero-lede { margin: 0; font-size: 16px; color: var(--ink-soft); max-width: 62ch; text-wrap: pretty; }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .proof {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--chip-ok-fg);
+      background: var(--chip-ok-bg);
+      border-radius: 999px;
+      font-size: 14px;
+      color: var(--ink-soft);
+    }
+    .proof-pip {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--chip-ok-fg);
+      flex: none;
+      animation: proof-beat 2s ease-in-out infinite;
+    }
+    @keyframes proof-beat { 50% { opacity: .25; } }
+    .proof-figure { font-size: 18px; font-weight: 700; color: var(--chip-ok-fg); }
+    .proof-text { min-width: 0; text-wrap: pretty; }
+    @media (prefers-reduced-motion: reduce) { .proof-pip { animation: none; } }
+
     .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
 
     /* A band's title on the left, its one-line qualifier on the right. */
@@ -426,14 +347,11 @@ interface Outward {
     }
   `
 })
-export class PublicHome implements OnInit {
-  readonly cluster = output<void>();
+export class PublicHome {
   readonly docs = output<void>();
-  readonly open = output<string>();
   readonly visitor = output<void>();
 
   protected readonly state = inject(StateService);
-  protected readonly docsService = inject(DocsService);
 
   /** Named because a hiring manager reads the list before reading the code. */
   /** The three things a visitor can actually do, in the order the page offers them. */
@@ -467,62 +385,5 @@ export class PublicHome implements OnInit {
     'Splunk'
   ];
 
-  readonly outward: Outward[] = [
-    {
-      name: 'OpenShift console',
-      note: 'Workloads, routes and quota for the namespace this page reads.',
-      href: 'https://console-openshift-console.apps.rm3.7wse.p1.openshiftapps.com',
-      mark: 'openshift'
-    },
-    {
-      name: 'Dynatrace tenant',
-      note: 'Traces through the gate and into booking-service. Trial, may have expired.',
-      href: 'https://icp44821.apps.dynatrace.com',
-      mark: 'dynatrace'
-    },
-    {
-      name: 'Splunk stack',
-      note: 'Structured logs and the audit trail. Trial, may have expired.',
-      href: 'https://prd-p-2d10o.splunkcloud.com',
-      mark: 'splunk'
-    }
-  ];
 
-  private static readonly ORDER = ['specs', 'notes', 'plans'];
-  private static readonly PER_GROUP = 3;
-
-  readonly total = computed(() => (this.docsService.summaries() ?? []).length);
-
-  /** Up to three per group here; the documentation page carries the rest. */
-  readonly groups = computed(() => {
-    const list = this.docsService.summaries() ?? [];
-    return PublicHome.ORDER
-      .map((key) => {
-        const all = list.filter((doc) => doc.group === key);
-        return {
-          key,
-          label: `${GROUP_LABELS[key]}s`,
-          count: all.length,
-          docs: all.slice(0, PublicHome.PER_GROUP)
-        };
-      })
-      .filter((group) => group.count > 0);
-  });
-
-  constructor() {
-    // The blurbs need the list first, so they are asked for again once it lands.
-    effect(() => {
-      if (this.docsService.summaries()) {
-        this.docsService.loadBlurbs();
-      }
-    });
-  }
-
-  blurb(id: string): string {
-    return this.docsService.blurbs()[id] ?? 'Opens the rendered document.';
-  }
-
-  ngOnInit(): void {
-    this.docsService.load();
-  }
 }
