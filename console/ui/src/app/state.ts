@@ -141,3 +141,38 @@ export interface LoadRun {
   message: string | null;
   secondsElapsed: number;
 }
+
+/**
+ * The shapes GET /api/observability returns.
+ *
+ * Two vendors, reported the same way: is the pipeline alive, and which
+ * workloads feed it. Neither carries logs or traces — reading those back needs
+ * credentials this cluster does not hold — so a feed says what is wired, and
+ * the vendors' own UIs say what arrived.
+ */
+export interface Feed {
+  service: string;
+  on: boolean;
+  detail: string;
+}
+
+export interface SplunkStatus {
+  endpoint: string;
+  reachable: boolean;
+  detail: string;
+  shippers: Feed[];
+}
+
+export interface DynatraceStatus {
+  tenant: string;
+  /** Which OneAgent flavour, because it decides what there is to look at. */
+  mode: string;
+  instrumented: Feed[];
+  detail: string;
+}
+
+export interface ObservabilityStatus {
+  splunk: SplunkStatus;
+  dynatrace: DynatraceStatus;
+  checkedAt: string;
+}

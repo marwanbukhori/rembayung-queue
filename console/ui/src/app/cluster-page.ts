@@ -3,11 +3,12 @@ import { ClusterResources } from './cluster-resources';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { ClusterService } from './cluster.service';
 import { ObjectGraph } from './object-graph';
+import { ObservabilityPanel } from './observability-panel';
 import { PodPulse } from './pod-pulse';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ArchitectureDiagram, ClusterResources, ObjectGraph, PodPulse],
+  imports: [ArchitectureDiagram, ClusterResources, ObjectGraph, ObservabilityPanel, PodPulse],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -36,6 +37,12 @@ import { PodPulse } from './pod-pulse';
         above it said the same thing twice in two sizes.
       -->
       <rb-pod-pulse />
+
+      <!--
+        Below the workloads, above the object graph: it is a fact about the
+        things just listed, and the reader has to have seen them first.
+      -->
+      <rb-observability-panel />
 
       <div class="card">
         <div class="why">How these objects connect</div>
