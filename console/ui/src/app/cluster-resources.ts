@@ -26,7 +26,12 @@ import { StateService } from './state.service';
           <span class="live-dot"></span>
           {{ live() ? 'Live' : 'Stale' }}
         </span>
-        <span class="live-note">{{ sourceLabel() }}</span>
+        <!--
+          What the reading says, in one line. The strip previously carried how
+          the read was made - namespace, interval, ServiceAccount - which is
+          true, unchanging, and not what anybody looks at a live panel for.
+        -->
+        <span class="summary mono">{{ summary() }}</span>
         <span class="stamp mono">{{ stamp() }}</span>
       </div>
       <div class="sweep" [class.stopped]="!live()"><span></span></div>
@@ -111,12 +116,17 @@ import { StateService } from './state.service';
       font-weight: 700;
       letter-spacing: .04em;
       text-transform: uppercase;
-      color: var(--chip-ok-fg);
-      background: var(--chip-ok-bg);
+      /*
+        Red, not green. Green claims the cluster is healthy; this pill only
+        claims the reading is live, and red is the recording convention.
+      */
+      color: var(--dhl-red);
+      background: var(--chip-bad-bg);
       border-radius: 999px;
       padding: 3px 12px;
       flex: none;
     }
+    .live-flag.stale { color: var(--muted); background: var(--track); }
     .live-flag.stale { color: var(--chip-neutral-fg); background: var(--chip-neutral-bg); }
     /*
       Red, not the pill's own colour. Green reads as "healthy", which is a claim
@@ -132,7 +142,6 @@ import { StateService } from './state.service';
     }
     .live-flag.stale .live-dot { background: var(--muted); }
     .live-flag.stale .live-dot { animation: none; }
-    .live-note { font-size: 14px; color: var(--ink-soft); min-width: 0; text-wrap: pretty; }
 
     /*
       Ten columns do not wrap usefully - a wrapped row interleaves with the next
@@ -164,6 +173,13 @@ import { StateService } from './state.service';
     .h-node { flex: 1 1 150px; min-width: 0; }
 
     .row.headed { align-items: baseline; gap: 8px 16px; }
+    /*
+      Striped, because tracking one pod across ten columns on a table this wide
+      is the whole job. Tinted from the namespace canvas rather than grey, so it
+      reads as banding and not as a selected row.
+    */
+    .row.headed:nth-child(odd) { background: var(--canvas); }
+    .row.headed:hover { background: var(--highlight); }
     .row.headed .state {
       flex: none;
       width: 92px;
@@ -188,6 +204,7 @@ import { StateService } from './state.service';
       white-space: nowrap;
     }
     .state.starting { color: var(--chip-warn-fg); }
+    .summary { font-size: 13px; color: var(--ink-soft); min-width: 0; }
     .stamp { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
 
     /* The poll made visible: one pass of the hairline is one two-second cycle. */
@@ -196,7 +213,9 @@ import { StateService } from './state.service';
       display: block;
       height: 100%;
       width: 34%;
-      background: linear-gradient(90deg, transparent, var(--dhl-red), transparent);
+      /* Red into yellow: one pass of the pair is one two-second poll. */
+      background: linear-gradient(90deg,
+        transparent, var(--dhl-red), var(--dhl-yellow), transparent);
       animation: sweepAcross 2s linear infinite;
     }
     .sweep.stopped > span { animation: none; background: var(--line); width: 100%; }
@@ -277,18 +296,26 @@ export class ClusterResources {
   /** Something has answered, so the animations are describing real traffic. */
   readonly live = computed(() => this.state.updatedAt() !== null && !this.state.transportError());
 
+  /** Pods, and how many of them are actually serving. */
+  readonly summary = computed(() => {
+    const list = this.pods();
+    if (!list.length) {
+      return '';
+    }
+    const ready = list.filter((p) => p.healthy).length;
+    const starting = list.filter((p) => this.starting(p)).length;
+    const parts = [`${list.length} ${list.length === 1 ? 'pod' : 'pods'}`, `${ready} ready`];
+    if (starting) {
+      parts.push(`${starting} starting`);
+    }
+    return parts.join(' · ');
+  });
+
   readonly stamp = computed(() => {
     const at = this.state.updatedAt();
     return at ? `read ${clock(at)}` : 'not read yet';
   });
 
-  readonly sourceLabel = computed(() => {
-    const health = this.health();
-    if (health?.namespace) {
-      return `ns/${health.namespace} · every 2s · read-only ServiceAccount`;
-    }
-    return 'Read every 2 seconds through a namespace-scoped ServiceAccount';
-  });
 
   readonly emptyText = computed(() => {
     const health = this.health();
