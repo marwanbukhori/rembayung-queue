@@ -39,4 +39,24 @@ class ObservabilityProbeTest {
         assertThat(ObservabilityProbe.hostOf("not a url")).isEqualTo("unknown");
         assertThat(ObservabilityProbe.hostOf("")).isEqualTo("unknown");
     }
+
+    /**
+     * SPLUNK_HEC_URL is written both ways in the wild, and this cluster's Secret
+     * uses the longer one. Appending blindly produced
+     * /services/collector/services/collector/health, a 404, and a panel reporting
+     * a healthy collector as unreachable.
+     */
+    @Test
+    void theHealthUrlIsCorrectWhicheverWayTheHecUrlIsWritten() {
+        String expected = "https://splunk.example.com:8088/services/collector/health";
+
+        assertThat(ObservabilityProbe.healthUrl("https://splunk.example.com:8088"))
+                .isEqualTo(expected);
+        assertThat(ObservabilityProbe.healthUrl("https://splunk.example.com:8088/"))
+                .isEqualTo(expected);
+        assertThat(ObservabilityProbe.healthUrl("https://splunk.example.com:8088/services/collector"))
+                .isEqualTo(expected);
+        assertThat(ObservabilityProbe.healthUrl("https://splunk.example.com:8088/services/collector/"))
+                .isEqualTo(expected);
+    }
 }

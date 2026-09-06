@@ -134,8 +134,7 @@ public class ObservabilityProbe {
 
         String endpoint = hostOf(hecUrl);
         try {
-            Reply reply = askCollector(trimSlash(hecUrl) + "/services/collector/health",
-                    trustSelfSigned);
+            Reply reply = askCollector(healthUrl(hecUrl), trustSelfSigned);
             boolean healthy = reply.status() == 200;
             return new ObservabilityStatus.Splunk(endpoint, healthy,
                     healthy ? "The collector answered: " + oneLine(reply.body())
@@ -156,12 +155,15 @@ public class ObservabilityProbe {
             String options = env(container, "JAVA_TOOL_OPTIONS");
             boolean injected = options != null && options.contains(AGENT_MARKER);
             if (!injected) {
-                // redis is a real part of this system and will never carry a Java
-                // agent. Saying "no OneAgent on this JVM" of it read as a fault
-                // rather than as a category, and made the panel look half-broken.
+                // A JVM without the agent and a workload that is not a JVM are
+                // different facts and only one of them is a gap. redis will never
+                // carry a Java agent; the console is a Spring Boot service that
+                // simply is not instrumented, which is a choice worth seeing.
+                // app.openshift.io/runtime is already set on every Deployment
+                // here, so this is read rather than guessed from the image name.
                 return new ObservabilityStatus.Feed(workloadOf(pod), false,
-                        options == null ? "not a Java workload - nothing to attach to"
-                                        : "no OneAgent on this JVM");
+                        isJvm(pod) ? "a JVM, but not instrumented - no traces from it"
+                                   : "not a Java workload - nothing to attach to");
             }
             // Ready is the half that makes this a measurement rather than a claim:
             // the JVM will not reach it if the agent library is missing or wrong.
@@ -269,8 +271,23 @@ public class ObservabilityProbe {
         }
     }
 
-    private static String trimSlash(String url) {
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    /**
+     * The collector's health endpoint, from whatever shape the HEC URL is written in.
+     *
+     * SPLUNK_HEC_URL is the URL the log appender POSTs events to, and Splunk's own
+     * documentation writes it both ways: some deployments set the bare host and
+     * port, others include the /services/collector path. Appending blindly built
+     * .../services/collector/services/collector/health against the second form,
+     * which the collector answered with a 404 - and a 404 rendered as "the
+     * collector is not reachable", the panel's own false negative for the second
+     * time in one afternoon.
+     */
+    static String healthUrl(String hecUrl) {
+        String base = hecUrl.endsWith("/") ? hecUrl.substring(0, hecUrl.length() - 1) : hecUrl;
+        if (base.endsWith("/services/collector")) {
+            base = base.substring(0, base.length() - "/services/collector".length());
+        }
+        return base + "/services/collector/health";
     }
 
     private static String oneLine(String body) {
@@ -303,6 +320,11 @@ public class ObservabilityProbe {
      * On a real Splunk stack this becomes a default client with the stack's CA in
      * the container truststore. It is here because a trial stack has no CA to add.
      */
+    private static boolean isJvm(Pod pod) {
+        Map<String, String> labels = pod.getMetadata() == null ? null : pod.getMetadata().getLabels();
+        return labels != null && "spring-boot".equals(labels.get("app.openshift.io/runtime"));
+    }
+
     private static boolean ownedByJob(Pod pod) {
         if (pod.getMetadata() == null || pod.getMetadata().getOwnerReferences() == null) {
             return false;
