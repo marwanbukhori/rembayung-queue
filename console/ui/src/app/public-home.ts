@@ -1,6 +1,7 @@
 import { Component, computed, inject, output } from '@angular/core';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { FlowDiagram } from './flow-diagram';
+import { PipelineDiagram } from './pipeline-diagram';
 import { Reveal } from './reveal';
 import { StateService } from './state.service';
 
@@ -26,7 +27,7 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [ArchitectureDiagram, FlowDiagram, Reveal],
+  imports: [ArchitectureDiagram, FlowDiagram, PipelineDiagram, Reveal],
   template: `
     <div class="stack">
       <section class="panel">
@@ -136,10 +137,34 @@ interface Outward {
         </div>
 
         <div class="band" [rbReveal]="0">
-          <div class="band-head eyebrow">Built with</div>
-          <div class="chips">
-            @for (item of stack; track item) {
-              <span class="stack-chip">{{ item }}</span>
+          <div class="band-head-row">
+            <div class="band-head eyebrow">How a commit reaches a pod</div>
+            <div class="band-aside mono">every label exists in the repo</div>
+          </div>
+          <rb-pipeline-diagram />
+        </div>
+
+        <div class="band" [rbReveal]="0">
+          <div class="band-head-row">
+            <div class="band-head eyebrow">Everything used, and what for</div>
+            <div class="band-aside mono">{{ toolCount() }} pieces</div>
+          </div>
+          <!--
+            Named with a job each. A row of logos says what somebody has touched;
+            it does not say what any of it does here, which is the only thing
+            worth knowing about a stack you are being shown.
+          -->
+          <div class="tools">
+            @for (group of tools; track group.area) {
+              <div class="tool-group" [rbReveal]="0">
+                <div class="tool-area eyebrow">{{ group.area }}</div>
+                @for (tool of group.items; track tool.name) {
+                  <div class="tool">
+                    <span class="tool-name mono">{{ tool.name }}</span>
+                    <span class="tool-what">{{ tool.what }}</span>
+                  </div>
+                }
+              </div>
             }
           </div>
         </div>
@@ -250,6 +275,18 @@ interface Outward {
     .fact-name { font-size: 15px; font-weight: 700; margin-top: 8px; }
     .fact-note { font-size: 14px; color: var(--ink-soft); margin-top: 4px; text-wrap: pretty; }
 
+    .tools {
+      display: grid;
+      gap: 24px 32px;
+      grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    }
+    .tool-group { min-width: 0; }
+    .tool-area { color: var(--muted); margin-bottom: 10px; }
+    .tool { padding: 7px 0; border-top: 1px solid var(--rule); }
+    .tool:first-of-type { border-top: 0; }
+    .tool-name { display: block; font-size: 13px; font-weight: 700; }
+    .tool-what { display: block; font-size: 13px; color: var(--ink-soft); text-wrap: pretty; }
+
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .stack-chip {
       font-family: var(--mono);
@@ -355,6 +392,61 @@ export class PublicHome {
 
   /** Named because a hiring manager reads the list before reading the code. */
   /** The three things a visitor can actually do, in the order the page offers them. */
+  /** Named with the job each one does here, not just named. */
+  readonly tools = [
+    {
+      area: 'The services',
+      items: [
+        { name: 'Java 25', what: 'three Spring Boot services in one repository' },
+        { name: 'Spring Boot 4', what: 'HTTP, scheduling, health probes, Micrometer metrics' },
+        { name: 'Spring Data JPA', what: 'the pessimistic row lock that makes a seat unsellable twice' },
+        { name: 'Maven', what: 'one wrapper per service; CI runs verify on each' }
+      ]
+    },
+    {
+      area: 'Data',
+      items: [
+        { name: 'Oracle', what: 'Autonomous Database a region away; the seat count lives in one row' },
+        { name: 'Flyway', what: 'schema migrations, validated on every start' },
+        { name: 'Redis', what: 'the queue itself: ticket counter, admission tokens, drop records' },
+        { name: 'Testcontainers', what: 'real Oracle 23ai and Redis in the test run, not mocks' }
+      ]
+    },
+    {
+      area: 'Delivery',
+      items: [
+        { name: 'GitHub Actions', what: 'ci.yml builds and tests; cd.yml deploys only a green run' },
+        { name: 'Docker Buildx', what: 'one image per service, tagged with the commit SHA' },
+        { name: 'ghcr.io', what: 'the registry; immutable SHA tags, never :latest' },
+        { name: 'Ansible', what: 'patches the Deployments, waits, rolls the set back on failure' },
+        { name: 'Kustomize', what: 'base manifests with a sandbox overlay that pins the tags' }
+      ]
+    },
+    {
+      area: 'The cluster',
+      items: [
+        { name: 'OpenShift', what: 'Routes, Services and Deployments under a 3000m namespace quota' },
+        { name: 'HPA', what: 'queue-gate scales 2 to 10, booking-service 2 to 4, on CPU' },
+        { name: 'NetworkPolicy', what: 'Redis and booking-service reachable from queue-gate only' },
+        { name: 'RBAC', what: 'a ServiceAccount that reads this namespace and no Secrets' },
+        { name: 'CronJob', what: 'restarts the workloads three times a day to outlive the idler' }
+      ]
+    },
+    {
+      area: 'Seeing it',
+      items: [
+        { name: 'Prometheus', what: 'a ServiceMonitor scrapes :9090; a rule alerts on oversold' },
+        { name: 'Dynatrace', what: 'application-only OneAgent for distributed traces and the service map' },
+        { name: 'Splunk', what: 'logback ships JSON events over HEC, behind a profile' },
+        { name: 'k6', what: 'the crowd, run as a Job inside the cluster' },
+        { name: 'Angular 20', what: 'this console; signals and standalone components, no UI framework' }
+      ]
+    }
+  ];
+
+  readonly toolCount = computed(() =>
+    this.tools.reduce((sum, group) => sum + group.items.length, 0));
+
   readonly moves = [
     {
       name: 'Start the 21:00 rush',
@@ -372,18 +464,6 @@ export class PublicHome {
 
   readonly oversold = computed(() => this.state.view()?.drop.oversold ?? 0);
 
-  readonly stack = [
-    'Java 25',
-    'Spring Boot 4',
-    'Oracle',
-    'Redis',
-    'OpenShift',
-    'Ansible',
-    'GitHub Actions',
-    'Prometheus',
-    'Dynatrace',
-    'Splunk'
-  ];
 
 
 }
