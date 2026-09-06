@@ -1,4 +1,5 @@
 import { Component, computed, inject, input } from '@angular/core';
+import { PodStatus } from './state';
 import { StateService } from './state.service';
 
 /**
@@ -31,25 +32,47 @@ import { StateService } from './state.service';
       <div class="sweep" [class.stopped]="!live()"><span></span></div>
 
       @if (pods().length) {
+        @if (full()) {
+          <!--
+            Headed columns rather than inline key/value pairs. The same facts
+            oc get pods shows, in the same order, so somebody who knows the
+            command can read this without learning a new layout.
+          -->
+          <div class="head-row">
+            <span class="h-state">STATUS</span>
+            <span class="h-name">NAME</span>
+            <span class="h-kind">WORKLOAD</span>
+            <span class="h-cell">READY</span>
+            <span class="h-cell">CPU REQ</span>
+            <span class="h-cell">RESTARTS</span>
+            <span class="h-cell">AGE</span>
+          </div>
+        }
         <ul class="list">
           @for (pod of pods(); track pod.name) {
-            <li class="row">
-              <span class="state" [class.ok]="pod.healthy" [class.warn]="!pod.healthy">
+            <li class="row" [class.headed]="full()">
+              <span class="state" [class.ok]="pod.healthy"
+                    [class.warn]="!pod.healthy && !starting(pod)"
+                    [class.starting]="starting(pod)">
                 <span class="dot" [class.beating]="pod.healthy && live()"></span>
-                {{ pod.healthy ? 'Ready' : 'Not ready' }}
+                {{ label(pod) }}
               </span>
               <span class="name mono">{{ pod.name }}</span>
-              <span class="facts">
-                <span class="fact"><span class="fact-key">replicas</span> <span class="mono">{{ pod.ready }}</span></span>
-                @if (full()) {
-                  <span class="fact"><span class="fact-key">cpu request</span> <span class="mono">{{ pod.cpu }}</span></span>
-                  <span class="fact"><span class="fact-key">restarts</span> <span class="mono">{{ pod.restarts }}</span></span>
-                  <span class="fact"><span class="fact-key">age</span> <span class="mono">{{ pod.age }}</span></span>
-                }
-              </span>
+              @if (full()) {
+                <span class="kind mono">{{ workloadOf(pod.name) }}</span>
+                <span class="cell mono">{{ pod.ready }}</span>
+                <span class="cell mono">{{ pod.cpu }}</span>
+                <span class="cell mono" [class.bad]="pod.restarts > 0">{{ pod.restarts }}</span>
+                <span class="cell mono">{{ pod.age }}</span>
+              } @else {
+                <span class="facts">
+                  <span class="fact"><span class="fact-key">replicas</span> <span class="mono">{{ pod.ready }}</span></span>
+                </span>
+              }
             </li>
           }
         </ul>
+      
       } @else {
         <!--
           The degradation contract: the section still renders, and the reason the
@@ -88,15 +111,46 @@ import { StateService } from './state.service';
       flex: none;
     }
     .live-flag.stale { color: var(--chip-neutral-fg); background: var(--chip-neutral-bg); }
+    /*
+      Red, not the pill's own colour. Green reads as "healthy", which is a claim
+      about the cluster; this dot is about the reading being live, which is the
+      recording convention everyone already knows.
+    */
     .live-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: currentColor;
+      background: var(--dhl-red);
       animation: livePulse 2s ease-in-out infinite;
     }
+    .live-flag.stale .live-dot { background: var(--muted); }
     .live-flag.stale .live-dot { animation: none; }
     .live-note { font-size: 14px; color: var(--ink-soft); min-width: 0; text-wrap: pretty; }
+
+    .head-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+    }
+    .h-state { flex: none; width: 92px; }
+    .h-name { flex: 2 1 240px; min-width: 0; }
+    .h-kind { flex: 1 1 140px; min-width: 0; }
+    .h-cell { flex: none; width: 76px; text-align: right; }
+
+    .row.headed { align-items: baseline; gap: 8px 16px; }
+    .row.headed .state { flex: none; width: 92px; }
+    .row.headed .name { flex: 2 1 240px; min-width: 0; overflow-wrap: anywhere; }
+    .kind { flex: 1 1 140px; min-width: 0; font-size: 13px; color: var(--ink-soft); }
+    .cell { flex: none; width: 76px; text-align: right; font-size: 13px; color: var(--ink-soft); }
+    .cell.bad { color: var(--chip-bad-fg); font-weight: 700; }
+    .state.starting { color: var(--chip-warn-fg); }
     .stamp { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
 
     /* The poll made visible: one pass of the hairline is one two-second cycle. */
@@ -155,6 +209,31 @@ import { StateService } from './state.service';
   `
 })
 export class ClusterResources {
+  /**
+   * Running but not ready yet. Readiness alone cannot tell that from a crash
+   * loop - both read 0/1 - so the phase decides, and a pod coming up during a
+   * rollout is not drawn as a fault.
+   */
+  protected starting(pod: PodStatus): boolean {
+    return !pod.healthy && pod.phase === 'Running';
+  }
+
+  protected label(pod: PodStatus): string {
+    if (pod.healthy) {
+      return 'Ready';
+    }
+    if (pod.phase === 'Succeeded' || pod.phase === 'Failed') {
+      return 'Completed';
+    }
+    return this.starting(pod) ? 'Starting' : 'Not ready';
+  }
+
+  /** The Deployment or Job a pod belongs to, from the name it was given. */
+  protected workloadOf(name: string): string {
+    const parts = name.split('-');
+    return parts.length > 2 ? parts.slice(0, -2).join('-') : name;
+  }
+
   /** The overview shows the workload and its replicas; the cluster page shows every column. */
   readonly full = input(false);
 
@@ -175,7 +254,7 @@ export class ClusterResources {
   readonly sourceLabel = computed(() => {
     const health = this.health();
     if (health?.namespace) {
-      return `ns/${health.namespace}, read every 2 seconds through a namespace-scoped ServiceAccount`;
+      return `ns/${health.namespace} · every 2s · read-only ServiceAccount`;
     }
     return 'Read every 2 seconds through a namespace-scoped ServiceAccount';
   });

@@ -131,50 +131,49 @@ interface WorkloadRow {
       </div>
 
       @if (rows().length) {
+        <!--
+          Headed, because four unlabelled columns of squares and bars is a
+          puzzle. The header names each column once so the rows can stay quiet.
+        -->
+        <div class="head-row">
+          <span class="h-name">SERVICE</span>
+          <span class="h-pods">PODS</span>
+          <span class="h-target">CPU AGAINST SCALING TARGET</span>
+          <span class="h-cpu">CPU</span>
+        </div>
         <div class="rows">
           @for (row of rows(); track row.name) {
             <div class="row" [class.scaled-out]="row.scaled === 'out'"
                  [class.scaled-in]="row.scaled === 'in'">
               <div class="who">
-                <span class="name mono">{{ row.name }}</span>
-                <span class="count mono">
-                  {{ row.pods.length }}{{ row.pods.length === 1 ? ' pod' : ' pods' }}@if (row.hasHpa) {
-                    <span class="of"> · autoscales {{ row.min }}–{{ row.max }}</span>
-                  }
-                </span>
-                @if (row.atCeiling) { <span class="ceiling mono">at the ceiling</span> }
+                <div class="who-name">
+                  <span class="swatch" [style.background]="colourFor(row.name)"></span>
+                  <span class="name mono">{{ row.name }}</span>
+                </div>
+                <div class="who-sub">
+                  {{ row.pods.length }} {{ row.pods.length === 1 ? 'pod' : 'pods' }}@if (row.hasHpa) { · autoscales {{ row.min }} to {{ row.max }}} @else { · fixed}
+                </div>
               </div>
 
               <div class="pods" [class.busy]="row.millis > 0">
                 @for (pod of row.pods; track pod.name) {
                   <i class="pod" [class.sick]="!pod.healthy && !pod.starting"
                      [class.starting]="pod.starting" [class.fresh]="pod.fresh"
-                     [title]="pod.name + ' · ' + pod.phase + ' · ' + pod.cpu
-                              + ' · ' + pod.restarts + ' restarts'"></i>
+                     [title]="pod.name + ' · ' + pod.phase + ' · ' + pod.cpu + ' · ' + pod.restarts + ' restarts'"></i>
                 }
-                <!--
-                  Headroom the autoscaler still has, drawn as outlines. The
-                  ceiling is the thing a reader wants when watching something
-                  scale, and "8 pods" alone does not say whether that is nearly
-                  all of it or barely any.
-                -->
                 @for (spare of row.headroom; track spare) {
                   <i class="pod spare" [title]="'headroom to ' + row.max"></i>
                 }
               </div>
 
-              <div class="cpu">
-                <div class="bar"><span [style.width.%]="share(row.millis)"
-                                       [style.background]="colourFor(row.name)"></span></div>
-                <span class="millis mono">{{ row.millis }}m</span>
+              <div class="target">
+                <div class="bar">
+                  <span [style.width.%]="targetPct(row)" [style.background]="colourFor(row.name)"></span>
+                </div>
+                <div class="target-note">{{ targetNote(row) }}</div>
               </div>
 
-              @if (row.hasHpa) {
-                <p class="note">
-                  {{ utilisation(row.currentPercent, row.targetPercent) }}@if (row.desired !== null
-                    && row.current !== null && row.desired !== row.current) {, scaling to {{ row.desired }}}@if (row.note) { — {{ row.note }}}
-                </p>
-              }
+              <div class="cpu-figure mono">{{ row.millis }}m</div>
             </div>
           }
         </div>
@@ -222,12 +221,18 @@ interface WorkloadRow {
     .quota { font-size: 12px; color: var(--muted); }
 
     .rows { display: flex; flex-direction: column; }
+    /*
+      Four columns that stay in step with the header above them: name, pods,
+      utilisation against the scaling target, and the CPU it is spending. flex
+      with matching bases rather than grid, so a narrow screen wraps a row
+      instead of shearing the header off its columns.
+    */
     .row {
-      display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(140px, 2fr) minmax(120px, 1fr);
+      display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px 16px;
-      padding: 12px 16px;
+      gap: 12px 20px;
+      padding: 16px;
       border-bottom: 1px solid var(--rule);
       transition: background-color 600ms var(--ease);
     }
@@ -236,7 +241,34 @@ interface WorkloadRow {
     .row.scaled-out { background: var(--chip-ok-bg); }
     .row.scaled-in { background: var(--chip-warn-bg); }
 
-    .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+    .head-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      padding: 12px 16px;
+      background: var(--canvas);
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+    }
+    .h-name { flex: 1 1 180px; min-width: 0; }
+    .h-pods { flex: 1 1 150px; min-width: 0; }
+    .h-target { flex: 1 1 190px; min-width: 0; }
+    .h-cpu { flex: none; width: 68px; text-align: right; }
+
+    .who { flex: 1 1 180px; min-width: 0; }
+    .who-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .who-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
+    .target { flex: 1 1 190px; min-width: 0; }
+    .target .bar { height: 6px; background: var(--track); border-radius: 2px; overflow: hidden; }
+    .target .bar span { display: block; height: 100%; border-radius: 2px; transition: width 700ms var(--ease); }
+    .target-note { font-size: 13px; color: var(--muted); margin-top: 6px; text-wrap: pretty; }
+
+    .cpu-figure { flex: none; width: 68px; text-align: right; font-size: 14px; }
     .name { font-size: 13px; font-weight: 700; }
     .count { font-size: 12px; color: var(--muted); }
     .of { color: var(--muted); }
@@ -250,7 +282,7 @@ interface WorkloadRow {
       padding: 2px 8px;
     }
 
-    .pods { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+    .pods { flex: 1 1 150px; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; align-content: center; }
     .pod {
       width: 14px;
       height: 14px;
@@ -260,7 +292,7 @@ interface WorkloadRow {
     }
     .pod.sick { background: var(--chip-bad-fg); }
     /* Room the autoscaler could still use. */
-    .pod.spare { background: none; border: 1px dashed var(--line); }
+    .pod.spare { background: none; border: 1px dashed #C9C9C9; }
     /*
       Starting is not sick. A pod coming up during a scale-out or a rollout is
       the normal case on this page, and colouring it like a fault made a healthy
@@ -484,6 +516,39 @@ export class PodPulse {
       return 'no cpu metric collected yet';
     }
     return `cpu ${current}% of a ${target}% target`;
+  }
+
+  /**
+   * How close this workload is to the CPU level that would make it scale.
+   *
+   * The bar the design asks for is utilisation against the autoscaler's target,
+   * not CPU against the namespace budget - a workload at 17% of a 60% target is
+   * a third of the way to needing another pod, and that is the number worth
+   * drawing beside a row of pods. Workloads with no autoscaler get their share
+   * of the quota instead, since there is no target to be under.
+   */
+  protected targetPct(row: WorkloadRow): number {
+    if (row.hasHpa && row.currentPercent !== null && row.targetPercent) {
+      return Math.min(100, Math.round((row.currentPercent / row.targetPercent) * 100));
+    }
+    return this.share(row.millis);
+  }
+
+  protected targetNote(row: WorkloadRow): string {
+    if (!row.hasHpa) {
+      return `fixed at ${row.pods.length} ${row.pods.length === 1 ? 'pod' : 'pods'}, never scales`;
+    }
+    if (row.currentPercent === null || row.targetPercent === null) {
+      return 'no cpu metric collected yet';
+    }
+    const at = `cpu ${row.currentPercent}% against a ${row.targetPercent}% target`;
+    if (row.atCeiling) {
+      return `${at} — at the ceiling, it cannot add another pod`;
+    }
+    if (row.desired !== null && row.current !== null && row.desired !== row.current) {
+      return `${at}, scaling to ${row.desired}`;
+    }
+    return `${at}, still under the line`;
   }
 
   protected share(millis: number): number {
