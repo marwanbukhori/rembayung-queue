@@ -71,9 +71,9 @@ import { Feed } from './state';
           <section class="vendor">
             <header>
               <span class="name">Dynatrace</span>
-              <span class="pill" [class.ok]="agentsUp()" [class.bad]="!agentsUp()">
-                <span class="dot" [class.beat]="agentsUp()"></span>
-                {{ agentsUp() ? 'AGENTS LOADED' : 'NO AGENTS' }}
+              <span class="pill" [class.ok]="agentCount() > 0" [class.bad]="agentCount() === 0">
+                <span class="dot" [class.beat]="agentCount() > 0"></span>
+                {{ agentCount() > 0 ? agentCount() + ' AGENTS LOADED' : 'NO AGENTS' }}
               </span>
             </header>
             <p class="role">Where the time went — the ~2.7s Oracle round trip, hop by hop.</p>
@@ -177,12 +177,18 @@ export class ObservabilityPanel {
 
   protected readonly status = computed(() => this.observability.status());
 
-  /** One agent down is worth showing as down: a service missing from the traces
-   *  is exactly the gap somebody would otherwise not notice. */
-  protected readonly agentsUp = computed(() => {
-    const feeds: Feed[] = this.status()?.dynatrace.instrumented ?? [];
-    return feeds.length > 0 && feeds.every((f) => f.on);
-  });
+  /**
+   * How many agents are loaded, not whether all of them are.
+   *
+   * "All" was the first spelling and it read NO AGENTS against a namespace where
+   * both services on the booking path were instrumented - because redis is in
+   * the list and redis will never carry a Java agent. A count says what is true
+   * without needing every row to mean the same thing, and a drop from two to one
+   * is still visible.
+   */
+  protected readonly agentCount = computed(
+    () => (this.status()?.dynatrace.instrumented ?? []).filter((f: Feed) => f.on).length
+  );
 
   protected splunkHref(): string {
     // source, not service: the appender sets source=rembayung on every event it
