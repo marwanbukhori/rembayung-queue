@@ -139,15 +139,18 @@ import { StateService } from './state.service';
       one and the header stops meaning anything. The full table scrolls sideways
       instead, which is what every kubectl output does on a narrow terminal.
     */
-    .headed-scroll { overflow-x: auto; }
-    .headed-scroll .head-row, .headed-scroll .row { min-width: 980px; }
+    .headed-scroll { overflow-x: auto; overflow-y: hidden; }
+    .headed-scroll .head-row, .headed-scroll .row { min-width: 1040px; flex-wrap: nowrap; }
+    /* The last column has to clear the scroll gutter or it reads as cut off. */
+    .headed-scroll .row > :last-child, .headed-scroll .head-row > :last-child { padding-right: 4px; }
 
     .head-row {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: 8px 16px;
-      padding: 10px 0;
+      /* Same horizontal padding as a row, or every column sits 16px off it. */
+      padding: 10px 16px;
       border-bottom: 1px solid var(--line);
       font-size: 11px;
       font-weight: 700;
@@ -161,7 +164,15 @@ import { StateService } from './state.service';
     .h-node { flex: 1 1 150px; min-width: 0; }
 
     .row.headed { align-items: baseline; gap: 8px 16px; }
-    .row.headed .state { flex: none; width: 92px; }
+    .row.headed .state {
+      flex: none;
+      width: 92px;
+      min-width: 0;
+      padding: 0;
+      background: none;
+      font-weight: 400;
+      font-size: 13px;
+    }
     .row.headed .name { flex: 2 1 240px; min-width: 0; overflow-wrap: anywhere; }
     .kind { flex: 1 1 140px; min-width: 0; font-size: 13px; color: var(--ink-soft); }
     .cell { flex: none; width: 76px; text-align: right; font-size: 13px; color: var(--ink-soft); }

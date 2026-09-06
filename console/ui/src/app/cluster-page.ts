@@ -31,14 +31,11 @@ import { PodPulse } from './pod-pulse';
       </div>
       <rb-cluster-resources [full]="true" />
 
-      <div class="card">
-        <div class="why">Pods, CPU and autoscaling</div>
-        <p class="note">
-          One square per running pod, the namespace budget divided by workload, and how much
-          headroom each autoscaler still has.
-        </p>
-        <rb-pod-pulse />
-      </div>
+      <!--
+        No wrapper: the card carries its own title and subtitle, so a heading
+        above it said the same thing twice in two sizes.
+      -->
+      <rb-pod-pulse />
 
       <div class="card">
         <div class="why">How these objects connect</div>
