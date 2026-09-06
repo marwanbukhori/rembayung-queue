@@ -67,6 +67,7 @@ public class ObservabilityProbe {
     private final String hecUrl;
     private final String hecToken;
     private final String dynatraceTenant;
+    private final boolean trustSelfSigned;
 
     private volatile Snapshot cache;
 
@@ -76,11 +77,14 @@ public class ObservabilityProbe {
                               @Value("${SPLUNK_HEC_URL:}") String hecUrl,
                               @Value("${SPLUNK_HEC_TOKEN:}") String hecToken,
                               @Value("${console.dynatrace-tenant:https://icp44821.apps.dynatrace.com}")
-                              String dynatraceTenant) {
+                              String dynatraceTenant,
+                              @Value("${console.splunk.trust-self-signed:true}")
+                              boolean trustSelfSigned) {
         this.kube = kube;
         this.hecUrl = hecUrl == null ? "" : hecUrl.trim();
         this.hecToken = hecToken == null ? "" : hecToken.trim();
         this.dynatraceTenant = dynatraceTenant;
+        this.trustSelfSigned = trustSelfSigned;
     }
 
     public ObservabilityStatus current() {
@@ -128,7 +132,7 @@ public class ObservabilityProbe {
 
         String endpoint = hostOf(hecUrl);
         try {
-            HttpResponse<String> response = httpClient().send(
+            HttpResponse<String> response = httpClient(trustSelfSigned).send(
                     HttpRequest.newBuilder(URI.create(trimSlash(hecUrl) + "/services/collector/health"))
                             .timeout(HTTP_TIMEOUT)
                             .GET()
@@ -265,7 +269,11 @@ public class ObservabilityProbe {
     }
 
     /**
-     * A client that does not verify the collector's certificate.
+     * A client that does not verify the collector's certificate, when and only
+     * when {@code console.splunk.trust-self-signed} says so. Set it to false and
+     * this returns an ordinary verifying client, which is what a real Splunk
+     * stack must run with; it defaults to true because the alternative here is
+     * worse than the risk. See below.
      *
      * The same decision, for the same measured reason, as the logback appender
      * that ships the logs: Splunk Cloud trial stacks serve a self-signed
@@ -274,12 +282,22 @@ public class ObservabilityProbe {
      * unreachable. The scope is deliberately one request to one known host that
      * returns a fixed health document, and the token is not sent — so there is
      * no credential to intercept and no response body that is trusted for
-     * anything beyond being displayed.
+     * anything beyond being displayed, truncated and HTML-escaped by Angular.
+     *
+     * Defaulting this to false would be the reflex, and it would be wrong here:
+     * a verifying client cannot complete the handshake against a self-signed
+     * trial certificate, so the panel would report a healthy collector as
+     * unreachable. A status panel whose whole purpose is to tell "working" from
+     * "broken" must not be the thing that invents a false negative.
      *
      * On a real Splunk stack this becomes a default client with the stack's CA in
      * the container truststore. It is here because a trial stack has no CA to add.
      */
-    private static HttpClient httpClient() throws Exception {
+    private static HttpClient httpClient(boolean trustSelfSigned) throws Exception {
+        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(HTTP_TIMEOUT);
+        if (!trustSelfSigned) {
+            return builder.build();
+        }
         TrustManager[] trustAll = { new X509TrustManager() {
             @Override public void checkClientTrusted(X509Certificate[] chain, String type) { }
             @Override public void checkServerTrusted(X509Certificate[] chain, String type) { }
@@ -287,9 +305,6 @@ public class ObservabilityProbe {
         } };
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(null, trustAll, new java.security.SecureRandom());
-        return HttpClient.newBuilder()
-                .connectTimeout(HTTP_TIMEOUT)
-                .sslContext(context)
-                .build();
+        return builder.sslContext(context).build();
     }
 }
