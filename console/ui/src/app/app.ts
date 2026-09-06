@@ -36,8 +36,8 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
               <rect width="24" height="24" rx="3" fill="#1A1A1A" />
               <path d="M4 8h13M4 12h16M4 16h9" stroke="#FFCC00" stroke-width="2.2" stroke-linecap="round" />
             </svg>
-            <span class="wordmark">Rembayung</span>
-            <span class="tagline">booking queue simulation</span>
+            <span class="wordmark">DevOps Interview</span>
+            <span class="tagline">Rembayung booking queue</span>
           </button>
           <div style="flex: 1 1 20px;"></div>
           <div class="badges">
@@ -84,11 +84,6 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
           <rb-operations />
         }
       }
-
-      <footer>
-        <span>Rembayung booking queue, phase 7. A console a stranger can drive.</span>
-        <span class="mono">{{ readingLabel() }}</span>
-      </footer>
     </main>
   `,
   styles: `
@@ -166,16 +161,6 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
       flex-direction: column;
       gap: 32px;
     }
-    footer {
-      border-top: 1px solid var(--line);
-      padding-top: 16px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 24px;
-      justify-content: space-between;
-      font-size: 14px;
-      color: var(--muted);
-    }
   `
 })
 export class App {
@@ -219,12 +204,6 @@ export class App {
   });
 
   /** Which session and slot are actually on screen, named by the services. */
-  readonly readingLabel = computed(() => {
-    const drop = this.state.view()?.drop;
-    return drop && drop.available
-      ? `reading your own sitting of ${drop.capacity} seats`
-      : 'nothing read yet';
-  });
 
   show(surface: Surface): void {
     this.surface.set(surface);
