@@ -29,6 +29,15 @@ export interface PodStatus {
   age: string;
   /** Running, Succeeded, Pending or Failed. 0/1 alone cannot tell them apart. */
   phase: string;
+  /** The Deployment or Job, from ownerReferences rather than a name split. */
+  workload: string;
+  ownerKind: string;
+  node: string;
+  podIp: string;
+  /** Guaranteed, Burstable or BestEffort. */
+  qos: string;
+  /** The image tag, shortened to seven characters when it is a commit SHA. */
+  image: string;
 }
 
 export interface PodHealth {

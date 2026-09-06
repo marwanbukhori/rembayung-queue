@@ -32,6 +32,7 @@ import { StateService } from './state.service';
       <div class="sweep" [class.stopped]="!live()"><span></span></div>
 
       @if (pods().length) {
+        <div [class.headed-scroll]="full()">
         @if (full()) {
           <!--
             Headed columns rather than inline key/value pairs. The same facts
@@ -44,6 +45,9 @@ import { StateService } from './state.service';
             <span class="h-kind">WORKLOAD</span>
             <span class="h-cell">READY</span>
             <span class="h-cell">CPU REQ</span>
+            <span class="h-cell">QOS</span>
+            <span class="h-cell">IMAGE</span>
+            <span class="h-node">NODE</span>
             <span class="h-cell">RESTARTS</span>
             <span class="h-cell">AGE</span>
           </div>
@@ -59,9 +63,12 @@ import { StateService } from './state.service';
               </span>
               <span class="name mono">{{ pod.name }}</span>
               @if (full()) {
-                <span class="kind mono">{{ workloadOf(pod.name) }}</span>
+                <span class="kind mono" [title]="pod.ownerKind">{{ pod.workload }}</span>
                 <span class="cell mono">{{ pod.ready }}</span>
                 <span class="cell mono">{{ pod.cpu }}</span>
+                <span class="cell mono">{{ pod.qos }}</span>
+                <span class="cell mono">{{ pod.image }}</span>
+                <span class="node mono" [title]="pod.podIp">{{ pod.node }}</span>
                 <span class="cell mono" [class.bad]="pod.restarts > 0">{{ pod.restarts }}</span>
                 <span class="cell mono">{{ pod.age }}</span>
               } @else {
@@ -72,7 +79,7 @@ import { StateService } from './state.service';
             </li>
           }
         </ul>
-      
+        </div>
       } @else {
         <!--
           The degradation contract: the section still renders, and the reason the
@@ -127,6 +134,14 @@ import { StateService } from './state.service';
     .live-flag.stale .live-dot { animation: none; }
     .live-note { font-size: 14px; color: var(--ink-soft); min-width: 0; text-wrap: pretty; }
 
+    /*
+      Ten columns do not wrap usefully - a wrapped row interleaves with the next
+      one and the header stops meaning anything. The full table scrolls sideways
+      instead, which is what every kubectl output does on a narrow terminal.
+    */
+    .headed-scroll { overflow-x: auto; }
+    .headed-scroll .head-row, .headed-scroll .row { min-width: 980px; }
+
     .head-row {
       display: flex;
       flex-wrap: wrap;
@@ -143,6 +158,7 @@ import { StateService } from './state.service';
     .h-name { flex: 2 1 240px; min-width: 0; }
     .h-kind { flex: 1 1 140px; min-width: 0; }
     .h-cell { flex: none; width: 76px; text-align: right; }
+    .h-node { flex: 1 1 150px; min-width: 0; }
 
     .row.headed { align-items: baseline; gap: 8px 16px; }
     .row.headed .state { flex: none; width: 92px; }
@@ -150,6 +166,16 @@ import { StateService } from './state.service';
     .kind { flex: 1 1 140px; min-width: 0; font-size: 13px; color: var(--ink-soft); }
     .cell { flex: none; width: 76px; text-align: right; font-size: 13px; color: var(--ink-soft); }
     .cell.bad { color: var(--chip-bad-fg); font-weight: 700; }
+    /* The node is long and the least urgent, so it takes the slack column. */
+    .node {
+      flex: 1 1 150px;
+      min-width: 0;
+      font-size: 13px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .state.starting { color: var(--chip-warn-fg); }
     .stamp { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
 
@@ -226,12 +252,6 @@ export class ClusterResources {
       return 'Completed';
     }
     return this.starting(pod) ? 'Starting' : 'Not ready';
-  }
-
-  /** The Deployment or Job a pod belongs to, from the name it was given. */
-  protected workloadOf(name: string): string {
-    const parts = name.split('-');
-    return parts.length > 2 ? parts.slice(0, -2).join('-') : name;
   }
 
   /** The overview shows the workload and its replicas; the cluster page shows every column. */

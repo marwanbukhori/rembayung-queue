@@ -2,6 +2,7 @@ package dev.marwan.console.cluster;
 
 import dev.marwan.console.ConsoleProperties;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Quantity;
 import org.slf4j.Logger;
@@ -112,7 +113,64 @@ public class PodHealthProvider {
                 cpuRequest(pod),
                 restarts,
                 age(pod),
-                phase(pod));
+                phase(pod),
+                workload(pod),
+                ownerKind(pod),
+                pod.getSpec() == null || pod.getSpec().getNodeName() == null
+                        ? "-" : pod.getSpec().getNodeName(),
+                pod.getStatus() == null || pod.getStatus().getPodIP() == null
+                        ? "-" : pod.getStatus().getPodIP(),
+                pod.getStatus() == null || pod.getStatus().getQosClass() == null
+                        ? "-" : pod.getStatus().getQosClass(),
+                imageTag(pod));
+    }
+
+    /**
+     * The Deployment or Job this pod serves, from its ownerReferences.
+     *
+     * A ReplicaSet is named <deployment>-<hash>, so trimming its last segment
+     * gives the Deployment; a Job owns its pods directly and is already the
+     * answer. This replaces splitting the pod's own name, which is a guess: a
+     * Job pod carries one random segment and a Deployment's carries two, and a
+     * drop id is indistinguishable from a ReplicaSet hash.
+     */
+    private String workload(Pod pod) {
+        OwnerReference owner = ownerOf(pod);
+        if (owner == null) {
+            return pod.getMetadata().getName();
+        }
+        if ("ReplicaSet".equals(owner.getKind())) {
+            int cut = owner.getName().lastIndexOf('-');
+            return cut > 0 ? owner.getName().substring(0, cut) : owner.getName();
+        }
+        return owner.getName();
+    }
+
+    private String ownerKind(Pod pod) {
+        OwnerReference owner = ownerOf(pod);
+        return owner == null ? "-" : owner.getKind();
+    }
+
+    private OwnerReference ownerOf(Pod pod) {
+        var owners = pod.getMetadata().getOwnerReferences();
+        return owners == null || owners.isEmpty() ? null : owners.get(0);
+    }
+
+    /** Just the tag: the registry path is the same on every pod and says nothing. */
+    private String imageTag(Pod pod) {
+        if (pod.getSpec() == null || pod.getSpec().getContainers() == null
+                || pod.getSpec().getContainers().isEmpty()) {
+            return "-";
+        }
+        String image = pod.getSpec().getContainers()
+                .get(pod.getSpec().getContainers().size() - 1).getImage();
+        if (image == null) {
+            return "-";
+        }
+        int at = image.lastIndexOf(':');
+        String tag = at > 0 ? image.substring(at + 1) : image;
+        // A commit SHA in full is 40 characters of noise in a table column.
+        return tag.length() > 12 ? tag.substring(0, 7) : tag;
     }
 
     /** Running, Succeeded, Pending or Failed. Absent only if the API omits status. */
