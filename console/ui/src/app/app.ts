@@ -31,12 +31,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
       <div class="brandband">
         <div class="inner">
           <button class="brand" (click)="show('home')" title="Back to the overview">
-            <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-              <rect width="24" height="24" rx="3" fill="#1A1A1A" />
-              <path d="M4 8h13M4 12h16M4 16h9" stroke="#FFCC00" stroke-width="2.2" stroke-linecap="round" />
-            </svg>
-            <span class="wordmark">DevOps Interview</span>
-            <span class="tagline">Rembayung booking queue</span>
+            <img class="mark" src="dhl.png" alt="DHL" />
           </button>
           <div style="flex: 1 1 20px;"></div>
           <div class="badges">
@@ -108,9 +103,12 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
       cursor: pointer;
       text-align: left;
     }
-    .mark { align-self: center; flex: none; border-radius: 3px; }
-    .wordmark { font-size: 19px; font-weight: 800; letter-spacing: -0.015em; white-space: nowrap; }
-    .tagline { font-size: 13px; color: #4A4A4A; white-space: nowrap; }
+    /*
+      The supplied PNG is square with the wordmark occupying a band across the
+      middle, so height alone renders a speck surrounded by padding. A fixed box
+      with object-fit: cover crops the padding away and shows the mark itself.
+    */
+    .mark { flex: none; height: 34px; width: 132px; object-fit: cover; display: block; }
     .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .badge {
       display: flex;

@@ -20,7 +20,7 @@ import { StateService } from './state.service';
   selector: 'rb-architecture-diagram',
   template: `
     <div class="frame">
-      <svg viewBox="0 0 1000 330" role="img" [attr.aria-label]="summary()">
+      <svg viewBox="0 0 1000 340" role="img" [attr.aria-label]="summary()">
         <defs>
           <marker id="rb-arch-arrow" viewBox="0 0 10 10" refX="9" refY="5"
                   markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -100,6 +100,10 @@ import { StateService } from './state.service';
     .box rect { fill: var(--white); stroke: var(--line); stroke-width: 1; }
     .box.store rect { fill: var(--canvas); stroke-dasharray: 4 3; }
     .box.outside rect { fill: var(--white); stroke: var(--ink); stroke-dasharray: 4 3; }
+    .box.claim rect { fill: var(--ink); stroke: var(--ink); }
+    .box.claim .label { fill: var(--white); }
+    .box.claim .value { fill: #7BD69C; }
+    .box.claim .sub { fill: var(--on-dark-soft); }
 
     .label { font-family: var(--mono); font-size: 13px; font-weight: 700; fill: var(--ink); }
     .value { font-family: var(--mono); font-size: 17px; font-weight: 700; fill: var(--ink); }
@@ -110,6 +114,12 @@ export class ArchitectureDiagram {
   private readonly state = inject(StateService);
 
   private readonly pods = computed(() => this.state.view()?.pods ?? null);
+
+  /** Read from the same field the alert rule reads, never a constant. */
+  private readonly oversold = computed(() => {
+    const drop = this.state.view()?.drop;
+    return drop?.available ? String(drop.oversold) : '—';
+  });
 
   /**
    * Pods whose name starts with the deployment's, ready ones counted separately.
@@ -142,7 +152,11 @@ export class ArchitectureDiagram {
    * A diagram where every arrow pulses identically would be decoration.
    */
   protected readonly edges = [
-    { id: 'a-in', d: 'M158 155 H206', dur: '2s', dots: [0, 0.7, 1.4] },
+    // Nine dots crossing the first hop for every one crossing the rest. That
+    // ratio is the whole reason a queue exists, and it was the one thing the
+    // separate flow diagram said that this one did not.
+    { id: 'a-in', d: 'M158 155 H206', dur: '0.9s',
+      dots: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] },
     { id: 'a-console', d: 'M356 155 H371 V73 H386', dur: '2.4s', dots: [0.3, 1.5] },
     { id: 'a-queue', d: 'M356 155 H371 V233 H386', dur: '2.4s', dots: [0, 0.8, 1.6] },
     // Redis is the top-right box and booking-service the bottom-right one, so
@@ -153,7 +167,8 @@ export class ArchitectureDiagram {
     // edge on the wrong box and drew redis -> Oracle, which is the opposite of
     // the claim the whole diagram exists to make: booking-service is the only
     // thing that reaches the database.
-    { id: 'a-oracle', d: 'M766 233 H792 V155 H818', dur: '3.6s', dots: [0] }
+    { id: 'a-oracle', d: 'M766 233 H792 V155 H818', dur: '3.6s', dots: [0] },
+    { id: 'a-out', d: 'M905 192 V246', dur: '3.6s', dots: [1.2] }
   ];
 
   protected readonly boxes = computed(() => [
@@ -183,7 +198,12 @@ export class ArchitectureDiagram {
     },
     {
       id: 'oracle', x: 818, y: 118, w: 174, h: 74, tone: 'outside',
-      label: 'Oracle', value: '', sub: 'Autonomous, a region away'
+      label: 'Oracle', value: '', sub: 'one row, one lock'
+    },
+    {
+      // The outcome, on the diagram rather than in a sentence beneath it.
+      id: 'oversold', x: 818, y: 246, w: 174, h: 74, tone: 'claim',
+      label: 'Oversold', value: this.oversold(), sub: 'never above zero'
     }
   ]);
 

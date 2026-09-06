@@ -1,6 +1,5 @@
 import { Component, computed, inject, output } from '@angular/core';
 import { ArchitectureDiagram } from './architecture-diagram';
-import { FlowDiagram } from './flow-diagram';
 import { PipelineDiagram } from './pipeline-diagram';
 import { Reveal } from './reveal';
 import { StateService } from './state.service';
@@ -27,7 +26,7 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [ArchitectureDiagram, FlowDiagram, PipelineDiagram, Reveal],
+  imports: [ArchitectureDiagram, PipelineDiagram, Reveal],
   template: `
     <div class="stack">
       <section class="panel">
@@ -41,7 +40,7 @@ interface Outward {
         <div class="hero">
           <div class="hero-lead">
             <span class="tag eyebrow">Simulation — not a real booking site</span>
-            <h1 class="headline">Watch a restaurant's 9pm booking rush, on demand</h1>
+            <h1 class="headline">Watch a booking rush survive itself</h1>
             <div class="hero-actions">
               <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
               <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
@@ -59,15 +58,9 @@ interface Outward {
           </div>
           <div class="hero-say">
             <p class="hero-lede">
-              Rembayung takes reservations for one sitting a night, and bookings open at
-              <strong>21:00 every day except Friday</strong>. The rush is not a surprise, it is
-              scheduled: thousands of people press the same button in the same second for 250
-              seats. This console runs that minute on demand, so you can watch what the queue does
-              instead of being told.
-            </p>
-            <p class="hero-note">
-              Starting one seeds a fresh 250-seat slot of your own and opens it immediately, so you
-              can see what 21:00 looks like without waiting for 21:00.
+              <strong>3,000 people, 250 seats, one second.</strong> A restaurant's booking rush,
+              run on demand against a real cluster — so you can watch the queue hold instead of
+              being told it does.
             </p>
           </div>
         </div>
@@ -83,68 +76,12 @@ interface Outward {
           }
         </nav>
 
-        <div class="band" id="path" [rbReveal]="0">
+        <div class="band" id="system" [rbReveal]="0">
           <div class="band-head-row">
-            <div class="band-head eyebrow">The path one customer takes</div>
-            <div class="band-aside mono">read live from the cluster</div>
-          </div>
-          <rb-flow-diagram [alwaysMoving]="true" />
-        </div>
-
-        <div class="band" id="runs" [rbReveal]="0">
-          <div class="band-head-row">
-            <div class="band-head eyebrow">What runs it</div>
-            <div class="band-aside mono">pod counts are live</div>
+            <div class="band-head eyebrow">The system</div>
+            <div class="band-aside mono">pod counts and oversold are live</div>
           </div>
           <rb-architecture-diagram />
-        </div>
-
-        <div class="band" id="moves" [rbReveal]="0">
-          <div class="band-head-row">
-            <div class="band-head eyebrow">Three moves to try to break it</div>
-            <div class="band-aside mono">nothing to install</div>
-          </div>
-          <div class="moves">
-            @for (move of moves; track move.name; let i = $index) {
-              <div class="move">
-                <div class="move-num mono">{{ i + 1 }}</div>
-                <div style="min-width: 0;">
-                  <div class="move-name">{{ move.name }}</div>
-                  <div class="move-note">{{ move.note }}</div>
-                </div>
-              </div>
-            }
-          </div>
-        </div>
-
-        <div class="band" id="simulated" [rbReveal]="0">
-          <div class="band-head eyebrow">What is being simulated</div>
-          <div class="facts">
-            <div class="fact">
-              <div class="fact-figure mono">21:00</div>
-              <div class="fact-name">Every day except Friday</div>
-              <div class="fact-note">
-                A published opening time, so every customer arrives in the same second rather than
-                spread across an evening.
-              </div>
-            </div>
-            <div class="fact">
-              <div class="fact-figure mono">~3,000</div>
-              <div class="fact-name">Attempts that broke the real thing</div>
-              <div class="fact-note">
-                The restaurant's own platform fell over at around three thousand booking attempts,
-                and took the reservations with it.
-              </div>
-            </div>
-            <div class="fact">
-              <div class="fact-figure mono">250</div>
-              <div class="fact-name">Seats that must stay 250</div>
-              <div class="fact-note">
-                Scalpers found the double-sell: the same seat confirmed to two people. That is the
-                failure this build refuses to reproduce.
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="band" id="pipeline" [rbReveal]="0">
@@ -488,31 +425,14 @@ export class PublicHome {
   ];
 
   readonly contents = [
-    { id: 'path', label: 'The request path' },
-    { id: 'runs', label: 'What runs it' },
+    { id: 'system', label: 'The system' },
     { id: 'pipeline', label: 'Commit to pod' },
-    { id: 'moves', label: 'Three moves' },
-    { id: 'simulated', label: 'The numbers' },
-    { id: 'stack', label: 'The stack' }
+    { id: 'stack', label: 'What each tool does' }
   ];
 
   readonly toolCount = computed(() =>
     this.tools.reduce((sum, group) => sum + group.items.length, 0));
 
-  readonly moves = [
-    {
-      name: 'Start the 21:00 rush',
-      note: 'Seeds a slot row of 250 seats and a ticket counter of your own, then opens it.',
-    },
-    {
-      name: 'Send the crowd',
-      note: 'A load job inside the cluster offers hundreds of customers in the same second.',
-    },
-    {
-      name: 'Push it past breaking',
-      note: 'Raise admission until the connection pool gives out, and watch oversold stay at zero.',
-    },
-  ];
 
   readonly oversold = computed(() => this.state.view()?.drop.oversold ?? 0);
 
