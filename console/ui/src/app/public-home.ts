@@ -2,7 +2,6 @@ import { Component, computed, inject, output } from '@angular/core';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { PipelineDiagram } from './pipeline-diagram';
 import { Reveal } from './reveal';
-import { StateService } from './state.service';
 
 /** The three places to look when this page is not enough. */
 interface Outward {
@@ -39,28 +38,27 @@ interface Outward {
         -->
         <div class="hero">
           <div class="hero-lead">
-            <span class="tag eyebrow">Simulation — not a real booking site</span>
+            <span class="tag eyebrow">Simulation</span>
             <h1 class="headline">Watch a booking rush survive itself</h1>
             <div class="hero-actions">
               <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
               <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
             </div>
-            <!--
-              The claim, live, where the claim is made. Read from the same field
-              the alert rule reads, so the hero cannot boast a number the rest
-              of the page would contradict.
-            -->
-            <div class="proof">
-              <span class="proof-pip"></span>
-              <span class="proof-figure mono">{{ oversold() }}</span>
-              <span class="proof-text">seats oversold, across every simulation this cluster has run</span>
-            </div>
           </div>
           <div class="hero-say">
             <p class="hero-lede">
-              <strong>3,000 people, 250 seats, one second.</strong> A restaurant's booking rush,
-              run on demand against a real cluster — so you can watch the queue hold instead of
-              being told it does.
+              A working console for a booking system built to survive its own busiest second. A
+              restaurant sells 250 seats a night and opens them all at once; around three thousand
+              people press the same button in the same moment, and the seat sold twice is the one
+              that ends up in the newspaper.
+            </p>
+            <p class="hero-lede">
+              Everything behind this page is real and deployed. Three Spring Boot services on
+              <strong>OpenShift</strong>, tested against real Oracle and Redis containers, shipped
+              by <strong>GitHub Actions</strong> and <strong>Ansible</strong> with automatic
+              rollback, autoscaled under a fixed CPU budget, and watched by
+              <strong>Prometheus, Dynatrace and Splunk</strong>. Press start and the rush runs
+              against that cluster while you watch.
             </p>
           </div>
         </div>
@@ -152,29 +150,6 @@ interface Outward {
     }
     .hero-lede { margin: 0; font-size: 16px; color: var(--ink-soft); max-width: 62ch; text-wrap: pretty; }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-    .proof {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      border: 1px solid var(--chip-ok-fg);
-      background: var(--chip-ok-bg);
-      border-radius: 999px;
-      font-size: 14px;
-      color: var(--ink-soft);
-    }
-    .proof-pip {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: var(--chip-ok-fg);
-      flex: none;
-      animation: proof-beat 2s ease-in-out infinite;
-    }
-    @keyframes proof-beat { 50% { opacity: .25; } }
-    .proof-figure { font-size: 18px; font-weight: 700; color: var(--chip-ok-fg); }
-    .proof-text { min-width: 0; text-wrap: pretty; }
-    @media (prefers-reduced-motion: reduce) { .proof-pip { animation: none; } }
 
     .hero-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
 
@@ -368,7 +343,6 @@ export class PublicHome {
   readonly docs = output<void>();
   readonly visitor = output<void>();
 
-  protected readonly state = inject(StateService);
 
   /** Named because a hiring manager reads the list before reading the code. */
   /** The three things a visitor can actually do, in the order the page offers them. */
@@ -434,7 +408,6 @@ export class PublicHome {
     this.tools.reduce((sum, group) => sum + group.items.length, 0));
 
 
-  readonly oversold = computed(() => this.state.view()?.drop.oversold ?? 0);
 
 
 
