@@ -85,8 +85,12 @@ export class ObservabilityLinks {
     // @timestamp, message, logger_name, thread_name, level and service - there is
     // no drop id among them, and neither the gate nor booking-service writes one
     // per request. Service and a time window are what the data actually supports.
-    const query = encodeURIComponent(
-      'search service="queue-gate" OR service="booking-service"');
+    // source, not service. The appender sets <source>rembayung</source> on every
+    // event it ships, so this matches whatever arrived. A search on `service`
+    // depends on Splunk extracting that field out of the JSON body, and if the
+    // extraction is not configured the search is empty while the data is there -
+    // which looks exactly like a broken integration.
+    const query = encodeURIComponent('search source="rembayung"');
     return [
       {
         name: 'Splunk',

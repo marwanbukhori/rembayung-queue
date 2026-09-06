@@ -56,6 +56,20 @@ spec:
             - name: management
               containerPort: 9090
           env:
+            # The same three keys the other two services take, wired the same
+            # way. The console was the only service not shipping its logs, which
+            # meant every operation it performs - starting a sitting, creating a
+            # load Job, the scheduler refusing one - was missing from Splunk
+            # while the services either side of it were present.
+            - name: SPLUNK_HEC_URL
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: url, optional: true }
+            - name: SPLUNK_HEC_TOKEN
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: token, optional: true }
+            - name: SPRING_PROFILES_INCLUDE
+              valueFrom:
+                secretKeyRef: { name: splunk-hec, key: profile, optional: true }
             # Stated, never inferred. The console introspects this namespace
             # for pods, the quota and its own load Jobs, and the default in
             # application.yml was wrong once — the pods panel reported
