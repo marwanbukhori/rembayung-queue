@@ -46,17 +46,27 @@ import { StateService } from './state.service';
           to make a diagram look wrong.
         -->
         <g class="edges">
-          <!-- Everything public enters through one Route ... -->
-          <path d="M158 155 H206" />
-          <!-- ... which serves the page ... -->
-          <path d="M356 155 H371 V73 H386" />
-          <!-- ... and the queue. -->
-          <path d="M356 155 H371 V233 H386" />
-          <!-- The gate keeps the line in Redis and admits to booking-service. -->
-          <path d="M566 233 H581 V73 H596" />
-          <path d="M566 233 H596" />
-          <!-- booking-service is the only thing that reaches Oracle. -->
-          <path d="M766 233 H792 V155 H818" />
+          @for (edge of edges; track edge.id) {
+            <path [attr.id]="edge.id" [attr.d]="edge.d" />
+          }
+        </g>
+
+        <!--
+          Requests, moving. The boxes say what exists; only the dots say the
+          thing is working, and a static architecture drawing is indis-
+          tinguishable from a diagram of something switched off.
+        -->
+        <g class="traffic" aria-hidden="true">
+          @for (edge of edges; track edge.id) {
+            @for (offset of edge.dots; track offset) {
+              <circle class="dot" r="4">
+                <animateMotion [attr.dur]="edge.dur" repeatCount="indefinite"
+                               [attr.begin]="offset + 's'">
+                  <mpath [attr.href]="'#' + edge.id" />
+                </animateMotion>
+              </circle>
+            }
+          }
         </g>
 
         @for (box of boxes(); track box.id) {
@@ -84,6 +94,8 @@ import { StateService } from './state.service';
     .zone-label { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; fill: var(--muted); }
 
     .edges path { fill: none; stroke: var(--muted); stroke-width: 2; marker-end: url(#rb-arch-arrow); }
+    .dot { fill: var(--dhl-red); }
+    @media (prefers-reduced-motion: reduce) { .dot { display: none; } }
 
     .box rect { fill: var(--white); stroke: var(--line); stroke-width: 1; }
     .box.store rect { fill: var(--canvas); stroke-dasharray: 4 3; }
@@ -120,6 +132,29 @@ export class ArchitectureDiagram {
       ? `${mine.length} ${noun}`
       : `${ready}/${mine.length} ${noun}`;
   }
+
+  /**
+   * The paths, with how many requests are in flight on each and how fast.
+   *
+   * Not uniform on purpose: the public hops carry several dots at a brisk pace
+   * and the Oracle hop carries one slowly, because that is the shape of the
+   * system - a crowd arrives, and one booking at a time reaches the database.
+   * A diagram where every arrow pulses identically would be decoration.
+   */
+  protected readonly edges = [
+    { id: 'a-in', d: 'M158 155 H206', dur: '2s', dots: [0, 0.7, 1.4] },
+    { id: 'a-console', d: 'M356 155 H371 V73 H386', dur: '2.4s', dots: [0.3, 1.5] },
+    { id: 'a-queue', d: 'M356 155 H371 V233 H386', dur: '2.4s', dots: [0, 0.8, 1.6] },
+    // Redis is the top-right box and booking-service the bottom-right one, so
+    // the gate reaches Redis by going up and booking-service by going across.
+    { id: 'a-redis', d: 'M566 233 H581 V73 H596', dur: '1.6s', dots: [0, 0.8] },
+    { id: 'a-booking', d: 'M566 233 H596', dur: '3s', dots: [0.4] },
+    // From booking-service, not Redis. Rewriting these into an array put this
+    // edge on the wrong box and drew redis -> Oracle, which is the opposite of
+    // the claim the whole diagram exists to make: booking-service is the only
+    // thing that reaches the database.
+    { id: 'a-oracle', d: 'M766 233 H792 V155 H818', dur: '3.6s', dots: [0] }
+  ];
 
   protected readonly boxes = computed(() => [
     {

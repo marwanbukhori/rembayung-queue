@@ -32,8 +32,30 @@ import { Component } from '@angular/core';
         }
 
         <g class="edges">
-          @for (edge of edges; track edge) {
-            <path [attr.d]="edge" />
+          @for (edge of edges; track edge; let i = $index) {
+            <path [attr.id]="'rb-pipe-' + i" [attr.d]="edge" />
+          }
+        </g>
+
+        <!--
+          One commit, travelling. A pipeline drawn as boxes is a diagram of a
+          pipeline; a dot moving through it, with each stage lighting as it
+          arrives, is the pipeline. The whole loop takes about twelve seconds -
+          slow enough to follow with your eyes rather than a strobe.
+        -->
+        <g class="commit" aria-hidden="true">
+          @for (edge of edges; track edge; let i = $index) {
+            <circle class="dot" r="5">
+              <animateMotion dur="12s" repeatCount="indefinite"
+                             [attr.begin]="i * 1.05 + 's'"
+                             keyPoints="0;1" keyTimes="0;0.085" calcMode="linear"
+                             fill="freeze">
+                <mpath [attr.href]="'#rb-pipe-' + i" />
+              </animateMotion>
+              <animate attributeName="opacity" dur="12s" repeatCount="indefinite"
+                       [attr.begin]="i * 1.05 + 's'"
+                       values="0;1;1;0;0" keyTimes="0;0.02;0.075;0.09;1" />
+            </circle>
           }
         </g>
 
@@ -59,6 +81,25 @@ import { Component } from '@angular/core';
     .lane-label { font-size: 10px; letter-spacing: .1em; fill: var(--muted); }
 
     .edges path { fill: none; stroke: var(--muted); stroke-width: 2; marker-end: url(#rb-pipe-arrow); }
+    .commit .dot { fill: var(--dhl-red); opacity: 0; }
+
+    /*
+      Each stage lights as the commit reaches it, on the same twelve-second
+      loop. The delays are the lane order, so the highlight travels rather than
+      flickering everywhere at once.
+    */
+    .box rect { animation: stage 12s ease-in-out infinite; }
+    @keyframes stage {
+      0%, 100% { fill: var(--white); }
+      6%       { fill: var(--highlight); }
+      14%      { fill: var(--white); }
+    }
+    .box.gate rect, .box.store rect, .box.watch rect { animation: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .commit .dot { display: none; }
+      .box rect { animation: none; }
+    }
 
     .box rect { fill: var(--white); stroke: var(--line); stroke-width: 1; }
     .box.gate rect { fill: var(--chip-warn-bg); stroke: var(--chip-warn-fg); }

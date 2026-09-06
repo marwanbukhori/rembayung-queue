@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { StateService } from './state.service';
 import { TrafficService } from './traffic.service';
 
@@ -168,8 +168,17 @@ export class FlowDiagram {
   private readonly state = inject(StateService);
   private readonly traffic = inject(TrafficService);
 
-  /** Dots move when the system does. An idle page that animates is a lie. */
-  protected readonly flowing = computed(() => this.traffic.flowing());
+  /**
+   * Run the dots regardless of whether a rush is in flight.
+   *
+   * On the simulation page the dots report: they move when traffic moves, and
+   * an idle page that animates would be claiming something is happening. On the
+   * overview there is no run to report on and the diagram is explaining how the
+   * thing works, so a frozen picture just looks broken.
+   */
+  readonly alwaysMoving = input(false);
+
+  protected readonly flowing = computed(() => this.alwaysMoving() || this.traffic.flowing());
 
   /** Staggered starts, so the dots space themselves along the hop. */
   readonly flood = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];

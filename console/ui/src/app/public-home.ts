@@ -77,7 +77,7 @@ interface Outward {
             <div class="band-head eyebrow">The path one customer takes</div>
             <div class="band-aside mono">read live from the cluster</div>
           </div>
-          <rb-flow-diagram />
+          <rb-flow-diagram [alwaysMoving]="true" />
         </div>
 
         <div class="band" [rbReveal]="0">
@@ -159,7 +159,7 @@ interface Outward {
               <div class="tool-group" [rbReveal]="0">
                 <div class="tool-area eyebrow">{{ group.area }}</div>
                 @for (tool of group.items; track tool.name) {
-                  <div class="tool">
+                  <div class="tool" [title]="tool.what">
                     <span class="tool-name mono">{{ tool.name }}</span>
                     <span class="tool-what">{{ tool.what }}</span>
                   </div>
@@ -282,10 +282,22 @@ interface Outward {
     }
     .tool-group { min-width: 0; }
     .tool-area { color: var(--muted); margin-bottom: 10px; }
-    .tool { padding: 7px 0; border-top: 1px solid var(--rule); }
+    .tool { padding: 6px 0; border-top: 1px solid var(--rule); }
     .tool:first-of-type { border-top: 0; }
     .tool-name { display: block; font-size: 13px; font-weight: 700; }
-    .tool-what { display: block; font-size: 13px; color: var(--ink-soft); text-wrap: pretty; }
+    /*
+      Clamped to one line. Twenty-three entries at two or three lines each was a
+      page of prose where a scannable list belonged; the full sentence is still
+      there on hover and for a screen reader.
+    */
+    .tool-what {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .stack-chip {
