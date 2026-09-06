@@ -1,10 +1,13 @@
-import { Component, output } from '@angular/core';
+import { Component, computed, inject, output } from '@angular/core';
 import { ClusterResources } from './cluster-resources';
+import { ArchitectureDiagram } from './architecture-diagram';
+import { ClusterService } from './cluster.service';
 import { ObjectGraph } from './object-graph';
+import { PodPulse } from './pod-pulse';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ClusterResources, ObjectGraph],
+  imports: [ArchitectureDiagram, ClusterResources, ObjectGraph, PodPulse],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -20,6 +23,65 @@ import { ObjectGraph } from './object-graph';
         </p>
       </div>
       <rb-cluster-resources [full]="true" />
+
+      <div class="card">
+        <div class="why">Pods, CPU and autoscaling</div>
+        <p class="note">
+          One square per running pod, the namespace budget divided by workload, and how much
+          headroom each autoscaler still has.
+        </p>
+        <rb-pod-pulse />
+      </div>
+
+      <div class="card">
+        <div class="why">Services, and what is published</div>
+        <p class="note">
+          Every Service in the namespace, read live. A Service with no Route is reachable only from
+          inside the cluster — which is why booking-service and redis have none.
+        </p>
+        @if (endpoints().length) {
+          <div class="scroller">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Type</th>
+                  <th>Ports</th>
+                  <th>Selector</th>
+                  <th>Published at</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (endpoint of endpoints(); track endpoint.name) {
+                  <tr>
+                    <td class="mono">{{ endpoint.name }}</td>
+                    <td class="mono muted">{{ endpoint.type }}</td>
+                    <td class="mono muted">{{ endpoint.ports }}</td>
+                    <td class="mono muted">{{ endpoint.selector }}</td>
+                    <td class="mono">
+                      @if (endpoint.route) {
+                        <a [href]="'https://' + endpoint.route" target="_blank" rel="noreferrer">{{ endpoint.route }}</a>
+                      } @else {
+                        <span class="internal">internal only</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="note">The Kubernetes API is not readable from here just now.</p>
+        }
+      </div>
+
+      <div class="card">
+        <div class="why">The shape of it</div>
+        <p class="note">
+          What talks to what, and where the namespace boundary falls.
+        </p>
+        <rb-architecture-diagram />
+      </div>
       <div class="card">
         <div class="why">How these objects connect</div>
         <p class="note">
@@ -46,5 +108,9 @@ import { ObjectGraph } from './object-graph';
   `
 })
 export class ClusterPage {
+  private readonly cluster = inject(ClusterService);
+
+  protected readonly endpoints = computed(() => this.cluster.cluster()?.endpoints ?? []);
+
   readonly home = output<void>();
 }

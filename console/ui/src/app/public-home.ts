@@ -72,7 +72,18 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <!--
+          A contents strip rather than a sidebar: the page is one column of
+          bands, so the list of them is one line, and a sticky sidebar would
+          take width from diagrams that need it.
+        -->
+        <nav class="toc" aria-label="Sections on this page">
+          @for (item of contents; track item.id) {
+            <a class="toc-link" [href]="'#' + item.id">{{ item.label }}</a>
+          }
+        </nav>
+
+        <div class="band" id="path" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">The path one customer takes</div>
             <div class="band-aside mono">read live from the cluster</div>
@@ -80,7 +91,7 @@ interface Outward {
           <rb-flow-diagram [alwaysMoving]="true" />
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <div class="band" id="runs" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">What runs it</div>
             <div class="band-aside mono">pod counts are live</div>
@@ -88,7 +99,7 @@ interface Outward {
           <rb-architecture-diagram />
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <div class="band" id="moves" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">Three moves to try to break it</div>
             <div class="band-aside mono">nothing to install</div>
@@ -106,7 +117,7 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <div class="band" id="simulated" [rbReveal]="0">
           <div class="band-head eyebrow">What is being simulated</div>
           <div class="facts">
             <div class="fact">
@@ -136,7 +147,7 @@ interface Outward {
           </div>
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <div class="band" id="pipeline" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">How a commit reaches a pod</div>
             <div class="band-aside mono">every label exists in the repo</div>
@@ -144,7 +155,7 @@ interface Outward {
           <rb-pipeline-diagram />
         </div>
 
-        <div class="band" [rbReveal]="0">
+        <div class="band" id="stack" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">Everything used, and what for</div>
             <div class="band-aside mono">{{ toolCount() }} pieces</div>
@@ -263,7 +274,27 @@ interface Outward {
     .move-name { font-size: 15px; font-weight: 700; }
     .move-note { font-size: 14px; color: var(--ink-soft); margin-top: 2px; text-wrap: pretty; }
 
-    .band { border-top: 1px solid var(--rule); padding: 24px; }
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 14px 24px;
+      border-top: 1px solid var(--rule);
+    }
+    .toc-link {
+      font-size: 13px;
+      color: var(--ink-soft);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 13px;
+      white-space: nowrap;
+      transition: border-color 120ms var(--ease), color 120ms var(--ease);
+    }
+    .toc-link:hover { border-color: var(--dhl-red); color: var(--dhl-red); }
+
+    /* So a jumped-to band clears the sticky navbar above it. */
+    .band { border-top: 1px solid var(--rule); padding: 24px; scroll-margin-top: 96px; }
     .band-head { color: var(--muted); margin-bottom: 16px; }
     .facts {
       display: grid;
@@ -454,6 +485,15 @@ export class PublicHome {
         { name: 'Angular 20', what: 'this console; signals and standalone components, no UI framework' }
       ]
     }
+  ];
+
+  readonly contents = [
+    { id: 'path', label: 'The request path' },
+    { id: 'runs', label: 'What runs it' },
+    { id: 'pipeline', label: 'Commit to pod' },
+    { id: 'moves', label: 'Three moves' },
+    { id: 'simulated', label: 'The numbers' },
+    { id: 'stack', label: 'The stack' }
   ];
 
   readonly toolCount = computed(() =>

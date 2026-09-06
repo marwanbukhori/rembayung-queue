@@ -95,7 +95,7 @@ class ClusterStateTest {
                 new ClusterState.Quota("compute-deploy", 700, 3000),
                 List.of(new ClusterState.Consumer("queue-gate", 200, 2)),
                 List.of(),
-                new ClusterState.Pool("booking-service", 2, 5, 20));
+                new ClusterState.Pool("booking-service", 2, 5, 20), List.of());
 
         assertThat(state.available()).isTrue();
         assertThat(state.detail()).isNull();

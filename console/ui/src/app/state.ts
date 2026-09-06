@@ -90,6 +90,16 @@ export interface Pool {
   percent: number;
 }
 
+/** One Service, and the Route publishing it if anything does. */
+export interface Endpoint {
+  name: string;
+  type: string;
+  ports: string;
+  selector: string;
+  /** null when nothing publishes it — which is the interesting case. */
+  route: string | null;
+}
+
 export interface ClusterState {
   available: boolean;
   detail: string | null;
@@ -97,6 +107,7 @@ export interface ClusterState {
   consumers: Consumer[];
   autoscalers: Autoscaler[];
   pool: Pool | null;
+  endpoints: Endpoint[];
 }
 
 export type LoadPhase = 'NONE' | 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';

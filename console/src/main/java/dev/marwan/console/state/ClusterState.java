@@ -35,15 +35,32 @@ public record ClusterState(
         Quota quota,
         List<Consumer> consumers,
         List<Autoscaler> autoscalers,
-        Pool pool) {
+        Pool pool,
+        /**
+         * What the namespace publishes, and what it does not.
+         *
+         * Read rather than described: the console already had permission to list
+         * Services and Routes and never used it, so the cluster page could show
+         * pods and quota but not the thing a reader most wants to check - which
+         * of these is reachable from outside.
+         */
+        List<Endpoint> endpoints) {
+
+    /**
+     * One Service, and the Route publishing it if there is one.
+     *
+     * @param route the Route's host, or null when nothing publishes this Service.
+     *              booking-service and redis have none, which is the point.
+     */
+    public record Endpoint(String name, String type, String ports, String selector, String route) { }
 
     public static ClusterState of(String namespace, Quota quota, List<Consumer> consumers,
-                                  List<Autoscaler> autoscalers, Pool pool) {
-        return new ClusterState(true, null, namespace, quota, consumers, autoscalers, pool);
+                                  List<Autoscaler> autoscalers, Pool pool, List<Endpoint> endpoints) {
+        return new ClusterState(true, null, namespace, quota, consumers, autoscalers, pool, endpoints);
     }
 
     public static ClusterState unavailable(String detail) {
-        return new ClusterState(false, detail, null, null, List.of(), List.of(), null);
+        return new ClusterState(false, detail, null, null, List.of(), List.of(), null, List.of());
     }
 
     /**

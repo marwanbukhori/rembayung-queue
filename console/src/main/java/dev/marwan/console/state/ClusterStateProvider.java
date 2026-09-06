@@ -7,6 +7,8 @@ import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceQuota;
+import io.fabric8.kubernetes.api.model.ServicePort;
+import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscaler;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscalerCondition;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.MetricSpec;
@@ -102,7 +104,8 @@ public class ClusterStateProvider {
                     quotaOf(quota),
                     consumers(pods),
                     hpas.stream().map(this::describe).toList(),
-                    pool(hpas));
+                    pool(hpas),
+                    endpoints());
         } catch (Throwable e) {
             // Throwable rather than Exception: a missing optional HTTP client on
             // the classpath surfaces as an Error, and the console going down
@@ -112,6 +115,80 @@ public class ClusterStateProvider {
             kubernetes.invalidate();
             return ClusterState.unavailable(detail);
         }
+    }
+
+    /**
+     * Every Service, with the Route publishing it when one does.
+     *
+     * The console already had permission to list both and never used it, so the
+     * cluster page could show pods and quota but not the thing a reader most
+     * wants to check: which of these is reachable from outside. A Service with
+     * no Route comes back with a null host, which is the fact worth showing -
+     * booking-service and redis are reachable only from inside the namespace.
+     */
+    private List<ClusterState.Endpoint> endpoints() {
+        var services = kubernetes.client().services()
+                .inNamespace(properties.namespace()).list().getItems();
+        Map<String, String> routes = routeHosts();
+
+        List<ClusterState.Endpoint> endpoints = new ArrayList<>();
+        for (var service : services) {
+            var spec = service.getSpec();
+            String ports = spec == null || spec.getPorts() == null
+                    ? "-"
+                    : spec.getPorts().stream()
+                            .map(ClusterStateProvider::describePort)
+                            .reduce((x, y) -> x + ", " + y).orElse("-");
+            String selector = spec == null || spec.getSelector() == null
+                    ? "-"
+                    : spec.getSelector().entrySet().stream()
+                            .map(e -> e.getKey() + "=" + e.getValue())
+                            .reduce((x, y) -> x + "," + y).orElse("-");
+            endpoints.add(new ClusterState.Endpoint(
+                    service.getMetadata().getName(),
+                    spec == null ? "-" : spec.getType(),
+                    ports,
+                    selector,
+                    routes.get(service.getMetadata().getName())));
+        }
+        endpoints.sort(Comparator.comparing(ClusterState.Endpoint::name));
+        return endpoints;
+    }
+
+    /**
+     * Route hosts, by the Service each targets.
+     *
+     * Read as a generic resource rather than through the OpenShift model, which
+     * would mean adding openshift-client for one field. A cluster with no Route
+     * API answers with an empty map and the Services still describe themselves.
+     */
+    private Map<String, String> routeHosts() {
+        Map<String, String> hosts = new LinkedHashMap<>();
+        try {
+            var context = new ResourceDefinitionContext.Builder()
+                    .withGroup("route.openshift.io")
+                    .withVersion("v1")
+                    .withPlural("routes")
+                    .withNamespaced(true)
+                    .build();
+            for (var route : kubernetes.client().genericKubernetesResources(context)
+                    .inNamespace(properties.namespace()).list().getItems()) {
+                Object spec = route.getAdditionalProperties().get("spec");
+                if (spec instanceof Map<?, ?> fields
+                        && fields.get("host") != null
+                        && fields.get("to") instanceof Map<?, ?> target
+                        && target.get("name") != null) {
+                    hosts.put(String.valueOf(target.get("name")), String.valueOf(fields.get("host")));
+                }
+            }
+        } catch (RuntimeException e) {
+            log.debug("routes not readable: {}", e.toString());
+        }
+        return hosts;
+    }
+
+    private static String describePort(ServicePort port) {
+        return (port.getName() == null ? "" : port.getName() + ":") + port.getPort();
     }
 
     private ClusterState.Quota quotaOf(ResourceQuota quota) {

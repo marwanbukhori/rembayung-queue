@@ -2,14 +2,13 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
 import { DocsPage } from './docs-page';
-import { Operations } from './operations';
 import { PublicHome } from './public-home';
 import { StateService } from './state.service';
 import { Visitor } from './visitor';
 import { hasConsoleKey } from './key';
 
 /** Which surface is on screen. */
-type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
+type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
 
 /**
  * The shell: a persistent navbar, and whichever surface is showing.
@@ -26,7 +25,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, ClusterPage, DocsPage, DocPage, Visitor, Operations],
+  imports: [PublicHome, ClusterPage, DocsPage, DocPage, Visitor],
   template: `
     <header class="navbar">
       <div class="brandband">
@@ -79,9 +78,6 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor' | 'ops';
         }
         @case ('visitor') {
           <rb-visitor (home)="show('home')" (docs)="show('docs')" />
-        }
-        @case ('ops') {
-          <rb-operations />
         }
       }
     </main>
@@ -171,8 +167,7 @@ export class App {
     { surface: 'home', label: 'Overview' },
     { surface: 'visitor', label: 'Run a simulation' },
     { surface: 'cluster', label: 'Cluster' },
-    { surface: 'docs', label: 'Documentation' },
-    { surface: 'ops', label: 'Operator' }
+    { surface: 'docs', label: 'Documentation' }
   ];
 
   /**

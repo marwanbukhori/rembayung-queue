@@ -54,11 +54,46 @@ import { DocsService, GROUP_LABELS } from './docs.service';
       } @else {
         <p class="reason">Loading…</p>
       }
+
+      <!--
+        At the bottom, because it is how these documents came to exist rather
+        than what they say. A reader who wants the system reads the build notes;
+        a reader who wants the process reads this.
+      -->
+      <section class="method">
+        <h2 class="method-name">How these were written</h2>
+        <p class="method-text">
+          Each phase started as a <strong>spec</strong>, argued out in conversation with Claude
+          using its <span class="mono">brainstorming</span> superpower and committed before any code
+          existed — what is being built, what it must not do, and what would count as finished.
+        </p>
+        <p class="method-text">
+          From an approved spec, <span class="mono">writing-plans</span> produced a
+          <strong>plan</strong>: numbered tasks, each naming the files it touches, the test to write
+          first, and the commit that closes it. That plan is what execution followed, task by task —
+          which is why every spec and plan here is dated before the build note beside it.
+        </p>
+        <p class="method-text">
+          The <strong>build notes</strong> came last, written while building: what broke, what the
+          measurement said, and which assumption turned out to be wrong. They are the only one of
+          the three that could not have been written in advance.
+        </p>
+      </section>
     </div>
   `,
   styles: `
     .stack-24 { display: flex; flex-direction: column; gap: 24px; }
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+    .method {
+      border-top: 1px solid var(--rule);
+      padding-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .method-name { margin: 0; font-size: 19px; font-weight: 700; }
+    .method-text { margin: 0; font-size: 15px; color: var(--ink-soft); max-width: 78ch; text-wrap: pretty; }
+
     .groups {
       display: grid;
       gap: 16px;
@@ -107,16 +142,23 @@ export class DocsPage implements OnInit {
 
   protected readonly docs = inject(DocsService);
 
+  /**
+   * Build notes first.
+   *
+   * They are what a reader actually wants: how each piece works, written while
+   * building it. Specs and plans are the method that produced them - worth
+   * showing, and not the thing to open with.
+   */
   private static readonly GROUPS = [
-    {
-      key: 'specs',
-      label: 'Specs',
-      blurb: 'What was agreed before anything was written, and why'
-    },
     {
       key: 'notes',
       label: 'Build notes',
       blurb: 'How each piece actually works, written while building it'
+    },
+    {
+      key: 'specs',
+      label: 'Specs',
+      blurb: 'What was agreed before anything was written, and why'
     },
     {
       key: 'plans',
