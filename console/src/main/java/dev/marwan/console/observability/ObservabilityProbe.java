@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Checks what Splunk and Dynatrace are actually doing, from the two vantage
@@ -149,7 +151,7 @@ public class ObservabilityProbe {
             long millis = (System.nanoTime() - startedAt) / 1_000_000;
             boolean healthy = reply.status() == 200;
             return new ObservabilityStatus.Splunk(endpoint, healthy,
-                    healthy ? oneLine(reply.body())
+                    healthy ? saidBy(reply.body())
                             : "The collector answered HTTP " + reply.status() + ".",
                     millis, shippers);
         } catch (Exception e) {
@@ -302,6 +304,26 @@ public class ObservabilityProbe {
         }
         return base + "/services/collector/health";
     }
+
+    /**
+     * The collector's sentence, not its JSON.
+     *
+     * HEC answers {@code {"text":"HEC is healthy","code":17}}, and rendering that
+     * verbatim put a brace-and-quote soup on the page where a reader wanted four
+     * words. The whole body is kept when it is not in that shape, because an
+     * unrecognised answer is exactly when the raw text is worth seeing.
+     *
+     * A hand-rolled match rather than a JSON parse: this reads one known field
+     * from one known endpoint, and the fallback is already "show it as it came".
+     */
+    static String saidBy(String body) {
+        String flat = oneLine(body);
+        Matcher matcher = HEC_TEXT.matcher(flat);
+        return matcher.find() ? matcher.group(1) : flat;
+    }
+
+    private static final Pattern HEC_TEXT =
+            Pattern.compile("\"text\"\\s*:\\s*\"([^\"]{1,120})\"");
 
     private static String oneLine(String body) {
         String flat = body == null ? "" : body.replaceAll("\\s+", " ").trim();

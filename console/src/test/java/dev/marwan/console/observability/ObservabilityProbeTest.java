@@ -59,4 +59,22 @@ class ObservabilityProbeTest {
         assertThat(ObservabilityProbe.healthUrl("https://splunk.example.com:8088/services/collector/"))
                 .isEqualTo(expected);
     }
+
+    /**
+     * The panel shows this line. HEC answers with JSON and rendering it verbatim
+     * put braces and escaped quotes where a reader wanted four words.
+     */
+    @Test
+    void theCollectorsOwnSentenceIsShown() {
+        assertThat(ObservabilityProbe.saidBy("{\"text\":\"HEC is healthy\",\"code\":17}"))
+                .isEqualTo("HEC is healthy");
+    }
+
+    /** An answer in some other shape is shown as it came, which is when it matters most. */
+    @Test
+    void anUnrecognisedAnswerIsKeptVerbatim() {
+        assertThat(ObservabilityProbe.saidBy("Service Unavailable"))
+                .isEqualTo("Service Unavailable");
+        assertThat(ObservabilityProbe.saidBy("")).isEmpty();
+    }
 }
