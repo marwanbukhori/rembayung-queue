@@ -71,7 +71,7 @@ autoscalers live, and can start a k6 load run as a Kubernetes Job.
 
 ## The stack, and why each piece is here
 
-| | | |
+| Tool | Used for | Why this one |
 |---|---|---|
 | **Java 25 · Spring Boot 4.1.1** | services | Current, not comfortable. Boot 4 ships Jackson 3 (`tools.jackson`), which is its own small migration. |
 | **Oracle 23ai · Autonomous** | database | The constraint and the row lock both live here. Tests run against real Oracle in Testcontainers. |
