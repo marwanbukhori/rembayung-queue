@@ -54,12 +54,20 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
         <div class="head-text">
           <h2 class="title">What the logs answer</h2>
           <p class="sub">
-            Four questions, each with the search that answers it and the answer it came back
-            with. Captured rather than embedded: Splunk needs a login, and this tenant is a
-            trial that will one day lapse.
+            Four questions, each with the search that answers it and the answer it came
+            back with.
           </p>
         </div>
+        <span class="pill">{{ visible().length }} searches</span>
       </header>
+
+      <div class="bar">
+        <span class="mono">source="rembayung"</span>
+        <span class="bar-note">
+          Captured rather than embedded: Splunk needs a login, and this tenant is a trial
+          that will one day lapse.
+        </span>
+      </div>
 
       <div class="list">
         @for (item of visible(); track item.shot) {
@@ -79,19 +87,19 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
             <div class="shot-col">
               <a class="frame" [href]="item.shot" target="_blank" rel="noreferrer"
                  [attr.aria-label]="'Open the full screenshot: ' + item.question">
-                <img [src]="item.shot" [alt]="item.question + ' — ' + item.reading"
+                <img [src]="item.shot" [alt]="item.question + ': ' + item.reading"
                      loading="lazy" (error)="missing(item.shot)" />
               </a>
-              <span class="enlarge">Cropped to fit — open for the full screen</span>
+              <span class="enlarge">Cropped to fit. Open for the full screen</span>
             </div>
           </article>
         }
       </div>
 
       <p class="foot">
-        Every search runs against <code>source="rembayung"</code> — the value the log appender
-        stamps on each event, so it matches whatever actually arrived rather than depending on
-        a field extraction being configured.
+        <code>source</code> is stamped on every event by the log appender, so these match
+        whatever actually arrived rather than depending on a field extraction being
+        configured.
       </p>
     </section>
   `,
@@ -105,19 +113,43 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
     }
     .accent-top { height: 3px; background: var(--dhl-red); }
 
-    .head { padding: 16px 18px 4px; }
-    .head-text { display: flex; flex-direction: column; gap: 4px; }
-    .title { margin: 0; font-size: 19px; font-weight: 700; }
-    .sub { margin: 0; font-size: 14px; color: var(--ink-soft); max-width: 78ch; text-wrap: pretty; }
+    .head {
+      padding: 20px;
+      display: flex; flex-wrap: wrap; gap: 8px 24px;
+      align-items: baseline; justify-content: space-between;
+    }
+    .head-text { min-width: 0; }
+    .title { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; }
+    .sub { margin: 4px 0 0; font-size: 15px; color: var(--muted); max-width: 60ch; text-wrap: pretty; }
+
+    .pill {
+      display: inline-flex; align-items: center;
+      font-size: 13px; font-weight: 700; letter-spacing: .04em;
+      padding: 6px 13px; border-radius: 999px; white-space: nowrap;
+      background: var(--canvas); color: var(--ink-soft);
+    }
+
+    .bar {
+      padding: 10px 20px;
+      background: #FCFBFA;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline;
+    }
+    .bar .mono {
+      font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 12px; color: var(--ink);
+    }
+    .bar-note { font-size: 13px; color: var(--muted); text-wrap: pretty; }
 
     .list { display: flex; flex-direction: column; }
 
     .scenario {
       display: grid;
       grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-      gap: 18px;
+      gap: 20px;
       align-items: start;
-      padding: 18px;
+      padding: 20px;
       border-top: 1px solid var(--rule);
     }
     /* One column on narrow screens: the screenshot is unreadable below about
@@ -195,7 +227,7 @@ export class LogScenarios {
       spl: 'source="rembayung" | stats count by message.service, severity',
       reading:
         'All three, split by level. queue-gate carries the traffic, booking-service the '
-        + 'writes, and the console its own polling — one row missing here is a service '
+        + 'writes, and the console its own polling. One row missing here is a service '
         + 'whose logs are going nowhere.',
       shot: '/evidence/splunk/services.png',
       earliest: '-60m',
@@ -206,7 +238,7 @@ export class LogScenarios {
       spl: 'source="rembayung" message.outcome=* | stats count by message.service, message.outcome',
       reading:
         'The outcome of every request that reached a decision. This is the seat count '
-        + 'argued from the log rather than from the database — and it has to agree with '
+        + 'argued from the log rather than from the database, and it has to agree with '
         + 'the oversold counter, or one of the two is lying.',
       shot: '/evidence/splunk/outcomes.png',
       earliest: '-60m',
@@ -217,7 +249,7 @@ export class LogScenarios {
       spl: 'source="rembayung"',
       reading:
         'The field list down the left is the point. Every line ships as JSON, so ticket, '
-        + 'position, dropId and admitted are fields to filter on — not words to grep for. '
+        + 'position, dropId and admitted are fields to filter on, not words to grep for. '
         + 'That is the whole reason for the JSON encoder over a pretty pattern.',
       shot: '/evidence/splunk/fields.png',
       earliest: '-60m',
@@ -229,7 +261,7 @@ export class LogScenarios {
         + ' | table _time message.service logger message.message',
       reading:
         'It already did. This is 126 warnings in an hour from one browser tab left open on '
-        + 'a sandbox that no longer existed — and the line named the service but not the '
+        + 'a sandbox that no longer existed, and the line named the service but not the '
         + 'drop, so it identified nothing. Both were fixed once the logs made it visible.',
       shot: '/evidence/splunk/warnings.png',
       earliest: '-60m',

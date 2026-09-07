@@ -72,7 +72,7 @@ import { EvidenceStrip } from './evidence-strip';
         <p class="method-text">
           Each phase started as a <strong>spec</strong>, argued out in conversation with Claude
           using its <span class="mono">brainstorming</span> superpower and committed before any
-          code existed — what is being built, what it must not do, and what would count as
+          code existed: what is being built, what it must not do, and what would count as
           finished. From an approved spec, <span class="mono">writing-plans</span> produced a
           numbered <strong>plan</strong>: each task naming the files it touches, the test to write
           first, and the commit that closes it.
@@ -80,7 +80,7 @@ import { EvidenceStrip } from './evidence-strip';
         <p class="method-text">
           Those two are working documents and live in the repository, under
           <span class="mono">docs/superpowers</span>. The notes above are the third and the last
-          written — the only one of the three that could not have been written in advance,
+          written, the only one of the three that could not have been written in advance,
           because it records what actually happened.
         </p>
       </section>

@@ -97,7 +97,7 @@ interface WorkloadRow {
             <div class="blocked-text mono">{{ why.message }}</div>
             <div class="blocked-text">
               It asks for {{ why.cpuMillis }}m, and the meter below is where the budget went.
-              Nothing is broken — the scheduler is refusing to place a pod the namespace cannot
+              Nothing is broken. The scheduler is refusing to place a pod the namespace cannot
               pay for, and it will place it by itself as soon as the budget frees up. Choosing
               fewer customers is what frees it.
             </div>
@@ -543,7 +543,7 @@ export class PodPulse {
     }
     const at = `cpu ${row.currentPercent}% against a ${row.targetPercent}% target`;
     if (row.atCeiling) {
-      return `${at} — at the ceiling, it cannot add another pod`;
+      return `${at}. At the ceiling, it cannot add another pod`;
     }
     if (row.desired !== null && row.current !== null && row.desired !== row.current) {
       return `${at}, scaling to ${row.desired}`;

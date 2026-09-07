@@ -110,7 +110,7 @@ import { Feed } from './state';
               </div>
               <p class="vendor-what">
                 Where the time went: the Oracle round trip, hop by hop. Open <strong>Services</strong>
-                or <strong>Kubernetes</strong> once you are in — not Logs, which this agent never fills.
+                or <strong>Kubernetes</strong> once you are in, not Logs, which this agent never fills.
               </p>
               <dl class="facts">
                 <dt>Tenant</dt><dd class="mono">{{ s.dynatrace.tenant }}</dd>

@@ -106,7 +106,7 @@ export class ObservabilityLinks {
         // gtf is Dynatrace's global timeframe parameter and takes a relative
         // expression directly.
         name: 'Dynatrace',
-        note: 'open Services or Kubernetes — not Logs, this agent ships none',
+        note: 'open Services or Kubernetes, not Logs; this agent ships none',
         // The tenant root. The deep link this used to carry named an app id that
         // is not installed in this environment, and Dynatrace answered "This
         // application doesn't exist" rather than falling back to anything.

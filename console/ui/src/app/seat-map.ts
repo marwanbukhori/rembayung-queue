@@ -143,6 +143,6 @@ export class SeatMap {
     }
     const bookings = Math.floor(drop.seatsTaken / 2);
     const noun = bookings === 1 ? 'booking' : 'bookings';
-    return `${bookings} ${noun}, 2 seats each — ${drop.seatsTaken} of ${drop.capacity} taken`;
+    return `${bookings} ${noun}, 2 seats each. ${drop.seatsTaken} of ${drop.capacity} taken`;
   });
 }

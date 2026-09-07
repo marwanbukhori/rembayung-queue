@@ -58,7 +58,7 @@ import { PodPulse } from './pod-pulse';
         <p class="note">
           The list above is what is running. This is why: which Route publishes what, which
           Service fronts which Deployment, and what governs each one. booking-service and redis
-          have no Route — they are reachable only from inside the namespace.
+          have no Route. They are reachable only from inside the namespace.
         </p>
         <rb-object-graph />
       </div>

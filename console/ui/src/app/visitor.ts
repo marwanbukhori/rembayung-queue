@@ -56,7 +56,7 @@ import { StateService } from './state.service';
         <p class="reason">
           Every counter above stays at zero until a run reaches it. A sitting with no traffic
           against it is idle, not broken. If the namespace is out of CPU the run sits Pending and
-          the cluster card says so in the scheduler's own words — that is the demonstration, not a
+          the cluster card says so in the scheduler's own words. That is the demonstration, not a
           fault.
         </p>
       }

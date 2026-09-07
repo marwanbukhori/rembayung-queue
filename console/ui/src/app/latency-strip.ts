@@ -61,7 +61,7 @@ import { TrafficService } from './traffic.service';
       </svg>
       <p class="note">
         The gate is milliseconds. The seat is a lock on one row held across a round trip to
-        Oracle in another region — every booking for this sitting queues behind it, and that
+        Oracle in another region. Every booking for this sitting queues behind it, and that
         round trip <strong>is</strong> the one-a-second rate.
       </p>
     </div>

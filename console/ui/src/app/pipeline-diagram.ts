@@ -140,7 +140,7 @@ export class PipelineDiagram {
       label: 'ghcr.io', what: 'immutable SHA tags,', extra: 'never :latest' },
 
     { x: 720, y: 60, w: 256, h: 68, tone: 'gate',
-      label: 'cd.yml', what: 'workflow_run on that CI run —', extra: 'refuses unless it succeeded' },
+      label: 'cd.yml', what: 'workflow_run on that CI run', extra: 'refuses unless it succeeded' },
     { x: 720, y: 146, w: 256, h: 68, tone: 'plain',
       label: 'Ansible', what: 'patches each Deployment, waits,', extra: 'rolls back the whole set on failure' },
     { x: 720, y: 232, w: 256, h: 68, tone: 'plain',

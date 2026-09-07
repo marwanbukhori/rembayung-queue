@@ -122,7 +122,7 @@ export class RunBanner {
         return {
           tone: 'idle', live: false, counts,
           title: 'Your simulation is open',
-          detail: 'Nothing is arriving yet — send a crowd to fill it.'
+          detail: 'Nothing is arriving yet. Send a crowd to fill it.'
         };
     }
   });

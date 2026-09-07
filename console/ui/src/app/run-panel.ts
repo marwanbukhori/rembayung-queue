@@ -50,7 +50,7 @@ const CROWDS = [
           <div>
             <h2 class="title">Run a rush</h2>
             <p class="sub">
-              A 9pm opening of your own — its own 250 seats, its own queue. Nothing here touches the
+              A 9pm opening of your own, with its own 250 seats and its own queue. Nothing here touches the
               public sitting or anyone else on this page, and running it again is free.
             </p>
           </div>
@@ -73,7 +73,7 @@ const CROWDS = [
           <div class="setting">
             <div class="label">
               Admitted per second
-              @if (busy()) { <span class="live mono">live — change it now</span> }
+              @if (busy()) { <span class="live mono">live, change it now</span> }
             </div>
             <div class="tabs">
               @for (rate of rates; track rate.value) {
@@ -89,7 +89,7 @@ const CROWDS = [
         @if (readOnly) {
           <div class="locked">
             <strong>You are looking at the live system, read-only.</strong>
-            Everything on these pages is real and updating — the sitting, the pods, the quota,
+            Everything on these pages is real and updating: the sitting, the pods, the quota,
             the autoscalers and the monitoring. Starting a rush spends this namespace's CPU
             budget, so it needs the console key.
           </div>
