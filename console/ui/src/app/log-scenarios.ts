@@ -61,9 +61,16 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
         <span class="pill">{{ visible().length }} searches</span>
       </header>
 
-      <div class="bar">
-        <span class="mono">source="rembayung"</span>
-        <span class="bar-note">
+      <!--
+        Not class="bar". The global stylesheet owns that name for the 8px progress
+        meter: height 8px, overflow hidden, and a "> span" rule that makes every
+        direct child a full-height fill. A component style cannot win back a
+        height the global rule sets on the same element, so this row was clipped
+        to 20px with 31px of text inside it.
+      -->
+      <div class="source-bar">
+        <span class="query mono">source="rembayung"</span>
+        <span class="caveat">
           Captured rather than embedded: Splunk needs a login, and this tenant is a trial
           that will one day lapse.
         </span>
@@ -129,18 +136,15 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
       background: var(--canvas); color: var(--ink-soft);
     }
 
-    .bar {
+    .source-bar {
       padding: 10px 20px;
       background: #FCFBFA;
       border-top: 1px solid var(--rule);
       border-bottom: 1px solid var(--rule);
       display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline;
     }
-    .bar .mono {
-      font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-      font-size: 12px; color: var(--ink);
-    }
-    .bar-note { font-size: 13px; color: var(--muted); text-wrap: pretty; }
+    .query { font-size: 12px; color: var(--ink); white-space: nowrap; }
+    .caveat { font-size: 13px; color: var(--muted); text-wrap: pretty; min-width: 0; }
 
     .list { display: flex; flex-direction: column; }
 
