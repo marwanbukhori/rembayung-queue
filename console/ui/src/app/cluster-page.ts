@@ -3,12 +3,14 @@ import { ClusterResources } from './cluster-resources';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { ClusterService } from './cluster.service';
 import { ObjectGraph } from './object-graph';
+import { LogScenarios } from './log-scenarios';
 import { ObservabilityPanel } from './observability-panel';
 import { PodPulse } from './pod-pulse';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ArchitectureDiagram, ClusterResources, ObjectGraph, ObservabilityPanel, PodPulse],
+  imports: [ArchitectureDiagram, ClusterResources, LogScenarios, ObjectGraph, ObservabilityPanel,
+    PodPulse],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -43,6 +45,13 @@ import { PodPulse } from './pod-pulse';
         things just listed, and the reader has to have seen them first.
       -->
       <rb-observability-panel />
+
+      <!--
+        Directly under the panel that says the pipelines are up, because this is
+        the question that follows it. "Splunk is receiving" is worth nothing on
+        its own - what a reader wants next is what the logs are then good for.
+      -->
+      <rb-log-scenarios />
 
       <div class="card">
         <div class="why">How these objects connect</div>
