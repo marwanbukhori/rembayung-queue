@@ -28,24 +28,51 @@ class KeyFilterTest {
     @MockitoBean private DemoStateProvider state;
     @MockitoBean private PodHealthProvider pods;
 
+    private void stubState() {
+        given(state.currentFor("default"))
+                .willReturn(new DemoState(true, null, "default", 1, 250, 0, 250, 0, 0, 0, 0));
+        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
+    }
+
+    /**
+     * The console's address is in a public README. A stranger following it has
+     * to see the numbers, or the link advertises a system that looks broken.
+     */
+    @Test
+    void anUnkeyedReadIsAllowed() throws Exception {
+        stubState();
+
+        mvc.perform(get("/api/state")).andExpect(status().isOk());
+        mvc.perform(get("/api/docs")).andExpect(status().isOk());
+    }
+
     /**
      * The handler must not run at all — not "run and return nothing useful".
      * Verifying the provider was never asked is the difference between a gate
      * and a curtain.
      */
     @Test
-    void anUnkeyedReadIsRefusedBeforeAnyHandlerRuns() throws Exception {
-        mvc.perform(get("/api/state")).andExpect(status().isUnauthorized());
+    void anUnkeyedWriteIsRefusedBeforeAnyHandlerRuns() throws Exception {
+        mvc.perform(post("/api/drops")).andExpect(status().isUnauthorized());
 
         verify(state, never()).currentFor(anyString());
         verify(pods, never()).current();
     }
 
+    /**
+     * Every write, not just the one that happens to be checked. These are the
+     * calls that spend the namespace's CPU quota.
+     */
+    @Test
+    void everyWriteIsGated() throws Exception {
+        mvc.perform(post("/api/drops")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/drops/d-1234abcd/load")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/drops/d-1234abcd/rate")).andExpect(status().isUnauthorized());
+    }
+
     @Test
     void theKeyIsAcceptedInAHeader() throws Exception {
-        given(state.currentFor("default"))
-                .willReturn(new DemoState(true, null, "default", 1, 250, 0, 250, 0, 0, 0, 0));
-        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
+        stubState();
 
         mvc.perform(get("/api/state").header("X-Console-Key", "s3cret-demo-key"))
                 .andExpect(status().isOk());
@@ -57,39 +84,28 @@ class KeyFilterTest {
      */
     @Test
     void theKeyIsAcceptedInTheQueryString() throws Exception {
-        given(state.currentFor("default"))
-                .willReturn(new DemoState(true, null, "default", 1, 250, 0, 250, 0, 0, 0, 0));
-        given(pods.current()).willReturn(PodHealth.of("marwanbukhori-dev", java.util.List.of()));
+        stubState();
 
         mvc.perform(get("/api/state").param("key", "s3cret-demo-key"))
                 .andExpect(status().isOk());
     }
 
+    /**
+     * Asserted on a write, because a read would pass with no key at all and so
+     * could not tell a rejected key from an ignored one.
+     */
     @Test
-    void theWrongKeyIsRefused() throws Exception {
-        mvc.perform(get("/api/state").header("X-Console-Key", "not-the-key"))
+    void theWrongKeyIsRefusedOnAWrite() throws Exception {
+        mvc.perform(post("/api/drops").header("X-Console-Key", "not-the-key"))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/state").param("key", "not-the-key"))
+        mvc.perform(post("/api/drops").param("key", "not-the-key"))
                 .andExpect(status().isUnauthorized());
-    }
-
-    /** Reads are gated too: one rule, not two. */
-    @Test
-    void theDocumentationIsGatedLikeEverythingElse() throws Exception {
-        mvc.perform(get("/api/docs")).andExpect(status().isUnauthorized());
-    }
-
-    /** And so is the one endpoint that changes anything. */
-    @Test
-    void creatingADropIsGated() throws Exception {
-        mvc.perform(post("/api/drops")).andExpect(status().isUnauthorized());
     }
 
     /**
      * The page itself is not gated: the browser fetches its script and
      * stylesheet without the query string that opened the link, so gating the
-     * static shell would break the link the moment it worked. The shell holds
-     * no numbers — every one of them comes from /api.
+     * static shell would break the link the moment it worked.
      */
     @Test
     void theStaticShellIsNotGated() throws Exception {

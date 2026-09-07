@@ -60,9 +60,12 @@ public class ConsoleConfiguration {
      * interceptor or a request log.
      */
     @Bean
-    FilterRegistrationBean<KeyFilter> keyFilter(AccessKey key) {
+    FilterRegistrationBean<KeyFilter> keyFilter(
+            AccessKey key,
+            @org.springframework.beans.factory.annotation.Value("${console.public-reads:true}")
+            boolean publicReads) {
         FilterRegistrationBean<KeyFilter> registration =
-                new FilterRegistrationBean<>(new KeyFilter(key));
+                new FilterRegistrationBean<>(new KeyFilter(key, publicReads));
         registration.addUrlPatterns("/api/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;

@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { hasConsoleKey } from './key';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
 import { StateService } from './state.service';
@@ -31,6 +32,13 @@ const CROWDS = [
  * The admission rate stays live while a run is in flight, because changing it
  * mid-rush and watching what gives is the interesting thing this console can
  * do - not a step, a dial.
+ *
+ * <h2>Without a key this panel explains itself instead of failing</h2>
+ * Reads are open so a stranger following the link from the README sees the real
+ * numbers, but starting a rush spends this namespace's CPU quota and stays
+ * gated. The controls would therefore answer 401 to anyone who pressed them,
+ * which reads as a broken console rather than a closed door - so they are
+ * disabled and the panel says who the button is for.
  */
 @Component({
   selector: 'rb-run-panel',
@@ -54,7 +62,7 @@ const CROWDS = [
             <div class="tabs">
               @for (crowd of crowds; track crowd.offered) {
                 <button class="tab" [class.on]="crowd.offered === vus()"
-                        [disabled]="busy()" (click)="vus.set(crowd.offered)">
+                        [disabled]="busy() || readOnly" (click)="vus.set(crowd.offered)">
                   {{ crowd.offered }}
                 </button>
               }
@@ -70,6 +78,7 @@ const CROWDS = [
             <div class="tabs">
               @for (rate of rates; track rate.value) {
                 <button class="tab" [class.on]="rate.value === admitRate()"
+                        [disabled]="readOnly"
                         (click)="chooseRate(rate.value)">{{ rate.value }}</button>
               }
             </div>
@@ -77,10 +86,19 @@ const CROWDS = [
           </div>
         </div>
 
-        <div class="go">
-          <button class="btn btn-primary" [disabled]="busy()" (click)="run()">{{ label() }}</button>
-          <span class="hint">{{ hint() }}</span>
-        </div>
+        @if (readOnly) {
+          <div class="locked">
+            <strong>You are looking at the live system, read-only.</strong>
+            Everything on these pages is real and updating — the sitting, the pods, the quota,
+            the autoscalers and the monitoring. Starting a rush spends this namespace's CPU
+            budget, so it needs the console key.
+          </div>
+        } @else {
+          <div class="go">
+            <button class="btn btn-primary" [disabled]="busy()" (click)="run()">{{ label() }}</button>
+            <span class="hint">{{ hint() }}</span>
+          </div>
+        }
 
         @if (failure(); as reason) {
           <p class="reason">{{ reason }}</p>
@@ -128,11 +146,26 @@ const CROWDS = [
     .tab.on { background: var(--ink); border-color: var(--ink); color: var(--white); font-weight: 700; }
     .tab:disabled { opacity: .5; cursor: default; }
 
+    .locked {
+      font-size: 14px;
+      color: var(--ink-soft);
+      background: var(--chip-info-bg);
+      border-left: 4px solid var(--info);
+      border-radius: 3px;
+      padding: 12px 14px;
+      max-width: 78ch;
+      text-wrap: pretty;
+    }
+    .locked strong { color: var(--ink); display: block; margin-bottom: 2px; }
+
     .go { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
     .hint { font-size: 14px; color: var(--muted); text-wrap: pretty; }
   `
 })
 export class RunPanel {
+  /** Read once: the key arrives with the page and does not appear mid-session. */
+  protected readonly readOnly = !hasConsoleKey();
+
   private readonly sandboxes = inject(SandboxService);
   private readonly loads = inject(LoadService);
   private readonly state = inject(StateService);
