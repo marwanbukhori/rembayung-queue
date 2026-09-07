@@ -108,13 +108,16 @@ import { Feed } from './state';
                   {{ agentCount() > 0 ? agentCount() + ' agents loaded' : 'No agents' }}
                 </span>
               </div>
-              <p class="vendor-what">Where the time went: the Oracle round trip, hop by hop.</p>
+              <p class="vendor-what">
+                Where the time went: the Oracle round trip, hop by hop. Open <strong>Services</strong>
+                or <strong>Kubernetes</strong> once you are in — not Logs, which this agent never fills.
+              </p>
               <dl class="facts">
                 <dt>Tenant</dt><dd class="mono">{{ s.dynatrace.tenant }}</dd>
                 <dt>Mode</dt><dd class="mono soft">{{ s.dynatrace.mode }}</dd>
               </dl>
               <a class="open" [href]="dynatraceHref()" target="_blank" rel="noreferrer">
-                Open the traces {{ arrow }}
+                Open Dynatrace {{ arrow }}
               </a>
             </div>
 
@@ -347,6 +350,15 @@ export class ObservabilityPanel {
   }
 
   protected dynatraceHref(): string {
-    return `${ObservabilityPanel.DYNATRACE}/ui/apps/dynatrace.distributedtraces/?gtf=-60m`;
+    // The tenant root, not an app deep link.
+    //
+    // This pointed at /ui/apps/dynatrace.distributedtraces and the tenant
+    // answered "This application doesn't exist" — app ids differ between
+    // Dynatrace environments and that one is not installed here. A guessed deep
+    // link that 404s is worse than a shallow one that works, so this lands on
+    // the environment and the caption says which app to open. Services and
+    // Kubernetes are the two that hold this system's data; Logs is empty by
+    // design, because an application-only OneAgent ships none.
+    return `${ObservabilityPanel.DYNATRACE}/ui`;
   }
 }

@@ -137,8 +137,8 @@ export class EvidenceStrip {
       caption:
         'Distributed traces and the service map. This agent ships no logs at all, '
         + 'which is why the log view there is empty by design.',
-      href: null,
-      linkLabel: 'Needs a Dynatrace login'
+      href: 'https://icp44821.apps.dynatrace.com/ui',
+      linkLabel: 'Open Dynatrace'
     }
   ];
 
