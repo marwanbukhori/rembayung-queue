@@ -13,6 +13,7 @@ import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -140,6 +141,57 @@ class DemoStateProviderTest {
         assertThat(provider.currentFor("d-other").slotId()).isEqualTo(99);
         bookingServer.verify();
         gateServer.verify();
+    }
+
+    /**
+     * An expired sandbox is not a fault, and the page should say which thing
+     * ended rather than quoting a status code.
+     *
+     * Found in production: the console logged "console could not read
+     * queue-gate: 404 : [no body]" four times a minute, indefinitely, with a
+     * tab left open on a sandbox whose Redis key had gone. The message named
+     * the service but not the drop — the one field that would have identified
+     * it — and reported a routine expiry at the same level as a gate that had
+     * fallen over.
+     */
+    @Test
+    void anExpiredSandboxSaysSoRatherThanQuotingA404() {
+        RestClient.Builder booking = RestClient.builder().baseUrl("http://booking-service:8081");
+        RestClient.Builder gate = RestClient.builder().baseUrl("http://queue-gate:8080");
+        MockRestServiceServer.bindTo(gate).build()
+                .expect(requestTo("http://queue-gate:8080/internal/drops/d-gone9999/state"))
+                .andRespond(withResourceNotFound());
+
+        DemoState state = new DemoStateProvider(booking.build(), gate.build(), properties(), clock)
+                .currentFor("d-gone9999");
+
+        assertThat(state.available()).isFalse();
+        assertThat(state.detail()).contains("d-gone9999");
+        assertThat(state.detail()).containsIgnoringCase("expired");
+        // The status code is the cause, not the explanation. A visitor reading
+        // "404" learns nothing they can act on.
+        assertThat(state.detail()).doesNotContain("404");
+    }
+
+    /**
+     * The canonical drop is configuration, not a stored record, so the gate
+     * resolves it without touching Redis and it cannot expire. A 404 on it is a
+     * genuine fault and must not be dressed up as a lapsed sandbox.
+     */
+    @Test
+    void aMissingCanonicalDropIsAFaultRatherThanAnExpiry() {
+        RestClient.Builder booking = RestClient.builder().baseUrl("http://booking-service:8081");
+        RestClient.Builder gate = RestClient.builder().baseUrl("http://queue-gate:8080");
+        MockRestServiceServer.bindTo(gate).build()
+                .expect(requestTo("http://queue-gate:8080/internal/drops/default/state"))
+                .andRespond(withResourceNotFound());
+
+        DemoState state = new DemoStateProvider(booking.build(), gate.build(), properties(), clock)
+                .currentFor("default");
+
+        assertThat(state.available()).isFalse();
+        assertThat(state.detail()).contains("queue-gate");
+        assertThat(state.detail()).doesNotContainIgnoringCase("expired");
     }
 
     private ConsoleProperties properties() {

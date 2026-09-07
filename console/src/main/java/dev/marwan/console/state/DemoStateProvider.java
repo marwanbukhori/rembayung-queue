@@ -4,6 +4,7 @@ import dev.marwan.console.ConsoleProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
@@ -90,8 +91,18 @@ public class DemoStateProvider {
                     .uri("/internal/drops/{dropId}/state", dropId)
                     .retrieve()
                     .body(DropState.class);
+        } catch (HttpClientErrorException.NotFound e) {
+            // A sandbox drop is a Redis key with an idle TTL, so a 404 on one is
+            // it having lapsed - ordinary, and the visitor's own sandbox ending
+            // rather than anything being wrong. The canonical drop is resolved
+            // from configuration and never stored, so a 404 on THAT is a real
+            // fault and keeps the warning.
+            if (!dropId.equals(properties.canonicalDrop())) {
+                return expired(dropId);
+            }
+            return unreachable("queue-gate", dropId, e);
         } catch (Exception e) {
-            return unreachable("queue-gate", e);
+            return unreachable("queue-gate", dropId, e);
         }
         if (drop == null) {
             return DemoState.unavailable("queue-gate has no drop " + dropId);
@@ -109,7 +120,7 @@ public class DemoStateProvider {
                     .retrieve()
                     .body(SlotState.class);
         } catch (Exception e) {
-            return unreachable("booking-service", e);
+            return unreachable("booking-service", dropId, e);
         }
         if (slot == null) {
             return DemoState.unavailable("booking-service has no slot " + slotId);
@@ -125,10 +136,25 @@ public class DemoStateProvider {
      * "queue-gate did not answer: 404 Not Found" tells a visitor their sandbox
      * expired; a NestedRuntimeException class name tells them nothing.
      */
-    private DemoState unreachable(String service, Exception e) {
-        log.warn("console could not read {}: {}", service, e.toString());
+    private DemoState unreachable(String service, String dropId, Exception e) {
+        // The drop id is in the line because it was missing from it. A tab left
+        // open on a lapsed sandbox warned four times a minute naming only the
+        // service, which is true of every drop and so identified none of them.
+        log.warn("console could not read {} for drop {}: {}", service, dropId, e.toString());
         String cause = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
         return DemoState.unavailable(service + " did not answer: " + trimmed(cause));
+    }
+
+    /**
+     * A lapsed sandbox, said as the end of something rather than as a failure.
+     *
+     * INFO, not WARN: thirty idle minutes expiring a demo is the design working.
+     * Logging it at WARN put it beside a gate that had actually fallen over, and
+     * because it repeats on every poll it was the louder of the two.
+     */
+    private DemoState expired(String dropId) {
+        log.info("sandbox drop {} has expired and the gate no longer holds it", dropId);
+        return DemoState.unavailable("this sandbox (" + dropId + ") has expired - start a new one");
     }
 
     private static String trimmed(String message) {
