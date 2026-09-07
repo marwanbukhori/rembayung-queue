@@ -160,6 +160,8 @@ export interface SplunkStatus {
   endpoint: string;
   reachable: boolean;
   detail: string;
+  /** How long the collector took to answer, or -1 when it did not answer. */
+  latencyMs: number;
   shippers: Feed[];
 }
 

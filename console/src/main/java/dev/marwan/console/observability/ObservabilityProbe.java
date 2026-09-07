@@ -90,9 +90,19 @@ public class ObservabilityProbe {
     }
 
     public ObservabilityStatus current() {
+        return current(false);
+    }
+
+    /**
+     * @param force skip the cache and probe now. The page has a "probe again"
+     *              button, and a button that quietly returned a reading up to
+     *              fifteen seconds old would be a button that lies: the whole
+     *              point of pressing it is to find out what is true right now.
+     */
+    public ObservabilityStatus current(boolean force) {
         Snapshot held = cache;
         Instant now = Instant.now();
-        if (held != null && held.takenAt().plus(TTL).isAfter(now)) {
+        if (!force && held != null && held.takenAt().plus(TTL).isAfter(now)) {
             return held.status();
         }
         ObservabilityStatus fresh = probe(now);
@@ -129,20 +139,23 @@ public class ObservabilityProbe {
         if (hecUrl.isEmpty()) {
             return new ObservabilityStatus.Splunk("not configured", false,
                     "This console has no " + SPLUNK_ENV + ", so it cannot reach the collector.",
-                    shippers);
+                    -1, shippers);
         }
 
         String endpoint = hostOf(hecUrl);
+        long startedAt = System.nanoTime();
         try {
             Reply reply = askCollector(healthUrl(hecUrl), trustSelfSigned);
+            long millis = (System.nanoTime() - startedAt) / 1_000_000;
             boolean healthy = reply.status() == 200;
             return new ObservabilityStatus.Splunk(endpoint, healthy,
-                    healthy ? "The collector answered: " + oneLine(reply.body())
+                    healthy ? oneLine(reply.body())
                             : "The collector answered HTTP " + reply.status() + ".",
-                    shippers);
+                    millis, shippers);
         } catch (Exception e) {
             return new ObservabilityStatus.Splunk(endpoint, false,
-                    "Could not reach the collector: " + KubernetesAccess.summarise(e), shippers);
+                    "Could not reach the collector: " + KubernetesAccess.summarise(e),
+                    -1, shippers);
         }
     }
 

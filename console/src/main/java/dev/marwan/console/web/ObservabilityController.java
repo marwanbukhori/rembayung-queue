@@ -3,6 +3,7 @@ package dev.marwan.console.web;
 import dev.marwan.console.observability.ObservabilityProbe;
 import dev.marwan.console.observability.ObservabilityStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -25,8 +26,15 @@ public class ObservabilityController {
         this.probe = probe;
     }
 
+    /**
+     * @param refresh the page's "probe again" button. Polling stays cached;
+     *                only a deliberate press pays for a fresh round trip to the
+     *                collector, so a room full of viewers cannot turn a status
+     *                panel into a load generator against Splunk.
+     */
     @GetMapping("/api/observability")
-    public ObservabilityStatus observability() {
-        return probe.current();
+    public ObservabilityStatus observability(
+            @RequestParam(name = "refresh", defaultValue = "false") boolean refresh) {
+        return probe.current(refresh);
     }
 }

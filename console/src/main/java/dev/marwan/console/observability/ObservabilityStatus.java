@@ -31,9 +31,14 @@ public record ObservabilityStatus(Splunk splunk, Dynatrace dynatrace, Instant ch
      * @param endpoint  the collector host, port included, with no token in it
      * @param reachable whether the collector answered its health endpoint
      * @param detail    the collector's own words, or why the probe could not run
+     * @param latencyMs how long the collector took to answer, or -1 when it did not.
+     *                  Shown beside the reply because "healthy" and "healthy but
+     *                  four seconds away" are different states and only one of
+     *                  them is worth interrupting a demo for.
      * @param shippers  one entry per workload, saying whether it is configured to ship
      */
-    public record Splunk(String endpoint, boolean reachable, String detail, List<Feed> shippers) { }
+    public record Splunk(String endpoint, boolean reachable, String detail,
+                         long latencyMs, List<Feed> shippers) { }
 
     /**
      * @param tenant       the Dynatrace environment these traces land in
