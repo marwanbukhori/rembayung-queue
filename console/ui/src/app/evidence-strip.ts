@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 
 /** One captured screen from a tool this project actually runs against. */
 interface Shot {
@@ -22,6 +22,13 @@ interface Shot {
  * so it cannot read either vendor back. These are the other half — what the data
  * actually looks like once it arrives, which no amount of probing can show.
  *
+ * <h2>A shot whose file is not there yet simply is not shown</h2>
+ * The Splunk and Dynatrace captures need a login this project cannot automate,
+ * so they arrive by hand and may arrive later than this code. Rather than
+ * coordinating the two, every shot is listed and any image that fails to load
+ * removes itself. A missing file therefore costs nothing — no broken icon, no
+ * empty frame — and dropping the PNG in is the whole of the work.
+ *
  * <h2>Why they are static files</h2>
  * Both vendors are trial tenants behind their own logins. A live embed would be
  * an iframe to a sign-in page, and a reader without an account would see nothing
@@ -43,11 +50,12 @@ interface Shot {
       </div>
 
       <div class="grid">
-        @for (shot of shots; track shot.src) {
+        @for (shot of visible(); track shot.src) {
           <figure class="shot">
             <a class="frame" [href]="shot.src" target="_blank" rel="noreferrer"
                [attr.aria-label]="'Open the full ' + shot.tool + ' screenshot'">
-              <img [src]="shot.src" [alt]="shot.tool + ': ' + shot.caption" loading="lazy" />
+              <img [src]="shot.src" [alt]="shot.tool + ': ' + shot.caption" loading="lazy"
+                   (error)="missing(shot.src)" />
             </a>
             <figcaption>
               <span class="tool">{{ shot.tool }}</span>
@@ -104,11 +112,7 @@ interface Shot {
   `
 })
 export class EvidenceStrip {
-  /**
-   * Only screens that exist are listed. An entry whose file is missing renders a
-   * broken image, which looks worse than not claiming to have the picture.
-   */
-  protected readonly shots: Shot[] = [
+  private readonly all: Shot[] = [
     {
       src: '/evidence/github-actions.png',
       tool: 'GitHub Actions',
@@ -117,6 +121,34 @@ export class EvidenceStrip {
         + 'CD deploys it and rolls back on its own if the smoke test fails.',
       href: 'https://github.com/marwanbukhori/rembayung-queue/actions',
       linkLabel: 'See the live runs'
+    },
+    {
+      src: '/evidence/splunk.png',
+      tool: 'Splunk',
+      caption:
+        'One rush, as it arrived: queue.arrival, queue.admitted and booking.claimed '
+        + 'events with the row-lock wait recorded on each booking.',
+      href: null,
+      linkLabel: 'Needs a Splunk login'
+    },
+    {
+      src: '/evidence/dynatrace.png',
+      tool: 'Dynatrace',
+      caption:
+        'Distributed traces and the service map. This agent ships no logs at all, '
+        + 'which is why the log view there is empty by design.',
+      href: null,
+      linkLabel: 'Needs a Dynatrace login'
     }
   ];
+
+  /** Files the browser could not load; recorded so they stop being rendered. */
+  private readonly absent = signal<ReadonlySet<string>>(new Set());
+
+  protected readonly visible = computed(() =>
+    this.all.filter((shot) => !this.absent().has(shot.src)));
+
+  protected missing(src: string): void {
+    this.absent.update((was) => new Set(was).add(src));
+  }
 }
