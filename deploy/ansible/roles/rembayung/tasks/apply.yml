@@ -1,7 +1,90 @@
 ---
-# strategic_merge_patch on the Deployment rather than `oc apply -k`: the overlay
-# pins a tag in git, and CD deploys a tag chosen at run time. Patching the image
-# leaves every other field the overlay owns untouched.
+# The manifests go on FIRST, then the image is patched onto them.
+#
+# For 81 commits this file patched only the image, and nothing in the deploy
+# path ever applied deploy/base. The reasoning at the time is preserved because
+# it was half right: the overlay pins a tag in git, CD deploys a tag chosen at
+# run time, and `oc apply -k` on a stale overlay really does roll the cluster
+# back — it happened twice. Patching only the image avoided that.
+#
+# What it also did was make every non-image field undeployable. env, probes,
+# resources, RBAC, routes, autoscalers: committed, reviewed, CI-green, and
+# never applied. The console's Splunk configuration was committed, deployed
+# green, and did nothing, and the symptom was an empty Splunk search that read
+# as a broken vendor integration for most of an afternoon.
+#
+# The conflict is resolved instead of avoided. The overlay is rendered from a
+# scratch copy whose pins are rewritten to image_tag first, so the tag git
+# happens to carry cannot reach the cluster and there is exactly one writer of
+# the image field. The scratch copy is why: `kustomize edit` in place would
+# leave the working tree dirty for anyone running this playbook by hand.
+- name: Create a scratch copy of the manifests, so the working tree is never edited
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: -rembayung-manifests
+  register: manifest_scratch
+
+- name: Copy the base and the overlay into it
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../{{ item.src }}/"
+    dest: "{{ manifest_scratch.path }}/{{ item.dest }}/"
+    mode: preserve
+  loop:
+    - { src: base, dest: base }
+    - { src: overlays/sandbox, dest: overlays/sandbox }
+  loop_control:
+    label: "{{ item.src }}"
+
+# Every newTag, matched by image name rather than by position, so a reordered
+# or extended images: list cannot silently leave one service on a stale pin.
+- name: Pin every image in the scratch overlay to the tag being deployed
+  ansible.builtin.replace:
+    path: "{{ manifest_scratch.path }}/overlays/sandbox/kustomization.yaml"
+    regexp: '(- name:\s*{{ rembayung_registry }}/{{ item }}\s*\n\s*newTag:\s*)\S+'
+    replace: '\g<1>{{ image_tag }}'
+  loop: "{{ rembayung_services }}"
+
+- name: Render the manifests
+  ansible.builtin.command:
+    cmd: kustomize build .
+    chdir: "{{ manifest_scratch.path }}/overlays/sandbox"
+  register: rendered_manifests
+  changed_when: false
+
+# The assertion this bug deserved. If a rename, a reordered list or a typo ever
+# stops a pin being rewritten, the render still succeeds and would deploy some
+# other tag — quietly, which is how the original went unnoticed for 81 commits.
+# Checked before anything is sent to the cluster.
+- name: Every service must be pinned to the tag being deployed
+  ansible.builtin.assert:
+    that:
+      - rendered_manifests.stdout is search(rembayung_registry ~ '/' ~ item ~ ':' ~ image_tag)
+    fail_msg: >-
+      The rendered manifests do not pin {{ item }} to {{ image_tag }}. The
+      images: list in deploy/overlays/sandbox/kustomization.yaml probably no
+      longer names {{ rembayung_registry }}/{{ item }}. Nothing has been
+      changed.
+  loop: "{{ rembayung_services }}"
+
+- name: Write the rendered manifests out for the apply
+  ansible.builtin.copy:
+    content: "{{ rendered_manifests.stdout }}"
+    dest: "{{ manifest_scratch.path }}/rendered.yaml"
+    mode: "0600"
+
+# apply: true, not a plain create-or-replace. It is the three-way merge
+# `oc apply` performs, so a field DELETED from git is removed from the cluster
+# rather than lingering because nothing names it any more.
+- name: Apply the manifests
+  kubernetes.core.k8s:
+    state: present
+    apply: true
+    src: "{{ manifest_scratch.path }}/rendered.yaml"
+
+# Kept, and not redundant. The apply above already carries the right image, so
+# this is normally a no-op that starts no second rollout. It stays as the one
+# place that states the invariant unconditionally: whatever kustomize did or
+# did not do, these three Deployments run image_tag.
 - name: Set the image on each Deployment
   kubernetes.core.k8s:
     state: patched
@@ -55,3 +138,8 @@
   # and the rescue block in main.yml turns that into a rollback. Catching it
   # here caught only this one failure; the rescue catches every failure between
   # the first patch and the end of the smoke test.
+
+- name: Remove the scratch copy
+  ansible.builtin.file:
+    path: "{{ manifest_scratch.path }}"
+    state: absent

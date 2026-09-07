@@ -21,6 +21,15 @@
 # map for exactly this reason: booking-service and queue-gate can legitimately
 # be on different tags, and restoring both to one tag would move a service that
 # was never broken.
+#
+# Scope, stated rather than implied: this restores IMAGES, not manifests.
+# apply.yml now also applies deploy/base, and a manifest applied there is not
+# undone here. That is deliberate — the manifests are whatever the commit says,
+# so reverting them means reverting the commit and deploying again, not having
+# this file carry a second copy of the previous manifest state. The failure it
+# does cover is the common one: a bad build. A bad manifest leaves the cluster
+# on the old image with the new configuration, which the play reports as a
+# failed deploy, and `git revert` plus a redeploy is the fix.
 - name: Restore each Deployment to the tag it was running
   kubernetes.core.k8s:
     state: patched

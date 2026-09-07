@@ -3,45 +3,39 @@ kind: Kustomization
 namespace: marwanbukhori-dev
 resources:
   - ../../base
-# BOOTSTRAP ONLY — DO NOT USE `oc apply -k` TO DEPLOY.
+# These tags are a bootstrap default. CD does NOT read them.
 #
-# Two systems write the image field: this file, and Phase 5's CD playbook at run
-# time. They drift the moment CD deploys anything, and `oc apply -k` then quietly
-# rolls the cluster BACK to whatever is pinned here. That has happened twice.
+# They used to be a trap. Two systems wrote the image field — this file, and the
+# CD playbook at run time — and they drifted the moment CD deployed anything, so
+# `oc apply -k` on a stale overlay rolled the cluster BACK to whatever was
+# pinned here. That happened twice.
 #
-# Use `oc apply -k` only to bootstrap a fresh namespace or to push a
-# non-image config change — and after any such apply, immediately re-run the
-# playbook to restore the intended image:
+# The playbook now renders this overlay from a scratch copy whose pins it
+# rewrites to the tag being deployed, and asserts the rewrite worked before
+# anything reaches the cluster. There is one writer of the image field again, so
+# whatever these say cannot revert a deploy.
+#
+# What they still decide is a manual `oc apply -k`, which is bootstrap only:
+# a fresh namespace, before CD has ever run against it. To deploy, or to push a
+# config change, run the playbook — it applies these manifests too, which is the
+# thing it did not do for its first 81 commits:
 #
 #   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
 #     -e image_tag=$(git rev-parse HEAD)
 #
-# WARNING: these tags are the state git declares, NOT necessarily what is
-# running. Phase 5's CD patches the image field on the live Deployments at run
-# time, so after any CD deploy this file lags until someone syncs it.
+# To check the cluster still matches this directory:
 #
-# Consequence, and it has already been a live hazard: `oc apply -k` on a stale
-# overlay REVERTS the cluster to whatever is pinned here. Check what is actually
-# running before applying:
+#   deploy/scripts/check-drift.sh
 #
-#   oc get deploy -o custom-columns=NAME:.metadata.name,\
-#     IMAGE:.spec.template.spec.containers[0].image
-#
-# To deploy, prefer the playbook, which reads the current state first and can
-# roll back:
-#
-#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/deploy.yml \
-#     -e image_tag=<sha>
-# All three services, and all three matter. console was missing here while the
-# other two were pinned, and a missing entry is not a missing pin: the base
-# names the image with no tag, so `oc apply -k` resolved it to :latest and
-# deployed whatever had been pushed most recently, next to two services held at
-# an exact SHA. One commit CI has published for every service, so applying this
-# overlay gives a set that ran together.
+# All three services are listed, and all three matter. console was missing here
+# once while the other two were pinned, and a missing entry is not a missing
+# pin: the base names the image with no tag, so `oc apply -k` resolved it to
+# :latest and deployed whatever had been pushed most recently, next to two
+# services held at an exact SHA.
 images:
   - name: ghcr.io/marwanbukhori/queue-gate
-    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b
+    newTag: fee8cb26d6fcc66d9e34a6e351839d4446b5b2d4
   - name: ghcr.io/marwanbukhori/booking-service
-    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b
+    newTag: fee8cb26d6fcc66d9e34a6e351839d4446b5b2d4
   - name: ghcr.io/marwanbukhori/console
-    newTag: 51ea8d58e310d090a8c055128b17fde8c95d7b1b
+    newTag: fee8cb26d6fcc66d9e34a6e351839d4446b5b2d4
