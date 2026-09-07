@@ -18,12 +18,11 @@ const SUMMARY_CHARS = 150;
  * re-read on every visit to the documentation page.
  *
  * <h2>Why the one-line summaries are derived in the browser</h2>
- * GET /api/docs answers with an id, a title and a group, and that contract is
- * fixed. A bare title is not enough for a stranger to choose between twenty-four
- * documents, so the blurbs come from the documents themselves: the same rendered
- * HTML the reading view uses, with its first paragraph taken as the summary.
- * Nothing is invented here — a document whose body cannot be read simply shows
- * its group and no blurb.
+ * GET /api/docs answers with an id and a title, and that contract is fixed. A
+ * bare title is not enough for a stranger to choose which note to open, so the
+ * blurbs come from the documents themselves: the same rendered HTML the reading
+ * view uses, with its first paragraph taken as the summary. Nothing is invented
+ * here — a document whose body cannot be read simply arrives without a blurb.
  */
 @Injectable({ providedIn: 'root' })
 export class DocsService {
@@ -98,26 +97,18 @@ export class DocsService {
   }
 }
 
-/** The group names the API uses, in the words the page shows them in. */
-export const GROUP_LABELS: Record<string, string> = {
-  specs: 'Spec',
-  notes: 'Build note',
-  plans: 'Plan'
-};
-
 /**
  * The first paragraph of a rendered document that actually says something.
  *
- * Two kinds of opening are skipped, because every document in this record has
- * one or the other and neither describes the document:
+ * Two kinds of opening are skipped, because a note usually has one or the other
+ * and neither describes it:
  *
  * <ul>
- *   <li>a blockquote — the plans open with a note addressed to the agent that
- *       executes them, not to a reader;</li>
+ *   <li>a blockquote — used for asides at the top of a file, not for the
+ *       sentence that says what the file is about;</li>
  *   <li>a run of bolded labels — <em>Date</em>, <em>Status</em>, <em>Covers</em>,
  *       <em>Commits</em> — which is front matter. Two or more of them in one
- *       paragraph is the tell; a single one is a real sentence, and
- *       <em>Goal:</em> opening a plan is exactly the line worth showing.</li>
+ *       paragraph is the tell; a single one is a real sentence and is kept.</li>
  * </ul>
  */
 function firstParagraph(html: string): string | null {

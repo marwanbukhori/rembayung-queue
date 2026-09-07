@@ -2,5 +2,4 @@
 export interface DocSummary {
   id: string;
   title: string;
-  group: 'specs' | 'notes' | 'plans';
 }

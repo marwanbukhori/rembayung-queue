@@ -165,7 +165,7 @@ export class App {
     { surface: 'home', label: 'Overview' },
     { surface: 'visitor', label: 'Run a simulation' },
     { surface: 'cluster', label: 'Cluster' },
-    { surface: 'docs', label: 'Documentation' }
+    { surface: 'docs', label: 'Build notes' }
   ];
 
   /**
@@ -182,7 +182,7 @@ export class App {
   readonly surface = signal<Surface>('home');
   readonly selectedDocId = signal<string | null>(null);
 
-  /** Reading a document is still being in Documentation, so the nav says so. */
+  /** Reading a note is still being in Build notes, so the nav says so. */
   readonly current = computed<Surface>(() => (this.surface() === 'doc' ? 'docs' : this.surface()));
 
   /**

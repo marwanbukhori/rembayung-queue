@@ -42,7 +42,7 @@ interface Outward {
             <h1 class="headline">Watch a booking rush survive itself</h1>
             <div class="hero-actions">
               <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
-              <button class="btn btn-secondary" (click)="docs.emit()">Read the design spec</button>
+              <button class="btn btn-secondary" (click)="docs.emit()">Read the build notes</button>
             </div>
           </div>
           <div class="hero-say">

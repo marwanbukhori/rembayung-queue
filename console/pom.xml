@@ -107,10 +107,14 @@
       <resource>
         <directory>${project.basedir}/../docs</directory>
         <targetPath>docs</targetPath>
+        <!-- The notes only. The specs and the plans are working documents:
+             they say what was going to be built and in what order, which is
+             worth having in the repository and is not what someone opening
+             this console wants to read. Shipping all three put twenty-four
+             documents behind one link, of which fourteen described the
+             intention rather than the result. -->
         <includes>
           <include>notes/*.md</include>
-          <include>superpowers/specs/*.md</include>
-          <include>superpowers/plans/*.md</include>
         </includes>
       </resource>
     </resources>

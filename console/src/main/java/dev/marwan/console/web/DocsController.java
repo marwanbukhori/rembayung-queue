@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -23,8 +22,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Serves the notes, specs and plans baked into the image (see the {@code docs}
- * resource in {@code pom.xml}) as rendered HTML.
+ * Serves the build notes baked into the image (see the {@code docs} resource in
+ * {@code pom.xml}) as rendered HTML.
+ *
+ * <p>The specs and the plans are deliberately not here. They were shipped
+ * alongside the notes once, and put twenty-four documents behind one link when
+ * ten of them were the ones a reader wanted; the other fourteen described what
+ * was going to be built rather than what was. They stay in the repository.
  *
  * <h2>The id is the only place a browser string touches the filesystem</h2>
  * Every file actually copied into the image is enumerated exactly once, at
@@ -40,8 +44,8 @@ public class DocsController {
 
     /**
      * GFM pipe tables. Plain commonmark has no notion of them, so every table in
-     * the notes and specs rendered as a literal row of pipes; the written record
-     * uses them heavily enough that that was the first thing a reader saw.
+     * the notes rendered as a literal row of pipes; the written record uses them
+     * heavily enough that that was the first thing a reader saw.
      */
     private static final List<Extension> EXTENSIONS = List.of(TablesExtension.create());
 
@@ -55,9 +59,11 @@ public class DocsController {
 
     @GetMapping
     public List<DocSummary> list() {
+        // By id, which is the reading order: the notes are numbered 01 to 09 and
+        // README sorts after them, so the list opens where a stranger should start.
         return docs.values().stream()
-                .sorted(Comparator.comparing(Doc::groupOrder).thenComparing(Doc::id))
-                .map(d -> new DocSummary(d.id(), d.title(), d.group()))
+                .sorted(Comparator.comparing(Doc::id))
+                .map(d -> new DocSummary(d.id(), d.title()))
                 .toList();
     }
 
@@ -76,36 +82,15 @@ public class DocsController {
         Resource[] resources = resolver.getResources("classpath*:docs/**/*.md");
         Map<String, Doc> found = new LinkedHashMap<>();
         for (Resource resource : resources) {
-            String uri = describe(resource);
-            String group = groupOf(uri);
             String id = idOf(resource.getFilename());
             String markdown = read(resource);
             String title = titleOf(markdown, id);
-            // Filenames are unique across notes, specs and plans; the later
-            // resource would otherwise silently shadow the earlier one.
-            found.merge(id, new Doc(id, title, group, markdown), (a, b) -> {
+            // Two files resolving to one id would silently shadow each other.
+            found.merge(id, new Doc(id, title, markdown), (a, b) -> {
                 throw new IllegalStateException("duplicate documentation id: " + id);
             });
         }
         return Map.copyOf(found);
-    }
-
-    private static String describe(Resource resource) {
-        try {
-            return resource.getURI().toString();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static String groupOf(String uri) {
-        if (uri.contains("/superpowers/specs/")) {
-            return "specs";
-        }
-        if (uri.contains("/superpowers/plans/")) {
-            return "plans";
-        }
-        return "notes";
     }
 
     private static String idOf(String filename) {
@@ -131,14 +116,5 @@ public class DocsController {
                 .orElse(id);
     }
 
-    private record Doc(String id, String title, String group, String markdown) {
-        int groupOrder() {
-            return switch (group) {
-                case "specs" -> 0;
-                case "notes" -> 1;
-                case "plans" -> 2;
-                default -> 3;
-            };
-        }
-    }
+    private record Doc(String id, String title, String markdown) { }
 }

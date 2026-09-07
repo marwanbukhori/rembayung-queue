@@ -13,7 +13,7 @@ import { DocsService } from './docs.service';
       <div class="crumbs">
         <button class="btn-crumb" (click)="home.emit()">Overview</button>
         <span>/</span>
-        <button class="btn-crumb" (click)="docs.emit()">Documentation</button>
+        <button class="btn-crumb" (click)="docs.emit()">Build notes</button>
         <span>/</span>
         <span style="color: var(--ink);">{{ title() }}</span>
       </div>
@@ -31,7 +31,7 @@ import { DocsService } from './docs.service';
             }
           }
           <div class="doc-footer">
-            <button class="btn btn-secondary" (click)="docs.emit()">Back to documentation</button>
+            <button class="btn btn-secondary" (click)="docs.emit()">Back to the build notes</button>
             <button class="btn-tertiary" (click)="visitor.emit()">Start a simulation instead</button>
           </div>
         </div>
