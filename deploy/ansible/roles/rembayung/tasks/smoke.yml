@@ -45,6 +45,43 @@
     - queue_join.status == 200
   ignore_errors: true
 
+# The log pipeline's silent failure mode, made loud.
+#
+# splunk-library-javalogging appends /services/collector/event/1.0 to whatever
+# SPLUNK_HEC_URL holds. This Secret once also carried /services/collector, so
+# every batch POSTed to .../services/collector/services/collector/event/1.0 and
+# was answered 404 — and because the appender is async with neverBlock, the 404
+# was discarded without an application log line. Healthy pods, an active
+# profile, a console panel reporting the collector reachable, and not one
+# indexed event for the whole of the observability work.
+#
+# A path in this key is always that bug, so fail the deploy on it rather than
+# discover it again by searching Splunk and finding nothing.
+- name: Read the HEC URL out of the splunk-hec Secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: "{{ rembayung_namespace }}"
+    name: splunk-hec
+  register: splunk_secret
+  failed_when: false
+
+- name: Fail when SPLUNK_HEC_URL carries a path
+  vars:
+    hec_url: "{{ (splunk_secret.resources[0].data.url | b64decode) if splunk_secret.resources | default([]) | length > 0 else '' }}"
+  ansible.builtin.assert:
+    that:
+      - hec_url | regex_search('^https?://[^/]+/?$') is not none
+    fail_msg: >-
+      splunk-hec url is "{{ hec_url }}". It must be the base URL only — scheme,
+      host and port, no path. The appender appends
+      /services/collector/event/1.0 itself, and a path here makes every batch a
+      silent 404. Fix with:
+      oc patch secret splunk-hec --type=merge -p
+      '{"data":{"url":"'"$(printf https://HOST:8088 | base64)"'"}}'
+    success_msg: "splunk-hec url is a bare base URL, as the appender requires"
+  when: splunk_secret.resources | default([]) | length > 0
+
 - name: Confirm booking-service is Ready
   kubernetes.core.k8s_info:
     api_version: apps/v1

@@ -15,7 +15,7 @@ dependency of the booking path.
 
 | Key | Meaning | Consumed by |
 |---|---|---|
-| `url` | Full HEC collector endpoint, e.g. `https://http-inputs-<tenant>.splunkcloud.com/services/collector` | `SPLUNK_HEC_URL` in both Deployments |
+| `url` | HEC **base** URL — scheme, host, port, and nothing else, e.g. `https://http-inputs-<tenant>.splunkcloud.com:8088`. Do **not** append `/services/collector`; see below | `SPLUNK_HEC_URL` in both Deployments |
 | `token` | The HEC token value | `SPLUNK_HEC_TOKEN` in both Deployments |
 | `profile` | The literal string `splunk` — the switch, see below | `SPRING_PROFILES_INCLUDE` in both Deployments |
 
@@ -24,7 +24,7 @@ Collector → New Token**, named `rembayung`, sourcetype `_json`, index `main`.
 
 ```bash
 oc create secret generic splunk-hec \
-  --from-literal=url=https://http-inputs-<tenant>.splunkcloud.com/services/collector \
+  --from-literal=url=https://http-inputs-<tenant>.splunkcloud.com:8088 \
   --from-literal=token=<the HEC token> \
   --from-literal=profile=splunk
 ```
@@ -75,3 +75,30 @@ oc rollout restart deploy/booking-service deploy/queue-gate
 
 Neither service re-reads the Secret while running: the values are injected as
 environment variables at pod start, so a rotation needs a rollout.
+
+## The `url` is the base URL, with no path
+
+`splunk-library-javalogging` hardcodes the collector path and appends it to
+whatever this key holds — `/services/collector/event/1.0`, from
+`HttpEventCollectorSender`. Write the path in here as well and the appender
+POSTs to:
+
+    https://<host>:8088/services/collector/services/collector/event/1.0
+
+which the collector answers with a 404. This key held that second
+`/services/collector` for the whole of the observability work, and the cost of
+it was the entire log pipeline: **not one application event was ever indexed.**
+
+Nothing reported it. The appender is wrapped in an AsyncAppender with
+`neverBlock` and `discardingThreshold 0`, so a 404 on every batch is discarded
+without an application log line; the pods stayed healthy, the profile was
+active, `oc get secret` looked right, and the console's panel showed the
+collector reachable — because a *health* probe on the correct path really was
+returning 200. Six events existed in `main` across all time, and they were all
+hand-posted with curl while debugging.
+
+Worth noting that `ObservabilityProbe.healthUrl` already defends against exactly
+this doubling, and its Javadoc describes hitting it. The lesson that did not
+transfer: the same trap was one field away, in the field that actually carried
+the logs. A reachable collector is not a working pipeline — the only proof is an
+indexed event.
