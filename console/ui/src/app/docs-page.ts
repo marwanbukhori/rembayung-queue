@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, effect, inject, output } from '@angular/core';
 import { DocsService } from './docs.service';
+import { EvidenceStrip } from './evidence-strip';
 
 /**
  * The build notes.
@@ -18,6 +19,7 @@ import { DocsService } from './docs.service';
  */
 @Component({
   selector: 'rb-docs-page',
+  imports: [EvidenceStrip],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -34,6 +36,13 @@ import { DocsService } from './docs.service';
           the part of this project most likely to be read and least likely to be cloned.
         </p>
       </div>
+
+      <!--
+        Above the note list, because it is the part a reader who opens nothing
+        else will still take in. The notes explain these three; this is what
+        they look like.
+      -->
+      <rb-evidence-strip />
 
       @if (docs.listError(); as problem) {
         <p class="reason">{{ problem }}</p>
