@@ -44,10 +44,22 @@
     replace: '\g<1>{{ image_tag }}'
   loop: "{{ rembayung_services }}"
 
-- name: Render the manifests
-  ansible.builtin.command:
-    cmd: kustomize build .
+# Rendered and filtered in one step, because CD may not write every kind the
+# overlay produces — see rembayung_applied_kinds for which are withheld and why.
+# Sending a withheld kind would fail the whole apply on a 403 and roll back a
+# deploy that was otherwise fine, which is how the first attempt at this failed.
+- name: Render the manifests, keeping only the kinds CD may write
+  ansible.builtin.shell:
     chdir: "{{ manifest_scratch.path }}/overlays/sandbox"
+    cmd: |
+      set -o pipefail
+      kustomize build . | python3 -c '
+      import sys, yaml
+      allowed = set(sys.argv[1].split(","))
+      docs = [d for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind") in allowed]
+      yaml.safe_dump_all(docs, sys.stdout)
+      ' "{{ rembayung_applied_kinds | join(',') }}"
+    executable: /bin/bash
   register: rendered_manifests
   changed_when: false
 

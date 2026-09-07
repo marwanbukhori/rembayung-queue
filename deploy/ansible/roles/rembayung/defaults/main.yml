@@ -23,6 +23,33 @@ rembayung_services:
   - queue-gate
   - console
 
+# The kinds CD is allowed to write, and the omissions are the point.
+#
+# ServiceAccount, Role and RoleBinding are rendered by the overlay and are NOT
+# here. CD authenticates with a token held in a public repository's Actions
+# secrets, and a credential that can rewrite RBAC is a credential that can widen
+# its own access. Kubernetes escalation prevention bounds that, but the cheaper
+# guarantee is not to grant it: this project's RBAC changes perhaps twice a
+# release and is applied by a human who already holds those rights.
+#
+# What made the old gap dangerous was silence, not the manual step — a change
+# could be committed, deployed green, and do nothing. deploy/scripts/check-drift.sh
+# closes that for every kind including the three below, so RBAC drift is now
+# loud rather than invisible.
+#
+# Adding a kind here also needs a matching rule in
+# deploy/openshift/cd-serviceaccount.yaml, which a human applies.
+rembayung_applied_kinds:
+  - ConfigMap
+  - CronJob
+  - Deployment
+  - HorizontalPodAutoscaler
+  - NetworkPolicy
+  - PrometheusRule
+  - Route
+  - Service
+  - ServiceMonitor
+
 # A rollout on this cluster takes well under a minute; 300s is slack for a slow
 # image pull, not an expectation.
 rembayung_rollout_timeout: 300
