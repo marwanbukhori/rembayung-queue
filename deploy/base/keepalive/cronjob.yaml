@@ -13,8 +13,21 @@
 #
 # The dangerous version of this is not the one already seen. If no commit lands
 # in the 12 hours before a demo — exactly what a sensible person does the day
-# before one — then ALL THREE workloads age out together and the site is simply
+# before one — then ALL FOUR workloads age out together and the site is simply
 # dead when the link is opened.
+#
+# That is not a hypothetical any more. This job was written counting three
+# workloads and forgot the console, which is the one the shared link actually
+# points at. The platform set its replicas to 0, nothing here brought it back,
+# and the public URL served "Application is not available" while the other three
+# stayed perfectly healthy — the failure invisible from every other page.
+#
+# So the console is handled first, and differently. The others are restored by
+# their HPA, which holds a minimum of 2 and puts pods back on its own; the
+# console has no HPA, so a replica count of 0 is absorbing and permanent until
+# something writes 1 back. That write is a patch rather than `oc scale` on
+# purpose: the CD account holds `patch` on deployments and no rights over the
+# scale subresource, so this needs no new permission.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -53,7 +66,17 @@ spec:
                 - |
                   set -euo pipefail
 
-                  # redis first, and waited for, because queue-gate's readiness
+                  # The console first, because it is the only workload with no
+                  # HPA to restore it and the only one whose URL is handed to
+                  # people. Unconditional: patching replicas to 1 when it is
+                  # already 1 changes nothing and costs one API call, which is
+                  # cheaper than reading the value and branching on it.
+                  echo "ensuring the console has a replica"
+                  oc patch deploy/console --type=merge -p '{"spec":{"replicas":1}}'
+                  oc rollout restart deploy/console
+                  oc rollout status deploy/console --timeout=300s
+
+                  # redis next, and waited for, because queue-gate's readiness
                   # includes a redis health check: restarting them together
                   # would take the gate out for the sum of both rollouts rather
                   # than the longer of the two.
@@ -70,7 +93,7 @@ spec:
                     oc rollout status "deploy/${d}" --timeout=420s
                   done
 
-                  echo "all pod ages reset"
+                  echo "all four workloads restarted, console has a replica"
               resources:
                 requests: { cpu: 10m, memory: 64Mi }
                 limits:   { cpu: 100m, memory: 128Mi }

@@ -70,8 +70,28 @@ meaningful="$(printf '%s\n' "${diff_out}" \
   | grep -E '^[+-][^+-]' \
   | grep -vE '^[+-]\s*(generation|resourceVersion):' || true)"
 
+# Matching git is not the same as serving traffic.
+#
+# The console sat at replicas 0 for forty minutes while this script would have
+# called the namespace clean: the platform had scaled it down, the Route stayed
+# up with nothing behind it, and the public URL answered "Application is not
+# available". Every other page looked perfect, because every other workload was
+# fine. A drift check that only compares manifests cannot see that, so it is
+# asked separately and plainly: is anything declared, but not actually running?
+dead="$(oc get deploy -n "${NS}" \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.availableReplicas}{"\n"}{end}' \
+  2>/dev/null | awk '$2 == "" || $2 == 0 { print "  " $1 " has no available replica" }')"
+
+if [ -n "${dead}" ]; then
+  echo "check-drift: NOT SERVING — declared but with nothing running:"
+  printf '%s\n' "${dead}"
+  echo
+  echo "  Bring one back with: oc scale deploy/<name> --replicas=1"
+  exit 1
+fi
+
 if [ -z "${meaningful}" ]; then
-  echo "check-drift: clean — the cluster matches deploy/base in ${NS}"
+  echo "check-drift: clean — the cluster matches deploy/base in ${NS}, and every deployment has a pod"
   exit 0
 fi
 
