@@ -18,7 +18,7 @@ import java.util.Set;
  * workloads and load runs share an `app` label; keepalive Jobs and their pods
  * carry nothing but their owner.
  */
-final class Scope {
+public final class Scope {
 
     static final String PART_OF = "app.kubernetes.io/part-of";
     static final String PROJECT = "rembayung-queue";
@@ -28,7 +28,7 @@ final class Scope {
     private Scope() {
     }
 
-    static boolean ours(HasMetadata object) {
+    public static boolean ours(HasMetadata object) {
         ObjectMeta meta = object == null ? null : object.getMetadata();
         if (meta == null) {
             return false;

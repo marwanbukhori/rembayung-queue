@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * Phones are not logged by design - the services leave them out on purpose -
  * so masking is the net, not the plan. It runs for every reader.
  */
-final class LogLines {
+public final class LogLines {
 
     static final int MAX_LINES = 500;
     static final int MAX_MESSAGE = 2000;
@@ -35,7 +35,7 @@ final class LogLines {
     private LogLines() {
     }
 
-    static List<LogLine> parse(String raw) {
+    public static List<LogLine> parse(String raw) {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
@@ -62,7 +62,7 @@ final class LogLines {
         };
     }
 
-    static String mask(String text) {
+    public static String mask(String text) {
         if (text == null) {
             return null;
         }
