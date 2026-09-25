@@ -23,6 +23,8 @@ HEAD, TAIL, WIDTH = 14, 8, 160
 STAMP = re.compile(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z ?")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 SECRET = re.compile(r"sha256~|ghp_|ghs_|token=[^*\s]")
+TEST_KEEP = re.compile(r"Tests run:|Container \S+ started in|BUILD SUCCESS|BUILD FAILURE|Total time|ERROR")
+TEST_HEAD = 4
 DEPLOY_KEEP = re.compile(r'^(TASK \[|PLAY |ok: |changed: |fatal: |failed: |skipping: |localhost +:|\s*"msg"|Run ansible-playbook)')
 
 # What each step does and why, from notes 06 and 07.
@@ -61,8 +63,14 @@ def cut(text):
     return text if len(text) <= WIDTH else text[:WIDTH] + "…"
 
 
-def trim(lines, deploy=False):
+def trim(lines, deploy=False, test=False):
     """Keep the useful part of one step's log, with GitHub's line numbers."""
+    if test:
+        # The command, then only what a reader looks for in a test log: the
+        # containers starting, each class's result, and the outcome.
+        head = lines[:TEST_HEAD]
+        rest = [(n, s) for n, s in lines[TEST_HEAD:] if TEST_KEEP.search(s)]
+        return [(n, cut(s)) for n, s in head + rest]
     if deploy:
         return [(n, cut(s)) for n, s in lines if DEPLOY_KEEP.match(s)]
     if len(lines) <= HEAD + TAIL + 1:
@@ -146,7 +154,7 @@ def run_from_attempt(run_id, attempt, workflow):
 def build(workflow, job, run_id, attempt, url, sha, started, completed, result, steps):
     out = []
     for s in steps:
-        log = trim(numbered(s["raw"]), deploy=s["name"] == "Deploy")
+        log = trim(numbered(s["raw"]), deploy=s["name"] == "Deploy", test=s["name"].startswith("Test "))
         out.append(dict(name=s["name"], result=s["result"], seconds=seconds(s["started"], s["completed"]),
                         log=log, explain=EXPLAIN.get(s["name"], EXPLAIN.get(s["name"].split(" ")[0], ""))))
     return dict(workflow=workflow, job=job, runId=int(run_id), attempt=int(attempt), url=url, commit=sha[:7],
@@ -190,6 +198,13 @@ def self_test():
     dep = trim([(1, "TASK [rembayung : Roll back] ****"), (2, "noise"), (3, 'ok: [localhost]'),
                 (4, "fatal: [localhost]: FAILED!"), (5, "PLAY RECAP ***"), (6, "localhost : ok=24")], deploy=True)
     check("deploy keeps tasks, results and recap", [n for n, _ in dep] == [1, 3, 4, 5, 6])
+    tl = [(1, "Run ./mvnw verify"), (2, "shell: bash"), (3, "[INFO] Scanning"), (4, "[INFO] noise"),
+          (5, "[INFO] more"), (6, "[INFO] more"), (7, "[INFO] Running dev.X"),
+          (8, "Container gvenzl/oracle-free started in PT28S"), (9, "[INFO] Tests run: 3, Failures: 0"),
+          (10, "[INFO] noise"), (11, "[INFO] BUILD SUCCESS"), (12, "[INFO] Total time: 1 min")]
+    kept = trim(tl, test=True)
+    check("test step keeps the command, container start-ups, results and outcome",
+          [n for n, _ in kept if n] == [1, 2, 3, 4, 8, 9, 11, 12])
     check("secret: sha256~ token refused", scan_for_secrets([(1, "oc login --token=sha256~abc")]) is not None)
     check("secret: raw token= refused", scan_for_secrets([(1, "token=abcdef")]) is not None)
     check("masked token allowed", scan_for_secrets([(1, "token=***"), (2, "password: ***")]) is None)

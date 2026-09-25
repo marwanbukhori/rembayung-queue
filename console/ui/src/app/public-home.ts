@@ -81,6 +81,10 @@ interface Outward {
             <span class="tile-name">Cluster</span>
             <span class="tile-what">The objects behind it: pods, autoscalers, the CPU budget</span>
           </button>
+          <button class="tile" (click)="cicd.emit()">
+            <span class="tile-name">CI/CD</span>
+            <span class="tile-what">How a commit reaches a pod, with real runs and their logs</span>
+          </button>
           <button class="tile" (click)="docs.emit()">
             <span class="tile-name">Build notes</span>
             <span class="tile-what">How each part was built, and why</span>
@@ -196,12 +200,14 @@ interface Outward {
       background: var(--white); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px;
     }
     .tile:hover { border-color: var(--ink); }
-    .tile.primary { grid-column: span 2; background: var(--dhl-red); color: #fff; border-color: var(--dhl-red); }
+    /* The primary action takes the left half; the four others fill a 2 by 2 beside it. */
+    .tile.primary { grid-column: span 2; grid-row: span 2; background: var(--dhl-red); color: #fff; border-color: var(--dhl-red); }
     .tile.primary:hover { filter: brightness(1.08); }
     .tile-name { font-size: 18px; font-weight: 700; }
     .tile-what { font-size: 14px; color: var(--ink-soft); }
     .tile.primary .tile-what { color: rgba(255, 255, 255, .9); }
     @media (max-width: 899px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 899px) { .tile.primary { grid-row: auto; } }
     @media (max-width: 599px) { .tiles { grid-template-columns: minmax(0, 1fr); } .tile.primary { grid-column: auto; } }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -305,6 +311,7 @@ export class PublicHome {
   readonly docs = output<void>();
   readonly visitor = output<void>();
   readonly cluster = output<void>();
+  readonly cicd = output<void>();
 
 
   /** Named because a hiring manager reads the list before reading the code. */

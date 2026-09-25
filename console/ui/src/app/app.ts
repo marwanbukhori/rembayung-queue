@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { CicdPage } from './cicd-page';
 import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
 import { DocsPage } from './docs-page';
@@ -8,7 +9,7 @@ import { Visitor } from './visitor';
 import { DemoKeyService, hasConsoleKey } from './key';
 
 /** Which surface is on screen. */
-type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
+type Surface = 'home' | 'cluster' | 'cicd' | 'docs' | 'doc' | 'visitor';
 
 /**
  * The shell: a persistent navbar, and whichever surface is showing.
@@ -25,7 +26,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, ClusterPage, DocsPage, DocPage, Visitor],
+  imports: [PublicHome, ClusterPage, CicdPage, DocsPage, DocPage, Visitor],
   template: `
     <header class="navbar">
       <div class="brandband">
@@ -85,10 +86,13 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
     <main [class.wide]="surface() === 'visitor'">
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" />
+          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" />
         }
         @case ('cluster') {
           <rb-cluster-page (home)="show('home')" />
+        }
+        @case ('cicd') {
+          <rb-cicd-page (home)="show('home')" (open)="openDoc($event)" />
         }
         @case ('docs') {
           <rb-docs-page (home)="show('home')" (open)="openDoc($event)" />
@@ -221,6 +225,7 @@ export class App {
     { surface: 'home', label: 'Overview' },
     { surface: 'visitor', label: 'Run a simulation' },
     { surface: 'cluster', label: 'Cluster' },
+    { surface: 'cicd', label: 'CI/CD' },
     { surface: 'docs', label: 'Build notes' }
   ];
 

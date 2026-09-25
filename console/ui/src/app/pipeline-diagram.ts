@@ -146,8 +146,8 @@ export class PipelineDiagram {
     { x: 720, y: 232, w: 256, h: 68, tone: 'plain',
       label: 'OpenShift', what: 'Route → Service → Deployment,', extra: 'HPA, quota, NetworkPolicy, RBAC' },
     { x: 720, y: 318, w: 256, h: 68, tone: 'watch',
-      label: 'Prometheus (Dynatrace, Splunk: trials ended)', what: 'ServiceMonitor scrapes :9090,',
-      extra: 'OneAgent traces, HEC ships logs' }
+      label: 'Prometheus', what: 'ServiceMonitor scrapes :9090;',
+      extra: 'Dynatrace, Splunk: trials ended' }
   ];
 
   protected readonly edges = [

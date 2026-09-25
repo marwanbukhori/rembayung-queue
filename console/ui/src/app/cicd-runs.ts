@@ -357,80 +357,88 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "env:"
      ],
      [
-      5,
-      "  JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      63,
+      "15:54:32.362 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 started in PT0.406654586S"
      ],
      [
-      6,
-      "  JAVA_HOME_25_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      94,
+      "15:55:54.594 [main] INFO tc.gvenzl/oracle-free:23-slim-faststart -- Container gvenzl/oracle-free:23-slim-faststart started in PT28.173679214S"
      ],
      [
-      7,
-      "[INFO] Scanning for projects..."
+      303,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 100.2 s -- in dev.marwan.booking.IdempotencyTest"
      ],
      [
-      8,
-      "[INFO] "
+      910,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.295 s -- in dev.marwan.booking.ConcurrencyInvariantTest"
      ],
      [
-      9,
-      "[INFO] ---------------------< dev.marwan:booking-service >---------------------"
+      959,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.279 s -- in dev.marwan.booking.ConfirmExpireRaceTest"
      ],
      [
-      10,
-      "[INFO] Building booking-service 0.1.0-SNAPSHOT"
+      998,
+      "[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.234 s -- in dev.marwan.booking.HealthProbeTest"
      ],
      [
-      11,
-      "[INFO]   from pom.xml"
+      1159,
+      "[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.878 s -- in dev.marwan.booking.ExpirySweeperTest"
      ],
      [
-      12,
-      "[INFO] --------------------------------[ jar ]---------------------------------"
+      1166,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.077 s -- in dev.marwan.booking.SchemaMigrationTest"
      ],
      [
-      13,
-      "[INFO] "
+      1173,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.114 s -- in dev.marwan.booking.InternalControllerTest"
      ],
      [
-      14,
-      "[INFO] --- resources:3.5.0:resources (default-resources) @ booking-service ---"
+      1176,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.199 s -- in dev.marwan.booking.config.BookingMetricsTest"
      ],
      [
-      null,
-      "… 1255 lines …"
+      1178,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in dev.marwan.booking.PoolExhaustionTest"
      ],
      [
-      1270,
-      "[INFO] Replacing main artifact /home/runner/work/rembayung-queue/rembayung-queue/booking-service/target/booking-service-0.1.0-SNAPSHOT.jar with repackaged archi…"
+      1185,
+      "[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.074 s -- in dev.marwan.booking.service.SlotStatesQueryTest"
      ],
      [
-      1271,
-      "[INFO] The original artifact has been renamed to /home/runner/work/rembayung-queue/rembayung-queue/booking-service/target/booking-service-0.1.0-SNAPSHOT.jar.ori…"
+      1187,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.152 s -- in dev.marwan.booking.service.SlotStateProviderTest"
      ],
      [
-      1272,
-      "[INFO] ------------------------------------------------------------------------"
+      1194,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.056 s -- in dev.marwan.booking.SlotRepositoryTest"
+     ],
+     [
+      1205,
+      "[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.260 s -- in dev.marwan.booking.BookingControllerTest"
+     ],
+     [
+      1217,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.100 s -- in dev.marwan.booking.BookingServiceTest"
+     ],
+     [
+      1257,
+      "[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.683 s -- in dev.marwan.booking.ReadinessUnderLoadTest"
+     ],
+     [
+      1259,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in dev.marwan.booking.OverloadResponseTest"
+     ],
+     [
+      1263,
+      "[INFO] Tests run: 73, Failures: 0, Errors: 0, Skipped: 0"
      ],
      [
       1273,
       "[INFO] BUILD SUCCESS"
      ],
      [
-      1274,
-      "[INFO] ------------------------------------------------------------------------"
-     ],
-     [
       1275,
       "[INFO] Total time:  01:54 min"
-     ],
-     [
-      1276,
-      "[INFO] Finished at: 2026-09-25T15:56:12Z"
-     ],
-     [
-      1277,
-      "[INFO] ------------------------------------------------------------------------"
      ]
     ],
     "explain": "The slowest step, on purpose: Testcontainers starts a real Oracle and a real Redis and the tests run against them. A mock would accept SQL that Oracle rejects, and the seat-claiming query is exactly the SQL that matters."
@@ -457,80 +465,84 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "env:"
      ],
      [
-      5,
-      "  JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      54,
+      "15:56:18.194 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 started in PT0.717294796S"
      ],
      [
-      6,
-      "  JAVA_HOME_25_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      81,
+      "15:56:20.125 [main] INFO tc.redis:7-alpine -- Container redis:7-alpine started in PT0.151597185S"
      ],
      [
-      7,
-      "[INFO] Scanning for projects..."
+      510,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.770 s -- in dev.marwan.gate.QueueServiceTest"
      ],
      [
-      8,
-      "[INFO] "
+      517,
+      "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.035 s -- in dev.marwan.gate.RedisReachableTest"
      ],
      [
-      9,
-      "[INFO] -----------------------< dev.marwan:queue-gate >------------------------"
+      544,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.647 s -- in dev.marwan.gate.HealthProbeTest"
      ],
      [
-      10,
-      "[INFO] Building queue-gate 0.1.0-SNAPSHOT"
+      573,
+      "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.356 s -- in dev.marwan.gate.BookingProxyDownstreamUnavailableTest"
      ],
      [
-      11,
-      "[INFO]   from pom.xml"
+      586,
+      "[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.216 s -- in dev.marwan.gate.web.InternalControllerTest"
      ],
      [
-      12,
-      "[INFO] --------------------------------[ jar ]---------------------------------"
+      597,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.150 s -- in dev.marwan.gate.web.InternalGuardTest"
      ],
      [
-      13,
-      "[INFO] "
+      599,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in dev.marwan.gate.AdmissionTest"
      ],
      [
-      14,
-      "[INFO] --- resources:3.5.0:resources (default-resources) @ queue-gate ---"
+      614,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.130 s -- in dev.marwan.gate.queue.MultiDropTest"
      ],
      [
-      null,
-      "… 1640 lines …"
+      1021,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.697 s -- in dev.marwan.gate.queue.RushFormsAQueueTest"
      ],
      [
-      1655,
-      "[INFO] Replacing main artifact /home/runner/work/rembayung-queue/rembayung-queue/queue-gate/target/queue-gate-0.1.0-SNAPSHOT.jar with repackaged archive, adding…"
+      1028,
+      "[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.079 s -- in dev.marwan.gate.queue.DropRegistryTest"
      ],
      [
-      1656,
-      "[INFO] The original artifact has been renamed to /home/runner/work/rembayung-queue/rembayung-queue/queue-gate/target/queue-gate-0.1.0-SNAPSHOT.jar.original"
+      1030,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.403 s -- in dev.marwan.gate.queue.QueueStateProviderTest"
      ],
      [
-      1657,
-      "[INFO] ------------------------------------------------------------------------"
+      1032,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in dev.marwan.gate.queue.QueueStateTest"
+     ],
+     [
+      1292,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.344 s -- in dev.marwan.gate.QueueControllerTest"
+     ],
+     [
+      1607,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.284 s -- in dev.marwan.gate.AdmissionServiceTest"
+     ],
+     [
+      1644,
+      "[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.330 s -- in dev.marwan.gate.BookingProxyControllerTest"
+     ],
+     [
+      1648,
+      "[INFO] Tests run: 84, Failures: 0, Errors: 0, Skipped: 0"
      ],
      [
       1658,
       "[INFO] BUILD SUCCESS"
      ],
      [
-      1659,
-      "[INFO] ------------------------------------------------------------------------"
-     ],
-     [
       1660,
       "[INFO] Total time:  16.628 s"
-     ],
-     [
-      1661,
-      "[INFO] Finished at: 2026-09-25T15:56:29Z"
-     ],
-     [
-      1662,
-      "[INFO] ------------------------------------------------------------------------"
      ]
     ],
     "explain": "queue-gate's tests, against a real Redis started by Testcontainers. The queue lives in Redis, so that is where it is tested."
@@ -557,80 +569,124 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "env:"
      ],
      [
-      5,
-      "  JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      36,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.227 s -- in dev.marwan.console.objects.NetworkDescriberTest"
      ],
      [
-      6,
-      "  JAVA_HOME_25_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/25.0.4-1/x64"
+      38,
+      "[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.081 s -- in dev.marwan.console.objects.WorkloadDescriberTest"
      ],
      [
-      7,
-      "[INFO] Scanning for projects..."
+      40,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in dev.marwan.console.objects.ScopeTest"
      ],
      [
-      8,
-      "[INFO] "
+      42,
+      "[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.marwan.console.objects.ObjectKindTest"
      ],
      [
-      9,
-      "[INFO] -------------------------< dev.marwan:console >-------------------------"
+      44,
+      "[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.163 s -- in dev.marwan.console.objects.PodLogsTest"
      ],
      [
-      10,
-      "[INFO] Building console 0.1.0-SNAPSHOT"
+      46,
+      "[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.086 s -- in dev.marwan.console.objects.ObjectsProviderTest"
      ],
      [
-      11,
-      "[INFO]   from pom.xml"
+      48,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in dev.marwan.console.objects.LogLinesTest"
      ],
      [
-      12,
-      "[INFO] --------------------------------[ jar ]---------------------------------"
+      77,
+      "[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.076 s -- in dev.marwan.console.objects.ObjectsControllerTest"
      ],
      [
-      13,
-      "[INFO] "
+      79,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in dev.marwan.console.objects.EventLinesTest"
      ],
      [
-      14,
-      "[INFO] --- resources:3.5.0:resources (default-resources) @ console ---"
+      81,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in dev.marwan.console.observability.ObservabilityProbeTest"
      ],
      [
-      null,
-      "… 247 lines …"
+      104,
+      "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.263 s -- in dev.marwan.console.web.DemoKeyControllerOffTest"
      ],
      [
-      262,
-      "[INFO] Replacing main artifact /home/runner/work/rembayung-queue/rembayung-queue/console/target/console-0.1.0-SNAPSHOT.jar with repackaged archive, adding neste…"
+      127,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.260 s -- in dev.marwan.console.web.StateControllerTest"
      ],
      [
-      263,
-      "[INFO] The original artifact has been renamed to /home/runner/work/rembayung-queue/rembayung-queue/console/target/console-0.1.0-SNAPSHOT.jar.original"
+      150,
+      "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.152 s -- in dev.marwan.console.web.DemoKeyControllerTest"
      ],
      [
-      264,
-      "[INFO] ------------------------------------------------------------------------"
+      173,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.030 s -- in dev.marwan.console.web.DocsControllerTest"
+     ],
+     [
+      196,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.338 s -- in dev.marwan.console.auth.KeyFilterTest"
+     ],
+     [
+      198,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dev.marwan.console.auth.AccessKeyTest"
+     ],
+     [
+      200,
+      "[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.050 s -- in dev.marwan.console.ops.LoadOpsTest"
+     ],
+     [
+      206,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.056 s -- in dev.marwan.console.ops.DropOpsTest"
+     ],
+     [
+      208,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in dev.marwan.console.state.ClusterStateTest"
+     ],
+     [
+      213,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in dev.marwan.console.state.ClusterStateProviderTest"
+     ],
+     [
+      218,
+      "[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in dev.marwan.console.state.DemoStateProviderTest"
+     ],
+     [
+      220,
+      "[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in dev.marwan.console.state.DemoStateTest"
+     ],
+     [
+      243,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.224 s -- in dev.marwan.console.metrics.MetricsControllerTest"
+     ],
+     [
+      245,
+      "[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in dev.marwan.console.metrics.PromTextTest"
+     ],
+     [
+      247,
+      "[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.103 s -- in dev.marwan.console.metrics.PodReadingsTest"
+     ],
+     [
+      249,
+      "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.050 s -- in dev.marwan.console.metrics.MetricsServiceTest"
+     ],
+     [
+      251,
+      "[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in dev.marwan.console.metrics.PromJsonTest"
+     ],
+     [
+      255,
+      "[INFO] Tests run: 149, Failures: 0, Errors: 0, Skipped: 0"
      ],
      [
       265,
       "[INFO] BUILD SUCCESS"
      ],
      [
-      266,
-      "[INFO] ------------------------------------------------------------------------"
-     ],
-     [
       267,
       "[INFO] Total time:  10.652 s"
-     ],
-     [
-      268,
-      "[INFO] Finished at: 2026-09-25T15:56:41Z"
-     ],
-     [
-      269,
-      "[INFO] ------------------------------------------------------------------------"
      ]
     ],
     "explain": "The console's tests: the key filter, the demo-key endpoint, the Prometheus and pod readers."
