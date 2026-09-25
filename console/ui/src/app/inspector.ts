@@ -234,15 +234,15 @@ import { malaysiaTime } from './time';
     .dot.t-bad { background: var(--chip-bad-fg); }
 
     /*
-      Wide screens: a panel over the graph's right edge, only while something is
-      selected. Closing it gives the graph its full width back.
+      Wide screens: a column beside the graph, only while something is
+      selected - the graph shrinks to make room instead of being covered.
     */
     @media (min-width: 1280px) {
-      .inspector { position: absolute; top: 0; right: 0; bottom: 0; width: min(40%, 460px); overflow-y: auto;
-                   background: var(--white); padding: 16px; border-left: 1px solid var(--line);
-                   box-shadow: -8px 0 24px rgba(0, 0, 0, .12); display: none; }
+      .inspector { max-height: 680px; overflow-y: auto; background: var(--white); padding: 4px 0 4px 20px;
+                   border-left: 1px solid var(--line); display: none; }
       .inspector.open { display: block; }
       .close { display: block; }
+      .head { position: sticky; top: 0; background: var(--white); z-index: 1; padding-bottom: 4px; }
     }
     @media (max-width: 1279px) {
       .inspector { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 20;

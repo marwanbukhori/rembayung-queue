@@ -1,6 +1,9 @@
 import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
 import { ChartsStrip } from './charts-strip';
+import { ClusterResources } from './cluster-resources';
+import { InspectorService } from './inspector.service';
+import { PodPulse } from './pod-pulse';
 import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
 import { RecentRuns } from './recent-runs';
@@ -26,7 +29,8 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, RecentRuns, RunBanner, RunPanel, TrafficLog],
+  imports: [CanonicalDrop, ChartsStrip, ClusterResources, Inspector, ObjectGraph, PodPulse, RecentRuns, RunBanner,
+    RunPanel, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -80,21 +84,29 @@ import { StateService } from './state.service';
       </section>
 
       <!--
-        The graph gets the whole width. The inspector opens over its right edge
-        rather than beside it, so a click shows the object and its logs next to
-        the diagram without scrolling, and closing it gives the width back.
+        The graph gets the whole width until something is clicked; then it
+        shares the row with the inspector, graph left and inspector right, and
+        shrinks to fit rather than being covered. Closing gives the width back.
       -->
       <section class="card band-card">
         <div class="why">Every object behind it</div>
         <p class="note">
           Click one to inspect it; start a rush and watch the autoscalers and pods move.
         </p>
-        <div class="graph-wrap">
+        <div class="graph-wrap" [class.inspecting]="!!inspector.selected()">
           <rb-object-graph />
           <rb-inspector />
         </div>
         <rb-recent-runs />
       </section>
+
+      <!--
+        The same two readings the Cluster page leads with: the CPU budget as one
+        square per pod, and every pod with its state, so a rush's effect on the
+        namespace is on this page without leaving it.
+      -->
+      <rb-pod-pulse />
+      <rb-cluster-resources [full]="true" />
 
       <!--
         The way back. Starting a simulation used to be a one-way door: the page
@@ -159,8 +171,10 @@ import { StateService } from './state.service';
     .band-card { padding: 20px 24px; }
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
     .graph-wrap { position: relative; }
-    /* Room for the inspector's logs when the graph itself is short. */
-    @media (min-width: 1280px) { .graph-wrap { min-height: 560px; } }
+    @media (min-width: 1280px) {
+      .graph-wrap.inspecting { display: grid; grid-template-columns: minmax(0, 1fr) min(40%, 460px);
+                               gap: 20px; align-items: start; }
+    }
 
     .exit {
       border-top: 1px solid var(--line);
@@ -187,6 +201,7 @@ export class Visitor implements OnInit, OnDestroy {
   private readonly state = inject(StateService);
   private readonly loads = inject(LoadService);
 
+  protected readonly inspector = inject(InspectorService);
   readonly sandbox = this.sandboxes.sandbox;
   readonly starting = this.sandboxes.starting;
   readonly failure = this.sandboxes.failure;
