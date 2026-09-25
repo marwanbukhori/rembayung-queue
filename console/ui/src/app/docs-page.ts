@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, effect, inject, output } from '@angular/core';
 import { DocsService } from './docs.service';
 import { EvidenceStrip } from './evidence-strip';
+import { ToolsList } from './tools-list';
 
 /**
  * The build notes.
@@ -19,7 +20,7 @@ import { EvidenceStrip } from './evidence-strip';
  */
 @Component({
   selector: 'rb-docs-page',
-  imports: [EvidenceStrip],
+  imports: [EvidenceStrip, ToolsList],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -42,6 +43,8 @@ import { EvidenceStrip } from './evidence-strip';
         else will still take in. The notes explain these three; this is what
         they look like.
       -->
+      <rb-tools-list />
+
       <rb-evidence-strip />
 
       @if (docs.listError(); as problem) {

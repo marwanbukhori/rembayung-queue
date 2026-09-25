@@ -85,7 +85,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
     <main [class.wide]="surface() === 'visitor'">
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" />
+          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" />
         }
         @case ('cluster') {
           <rb-cluster-page (home)="show('home')" />

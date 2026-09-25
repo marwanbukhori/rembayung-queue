@@ -1,6 +1,5 @@
-import { Component, computed, inject, output } from '@angular/core';
+import { Component, output } from '@angular/core';
 import { ArchitectureDiagram } from './architecture-diagram';
-import { PipelineDiagram } from './pipeline-diagram';
 import { Reveal } from './reveal';
 
 /** The three places to look when this page is not enough. */
@@ -25,7 +24,7 @@ interface Outward {
  */
 @Component({
   selector: 'rb-public-home',
-  imports: [ArchitectureDiagram, PipelineDiagram, Reveal],
+  imports: [ArchitectureDiagram, Reveal],
   template: `
     <div class="stack">
       <section class="panel">
@@ -39,11 +38,7 @@ interface Outward {
         <div class="hero">
           <div class="hero-lead">
             <span class="tag eyebrow">Simulation</span>
-            <h1 class="headline">Watch a booking rush survive itself</h1>
-            <div class="hero-actions">
-              <button class="btn btn-primary" (click)="visitor.emit()">Start a simulation</button>
-              <button class="btn btn-secondary" (click)="docs.emit()">Read the build notes</button>
-            </div>
+            <h1 class="headline">A virtual queue and booking service, deployed on OpenShift and load-tested live</h1>
           </div>
           <div class="hero-say">
             <p class="hero-lede">
@@ -64,16 +59,6 @@ interface Outward {
           </div>
         </div>
 
-        <!--
-          A contents strip rather than a sidebar: the page is one column of
-          bands, so the list of them is one line, and a sticky sidebar would
-          take width from diagrams that need it.
-        -->
-        <nav class="toc" aria-label="Sections on this page">
-          @for (item of contents; track item.id) {
-            <a class="toc-link" [href]="'#' + item.id">{{ item.label }}</a>
-          }
-        </nav>
 
         <div class="band" id="system" [rbReveal]="0">
           <div class="band-head-row">
@@ -83,37 +68,23 @@ interface Outward {
           <rb-architecture-diagram />
         </div>
 
-        <div class="band" id="pipeline" [rbReveal]="0">
-          <div class="band-head-row">
-            <div class="band-head eyebrow">How a commit reaches a pod</div>
-            <div class="band-aside mono">every label exists in the repo</div>
-          </div>
-          <rb-pipeline-diagram />
-        </div>
-
-        <div class="band" id="stack" [rbReveal]="0">
-          <div class="band-head-row">
-            <div class="band-head eyebrow">Everything used, and what for</div>
-            <div class="band-aside mono">{{ toolCount() }} pieces</div>
-          </div>
-          <!--
-            Named with a job each. A row of logos says what somebody has touched;
-            it does not say what any of it does here, which is the only thing
-            worth knowing about a stack you are being shown.
-          -->
-          <div class="tools">
-            @for (group of tools; track group.area) {
-              <div class="tool-group" [rbReveal]="0">
-                <div class="tool-area eyebrow">{{ group.area }}</div>
-                @for (tool of group.items; track tool.name) {
-                  <div class="tool" [title]="tool.what">
-                    <span class="tool-name mono">{{ tool.name }}</span>
-                    <span class="tool-what">{{ tool.what }}</span>
-                  </div>
-                }
-              </div>
-            }
-          </div>
+        <!--
+          Where to go next. One obvious action - run a rush - and the rest as
+          equals. CI/CD and AI Agent tiles join as their pages ship.
+        -->
+        <div class="band tiles">
+          <button class="tile primary" (click)="visitor.emit()">
+            <span class="tile-name">Run a simulation</span>
+            <span class="tile-what">Start a rush against the live cluster and watch it land</span>
+          </button>
+          <button class="tile" (click)="cluster.emit()">
+            <span class="tile-name">Cluster</span>
+            <span class="tile-what">The objects behind it: pods, autoscalers, the CPU budget</span>
+          </button>
+          <button class="tile" (click)="docs.emit()">
+            <span class="tile-name">Build notes</span>
+            <span class="tile-what">How each part was built, and why</span>
+          </button>
         </div>
       </section>
 
@@ -219,29 +190,19 @@ interface Outward {
     .fact-name { font-size: 15px; font-weight: 700; margin-top: 8px; }
     .fact-note { font-size: 14px; color: var(--ink-soft); margin-top: 4px; text-wrap: pretty; }
 
-    .tools {
-      display: grid;
-      gap: 24px 32px;
-      grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .tile {
+      display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; cursor: pointer;
+      background: var(--white); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px;
     }
-    .tool-group { min-width: 0; }
-    .tool-area { color: var(--muted); margin-bottom: 10px; }
-    .tool { padding: 6px 0; border-top: 1px solid var(--rule); }
-    .tool:first-of-type { border-top: 0; }
-    .tool-name { display: block; font-size: 13px; font-weight: 700; }
-    /*
-      Clamped to one line. Twenty-three entries at two or three lines each was a
-      page of prose where a scannable list belonged; the full sentence is still
-      there on hover and for a screen reader.
-    */
-    .tool-what {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    .tile:hover { border-color: var(--ink); }
+    .tile.primary { grid-column: span 2; background: var(--dhl-red); color: #fff; border-color: var(--dhl-red); }
+    .tile.primary:hover { filter: brightness(1.08); }
+    .tile-name { font-size: 18px; font-weight: 700; }
+    .tile-what { font-size: 14px; color: var(--ink-soft); }
+    .tile.primary .tile-what { color: rgba(255, 255, 255, .9); }
+    @media (max-width: 899px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 599px) { .tiles { grid-template-columns: minmax(0, 1fr); } .tile.primary { grid-column: auto; } }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .stack-chip {
@@ -343,70 +304,14 @@ interface Outward {
 export class PublicHome {
   readonly docs = output<void>();
   readonly visitor = output<void>();
+  readonly cluster = output<void>();
 
 
   /** Named because a hiring manager reads the list before reading the code. */
   /** The three things a visitor can actually do, in the order the page offers them. */
   /** Named with the job each one does here, not just named. */
-  readonly tools = [
-    {
-      area: 'The services',
-      items: [
-        { name: 'Java 25', what: 'three Spring Boot services in one repository' },
-        { name: 'Spring Boot 4', what: 'HTTP, scheduling, health probes, Micrometer metrics' },
-        { name: 'Spring Data JPA', what: 'the pessimistic row lock that makes a seat unsellable twice' },
-        { name: 'Maven', what: 'one wrapper per service; CI runs verify on each' }
-      ]
-    },
-    {
-      area: 'Data',
-      items: [
-        { name: 'Oracle', what: 'Autonomous Database a region away; the seat count lives in one row' },
-        { name: 'Flyway', what: 'schema migrations, validated on every start' },
-        { name: 'Redis', what: 'the queue itself: ticket counter, admission tokens, drop records' },
-        { name: 'Testcontainers', what: 'real Oracle 23ai and Redis in the test run, not mocks' }
-      ]
-    },
-    {
-      area: 'Delivery',
-      items: [
-        { name: 'GitHub Actions', what: 'ci.yml builds and tests; cd.yml deploys only a green run' },
-        { name: 'Docker Buildx', what: 'one image per service, tagged with the commit SHA' },
-        { name: 'ghcr.io', what: 'the registry; immutable SHA tags, never :latest' },
-        { name: 'Ansible', what: 'patches the Deployments, waits, rolls the set back on failure' },
-        { name: 'Kustomize', what: 'base manifests with a sandbox overlay that pins the tags' }
-      ]
-    },
-    {
-      area: 'The cluster',
-      items: [
-        { name: 'OpenShift', what: 'Routes, Services and Deployments under a 3000m namespace quota' },
-        { name: 'HPA', what: 'queue-gate scales 2 to 10, booking-service 2 to 4, on CPU' },
-        { name: 'NetworkPolicy', what: 'Redis and booking-service reachable from queue-gate only' },
-        { name: 'RBAC', what: 'a ServiceAccount that reads this namespace and no Secrets' },
-        { name: 'CronJob', what: 'restarts the workloads three times a day to outlive the idler' }
-      ]
-    },
-    {
-      area: 'Seeing it',
-      items: [
-        { name: 'Prometheus', what: 'a ServiceMonitor scrapes :9090; a rule alerts on oversold' },
-        { name: 'Dynatrace', what: 'trial ended - application-only OneAgent, now switched off' },
-        { name: 'Splunk', what: 'trial ended - JSON events over HEC, now switched off' },
-        { name: 'k6', what: 'the crowd, run as a Job inside the cluster' },
-        { name: 'Angular 20', what: 'this console; signals and standalone components, no UI framework' }
-      ]
-    }
-  ];
 
-  readonly contents = [
-    { id: 'system', label: 'The system' },
-    { id: 'pipeline', label: 'Commit to pod' },
-    { id: 'stack', label: 'What each tool does' }
-  ];
 
-  readonly toolCount = computed(() =>
-    this.tools.reduce((sum, group) => sum + group.items.length, 0));
 
 
 

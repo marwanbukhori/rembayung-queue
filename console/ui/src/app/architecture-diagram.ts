@@ -118,7 +118,7 @@ export class ArchitectureDiagram {
   /** Read from the same field the alert rule reads, never a constant. */
   private readonly oversold = computed(() => {
     const drop = this.state.view()?.drop;
-    return drop?.available ? String(drop.oversold) : '—';
+    return drop?.available ? String(drop.oversold) : 'reading…';
   });
 
   /**
@@ -130,7 +130,7 @@ export class ArchitectureDiagram {
   private count(deployment: string): string {
     const pods = this.pods();
     if (!pods?.available) {
-      return '—';
+      return 'reading…';
     }
     const mine = pods.pods.filter((p) => p.name.startsWith(deployment + '-'));
     if (!mine.length) {
