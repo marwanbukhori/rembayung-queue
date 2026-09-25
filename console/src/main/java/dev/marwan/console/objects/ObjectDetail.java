@@ -40,6 +40,12 @@ public record ObjectDetail(String kind, String name, boolean available, String d
                 "not readable right now", List.of(), List.of(), List.of());
     }
 
+    public ObjectDetail withMoreFacts(List<Fact> more) {
+        List<Fact> all = new java.util.ArrayList<>(facts);
+        all.addAll(more);
+        return new ObjectDetail(kind, name, available, detail, tone, headline, List.copyOf(all), related, events);
+    }
+
     public ObjectDetail withEvents(List<EventLine> lines) {
         return new ObjectDetail(kind, name, available, detail, tone, headline, facts, related, lines);
     }

@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +26,8 @@ class ObjectsProviderTest {
         @Override public Clock withZone(ZoneId zone) { return this; }
         @Override public Instant instant() { return now.get(); }
     };
-    private final ObjectsProvider provider = new ObjectsProvider(source, clock);
+    private final ObjectsProvider provider = new ObjectsProvider(source, clock,
+            () -> List.of(new ObjectDetail.Fact("Holds", "12 tickets issued, 10 admitted, 2 waiting")));
 
     @Test
     void anUnknownKindIsNotFound() {
@@ -159,6 +161,21 @@ class ObjectsProviderTest {
         provider.recentJobs();
 
         assertThat(source.reads).isEqualTo(afterFirst);
+    }
+
+    /** redis logs nothing about what it holds; the Deployment view says it instead. */
+    @Test
+    void redisSaysWhatItHolds() {
+        source.deployment = new io.fabric8.kubernetes.api.model.apps.DeploymentBuilder()
+                .withNewMetadata().withName("redis").addToLabels("app", "redis").endMetadata()
+                .withNewSpec().withReplicas(1).withNewTemplate().withNewSpec()
+                    .addNewContainer().withName("redis").withImage("redis:7-alpine").endContainer()
+                .endSpec().endTemplate().endSpec()
+                .withNewStatus().withAvailableReplicas(1).endStatus().build();
+
+        ObjectDetail detail = provider.describe("deployment", "redis");
+
+        assertThat(detail.facts()).extracting(ObjectDetail.Fact::label).contains("Holds");
     }
 
     private static Pod pod(String name) {

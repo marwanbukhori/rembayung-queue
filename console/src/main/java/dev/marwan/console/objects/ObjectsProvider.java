@@ -45,6 +45,7 @@ public class ObjectsProvider {
 
     private final ObjectSource source;
     private final Clock clock;
+    private final RedisHoldings holdings;
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     private volatile CachedJobs jobsCache;
 
@@ -53,9 +54,10 @@ public class ObjectsProvider {
 
     private record CachedJobs(List<ObjectSummary> jobs, Instant at) { }
 
-    public ObjectsProvider(ObjectSource source, Clock clock) {
+    public ObjectsProvider(ObjectSource source, Clock clock, RedisHoldings holdings) {
         this.source = source;
         this.clock = clock;
+        this.holdings = holdings;
     }
 
     public ObjectDetail describe(String kindName, String name) {
@@ -143,9 +145,10 @@ public class ObjectsProvider {
                     .withEvents(EventLines.from(source.events("Service", name)));
             case DEPLOYMENT -> {
                 Deployment d = ours(source.deployment(name), kind, name);
-                yield WorkloadDescriber.deployment(d, source.replicaSets(name),
+                ObjectDetail described = WorkloadDescriber.deployment(d, source.replicaSets(name),
                                 source.hpa(name).orElse(null), source.pods(name), now)
                         .withEvents(EventLines.from(source.events("Deployment", name)));
+                yield "redis".equals(name) ? described.withMoreFacts(holdings.facts()) : described;
             }
             case POD -> WorkloadDescriber.pod(ours(source.pod(name), kind, name), now)
                     .withEvents(EventLines.from(source.events("Pod", name)));

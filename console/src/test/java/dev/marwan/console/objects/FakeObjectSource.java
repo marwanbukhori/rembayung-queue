@@ -34,7 +34,9 @@ class FakeObjectSource implements ObjectSource {
     @Override public Optional<Service> service(String name) { read(); return Optional.empty(); }
     @Override public List<EndpointSlice> endpointSlices(String service) { read(); return List.of(); }
     @Override public List<NetworkPolicy> networkPolicies() { read(); return List.of(); }
-    @Override public Optional<Deployment> deployment(String name) { read(); return Optional.empty(); }
+    Deployment deployment;
+
+    @Override public Optional<Deployment> deployment(String name) { read(); return Optional.ofNullable(deployment); }
     @Override public List<ReplicaSet> replicaSets(String deployment) { read(); return List.of(); }
     @Override public Optional<HorizontalPodAutoscaler> hpa(String name) { read(); return Optional.empty(); }
     @Override public Optional<CronJob> cronJob(String name) { read(); return Optional.empty(); }
