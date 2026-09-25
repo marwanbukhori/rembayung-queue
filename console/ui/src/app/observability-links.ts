@@ -1,4 +1,5 @@
 import { Component, computed, inject } from '@angular/core';
+import { ObservabilityService } from './observability.service';
 import { SandboxService } from './sandbox.service';
 
 /**
@@ -26,6 +27,12 @@ import { SandboxService } from './sandbox.service';
       <div class="row">
         <span class="lead">See this run in</span>
         @for (link of links(); track link.name) {
+          @if (link.ended) {
+            <!-- Named, not linked: the tenant is gone and the link would open nothing. -->
+            <span class="link ended" [title]="link.name + ' trial ended'">
+              {{ link.name }} <span class="tag">trial ended</span>
+            </span>
+          } @else {
           <a class="link" [href]="link.href" target="_blank" rel="noreferrer"
              [title]="link.note">
             {{ link.name }}
@@ -34,6 +41,7 @@ import { SandboxService } from './sandbox.service';
                     stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </a>
+          }
         }
         <span class="note">last 30 minutes, this namespace</span>
       </div>
@@ -62,11 +70,15 @@ import { SandboxService } from './sandbox.service';
       padding: 4px 12px;
     }
     .link:hover { border-color: var(--dhl-red); color: var(--dhl-red); }
+    .link.ended, .link.ended:hover { color: var(--muted); border-color: var(--line); font-weight: 400; cursor: default; }
+    .tag { font-size: 11px; background: var(--chip-neutral-bg); color: var(--chip-neutral-fg);
+           border-radius: 999px; padding: 1px 7px; }
     .note { color: var(--muted); margin-left: auto; }
   `
 })
 export class ObservabilityLinks {
   private readonly sandboxes = inject(SandboxService);
+  private readonly observability = inject(ObservabilityService);
 
   private static readonly SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
   private static readonly DYNATRACE = 'https://icp44821.apps.dynatrace.com';
@@ -95,6 +107,7 @@ export class ObservabilityLinks {
       {
         name: 'Splunk',
         note: 'application logs',
+        ended: !!this.observability.status()?.splunk.disabled,
         href: `${ObservabilityLinks.SPLUNK}/en-US/app/search/search`
           + `?earliest=-30m&latest=now&q=${query}`
       },
@@ -107,6 +120,7 @@ export class ObservabilityLinks {
         // expression directly.
         name: 'Dynatrace',
         note: 'open Services or Kubernetes, not Logs; this agent ships none',
+        ended: !!this.observability.status()?.dynatrace.disabled,
         // The tenant root. The deep link this used to carry named an app id that
         // is not installed in this environment, and Dynatrace answered "This
         // application doesn't exist" rather than falling back to anything.

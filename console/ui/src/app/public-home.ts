@@ -57,7 +57,8 @@ interface Outward {
               <strong>OpenShift</strong>, tested against real Oracle and Redis containers, shipped
               by <strong>GitHub Actions</strong> and <strong>Ansible</strong> with automatic
               rollback, autoscaled under a fixed CPU budget, and watched by
-              <strong>Prometheus, Dynatrace and Splunk</strong>. Press start and the rush runs
+              <strong>Prometheus</strong> (Dynatrace and Splunk were wired in too; both trials have
+              since ended). Press start and the rush runs
               against that cluster while you watch.
             </p>
           </div>
@@ -390,8 +391,8 @@ export class PublicHome {
       area: 'Seeing it',
       items: [
         { name: 'Prometheus', what: 'a ServiceMonitor scrapes :9090; a rule alerts on oversold' },
-        { name: 'Dynatrace', what: 'application-only OneAgent for distributed traces and the service map' },
-        { name: 'Splunk', what: 'logback ships JSON events over HEC, behind a profile' },
+        { name: 'Dynatrace', what: 'trial ended - application-only OneAgent, now switched off' },
+        { name: 'Splunk', what: 'trial ended - JSON events over HEC, now switched off' },
         { name: 'k6', what: 'the crowd, run as a Job inside the cluster' },
         { name: 'Angular 20', what: 'this console; signals and standalone components, no UI framework' }
       ]

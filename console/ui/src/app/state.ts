@@ -163,6 +163,8 @@ export interface SplunkStatus {
   /** How long the collector took to answer, or -1 when it did not answer. */
   latencyMs: number;
   shippers: Feed[];
+  /** Why Splunk is switched off on purpose, or null when it is meant to be on. */
+  disabled: string | null;
 }
 
 export interface DynatraceStatus {

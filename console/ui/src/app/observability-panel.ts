@@ -43,12 +43,13 @@ import { Feed } from './state';
             <h2 class="title">Monitoring pipelines</h2>
             <p class="sub">Probed from this cluster, not taken on trust.</p>
           </div>
-          <span class="pill" [class.ok]="bothUp()" [class.bad]="!bothUp()">
-            <span class="dot" [class.beat]="bothUp()"></span>
-            {{ bothUp() ? (dynatraceOff() ? 'Splunk online, Dynatrace off' : 'Both monitors online') : 'Check the rows below' }}
+          <span class="pill" [class.ok]="bothUp() && !allOff()" [class.bad]="!bothUp()" [class.off]="allOff()">
+            <span class="dot" [class.beat]="bothUp() && !allOff()"></span>
+            {{ allOff() ? 'Trials ended' : bothUp() ? headline() : 'Check the rows below' }}
           </span>
         </header>
 
+        @if (!allOff()) {
         <div class="probe-bar">
           <span class="probed mono">{{ probedLabel() }}</span>
           <span class="spacer"></span>
@@ -59,9 +60,16 @@ import { Feed } from './state';
             {{ observability.probing() ? 'Probing' : 'Probe again' }}
           </button>
         </div>
+        }
 
         <!-- Splunk -->
         <div class="vendor-block">
+          @if (splunkOff()) {
+            <div class="vendor-name-row">
+              <span class="vendor-name">Splunk</span>
+              <span class="pill sm off"><span class="dot"></span>Trial ended</span>
+            </div>
+          } @else {
           <div class="vendor-grid">
             <div class="vendor-id">
               <div class="vendor-name-row">
@@ -95,10 +103,17 @@ import { Feed } from './state';
               </dl>
             </div>
           </div>
+          }
         </div>
 
         <!-- Dynatrace -->
         <div class="vendor-block last">
+          @if (dynatraceOff()) {
+            <div class="vendor-name-row">
+              <span class="vendor-name">Dynatrace</span>
+              <span class="pill sm off"><span class="dot"></span>Trial ended</span>
+            </div>
+          } @else {
           <div class="vendor-grid">
             <div class="vendor-id">
               <div class="vendor-name-row">
@@ -144,12 +159,15 @@ import { Feed } from './state';
               </dl>
             </div>
           </div>
+          }
         </div>
 
+        @if (!allOff()) {
         <p class="caveat">
           Logs live in Splunk only. This OneAgent flavour ships traces and the service map and
           no logs, so a log search in Dynatrace comes up empty by design.
         </p>
+        }
       </section>
     }
   `,
@@ -322,12 +340,24 @@ export class ObservabilityPanel {
   protected readonly dynatraceOff = computed(() => !!this.status()?.dynatrace.disabled);
 
   /**
-   * Everything that is meant to be on is on: the collector answered, and at
-   * least one JVM is traced unless tracing is switched off.
+   * Everything that is meant to be on, is. A vendor switched off does not
+   * count against it.
    */
-  protected readonly bothUp = computed(
-    () => (this.status()?.splunk.reachable ?? false) && (this.dynatraceOff() || this.agentCount() > 0)
-  );
+  protected readonly bothUp = computed(() =>
+    (this.splunkOff() || (this.status()?.splunk.reachable ?? false))
+    && (this.dynatraceOff() || this.agentCount() > 0));
+
+  protected readonly splunkOff = computed(() => !!this.status()?.splunk.disabled);
+
+  /** Both switched off: the panel is a record of what was here, not a monitor. */
+  protected readonly allOff = computed(() => this.splunkOff() && this.dynatraceOff());
+
+  protected headline(): string {
+    if (this.splunkOff()) {
+      return 'Dynatrace online, Splunk off';
+    }
+    return this.dynatraceOff() ? 'Splunk online, Dynatrace off' : 'Both monitors online';
+  }
 
   protected onCount(feeds: Feed[]): number {
     return feeds.filter((f) => f.on).length;

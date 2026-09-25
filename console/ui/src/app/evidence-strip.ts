@@ -43,9 +43,7 @@ interface Shot {
       <div class="head">
         <h2 class="name">What it looks like in the tools</h2>
         <p class="sub">
-          The pipeline that ships this, and the two monitors it ships to. Captured screens rather
-          than embeds: both vendors sit behind their own login, so an embed would show a reader
-          nothing but a sign-in page.
+          The pipeline that ships this, captured rather than embedded.
         </p>
       </div>
 
@@ -71,10 +69,16 @@ interface Shot {
           </figure>
         }
       </div>
+
+      <p class="ended">
+        <strong>Splunk</strong> and <strong>Dynatrace</strong>: trials ended. Their captures were
+        retired with them.
+      </p>
     </section>
   `,
   styles: `
     .evidence { display: flex; flex-direction: column; gap: 16px; }
+    .ended { margin: 0; font-size: 14px; color: var(--muted); }
     .head { display: flex; flex-direction: column; gap: 4px; }
     .name { margin: 0; font-size: 19px; font-weight: 700; }
     .sub { margin: 0; font-size: 15px; color: var(--ink-soft); max-width: 78ch; text-wrap: pretty; }
@@ -121,24 +125,6 @@ export class EvidenceStrip {
         + 'CD deploys it and rolls back on its own if the smoke test fails.',
       href: 'https://github.com/marwanbukhori/rembayung-queue/actions',
       linkLabel: 'See the live runs'
-    },
-    {
-      src: '/evidence/splunk.png',
-      tool: 'Splunk',
-      caption:
-        'One rush, as it arrived: queue.arrival, queue.admitted and booking.claimed '
-        + 'events with the row-lock wait recorded on each booking.',
-      href: null,
-      linkLabel: 'Needs a Splunk login'
-    },
-    {
-      src: '/evidence/dynatrace.png',
-      tool: 'Dynatrace',
-      caption:
-        'Distributed traces and the service map. This agent ships no logs at all, '
-        + 'which is why the log view there is empty by design.',
-      href: 'https://icp44821.apps.dynatrace.com/ui',
-      linkLabel: 'Open Dynatrace'
     }
   ];
 

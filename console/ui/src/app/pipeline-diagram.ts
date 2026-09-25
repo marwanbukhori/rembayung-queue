@@ -146,7 +146,7 @@ export class PipelineDiagram {
     { x: 720, y: 232, w: 256, h: 68, tone: 'plain',
       label: 'OpenShift', what: 'Route → Service → Deployment,', extra: 'HPA, quota, NetworkPolicy, RBAC' },
     { x: 720, y: 318, w: 256, h: 68, tone: 'watch',
-      label: 'Prometheus · Dynatrace · Splunk', what: 'ServiceMonitor scrapes :9090,',
+      label: 'Prometheus (Dynatrace, Splunk: trials ended)', what: 'ServiceMonitor scrapes :9090,',
       extra: 'OneAgent traces, HEC ships logs' }
   ];
 
@@ -173,5 +173,5 @@ export class PipelineDiagram {
     + 'Oracle and Redis containers. Only a green run publishes images to ghcr.io, tagged with the '
     + 'commit SHA. cd.yml triggers on that run, refuses to deploy unless it succeeded, and hands the '
     + 'tag to an Ansible playbook that patches the OpenShift Deployments, waits for them, and rolls '
-    + 'the whole set back if any fails. Prometheus, Dynatrace and Splunk observe what results.';
+    + 'the whole set back if any fails. Prometheus observes what results; Dynatrace and Splunk did until their trials ended.';
 }

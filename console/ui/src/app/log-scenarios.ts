@@ -1,4 +1,5 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { ObservabilityService } from './observability.service';
 
 /** One question asked of the logs, and the answer it came back with. */
 interface Scenario {
@@ -53,13 +54,26 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
       <header class="head">
         <div class="head-text">
           <h2 class="title">What the logs answer</h2>
-          <p class="sub">
-            Four questions, each with the search that answers it and the answer it came
-            back with.
-          </p>
+          @if (!ended()) {
+            <p class="sub">
+              Four questions, each with the search that answers it and the answer it came
+              back with.
+            </p>
+          }
         </div>
-        <span class="pill">{{ visible().length }} searches</span>
+        @if (ended()) {
+          <span class="pill-ended">Trial ended</span>
+        } @else {
+          <span class="pill">{{ visible().length }} searches</span>
+        }
       </header>
+
+      @if (ended()) {
+        <p class="ended-note">
+          These were saved Splunk searches over one rush. The trial has ended, so they are no
+          longer shown.
+        </p>
+      } @else {
 
       <!--
         Not class="bar". The global stylesheet owns that name for the 8px progress
@@ -108,9 +122,13 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
         whatever actually arrived rather than depending on a field extraction being
         configured.
       </p>
+      }
     </section>
   `,
   styles: `
+    .pill-ended { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px;
+                  background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); white-space: nowrap; }
+    .ended-note { margin: 0; padding: 0 20px 20px; font-size: 14px; color: var(--muted); }
     .panel {
       position: relative;
       background: var(--white);
@@ -225,6 +243,11 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
   `
 })
 export class LogScenarios {
+  private readonly observability = inject(ObservabilityService);
+
+  /** Splunk switched off on purpose: the card keeps its title and says why it is empty. */
+  protected readonly ended = computed(() => !!this.observability.status()?.splunk.disabled);
+
   private readonly all: Scenario[] = [
     {
       question: 'Is every service actually shipping?',
