@@ -22,9 +22,32 @@ import io.fabric8.kubernetes.client.KubernetesClientException;
 @EnableConfigurationProperties(AgentProperties.class)
 public class AgentConfiguration {
 
+    static final java.nio.file.Path TOKEN = java.nio.file.Path.of("/var/run/secrets/kubernetes.io/serviceaccount/token");
+
     @Bean
     Model agentModel(AgentProperties properties) {
-        return new OpenAiModel(properties.baseUrl(), properties.model());
+        if (!mayReceiveToken(properties.baseUrl())) {
+            return new OpenAiModel(properties.baseUrl(), properties.model());
+        }
+        // Read per call: the projected token rotates.
+        return new OpenAiModel(properties.baseUrl(), properties.model(), () -> {
+            try {
+                return java.nio.file.Files.readString(TOKEN).trim();
+            } catch (java.io.IOException e) {
+                return null;
+            }
+        });
+    }
+
+    /** The console's token goes only to an https service inside this cluster, never to an outside host. */
+    static boolean mayReceiveToken(String baseUrl) {
+        try {
+            java.net.URI uri = java.net.URI.create(baseUrl);
+            return "https".equals(uri.getScheme()) && uri.getHost() != null
+                    && uri.getHost().endsWith(".svc.cluster.local");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     @Bean

@@ -29,7 +29,8 @@ public final class Fallback {
                 (v.equals("0") ? well : caught).add(claim(v.equals("0") ? "No seat was oversold."
                         : v + " seats were oversold.", f));
             } else if (f.label().startsWith("Bookings")) {
-                well.add(claim("Bookings: " + v + ".", f));
+                // Clean only when nothing ended in a 5xx or a fault; otherwise it is something the run caught.
+                (v.endsWith(" 0 not clean") ? well : caught).add(claim("Bookings: " + v + ".", f));
             } else if (f.label().startsWith("Peak DB pool in use")) {
                 pool.add(f);
             } else if ((f.label().startsWith("Most 5xx") || f.label().startsWith("Pool timeouts")) && !v.equals("0")) {

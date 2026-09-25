@@ -33,8 +33,11 @@ import tools.jackson.databind.ObjectMapper;
  * tokens the report never shows, and temperature is low because the job is
  * reading facts, not writing prose.
  *
- * No credential is sent. The console's ServiceAccount token belongs to this
- * namespace; the model is a shared service in another one.
+ * The sandbox's shared models sit behind a login that accepts a Kubernetes
+ * token, so the wiring gives this the console's own ServiceAccount token - and
+ * only for an in-cluster https URL (see AgentConfiguration). Without a token
+ * source nothing is sent. Redirects are never followed: a 302 to a login page
+ * is an answer to report, not a place to send anything.
  */
 public class OpenAiModel implements Model {
 
@@ -44,10 +47,16 @@ public class OpenAiModel implements Model {
     private final String baseUrl;
     private final String model;
     private final HttpClient http;
+    private final java.util.function.Supplier<String> token;
 
     public OpenAiModel(String baseUrl, String model) {
+        this(baseUrl, model, null);
+    }
+
+    public OpenAiModel(String baseUrl, String model, java.util.function.Supplier<String> token) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.model = model;
+        this.token = token;
         this.http = client();
     }
 
@@ -66,9 +75,13 @@ public class OpenAiModel implements Model {
                 "chat_template_kwargs", Map.of("enable_thinking", false)));
         HttpResponse<String> response;
         try {
-            response = http.send(HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
-                            .timeout(timeout).header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
+                    .timeout(timeout).header("Content-Type", "application/json");
+            String bearer = token == null ? null : token.get();
+            if (bearer != null && !bearer.isBlank()) {
+                request.header("Authorization", "Bearer " + bearer);
+            }
+            response = http.send(request.POST(HttpRequest.BodyPublishers.ofString(body)).build(),
                     HttpResponse.BodyHandlers.ofString());
         } catch (HttpTimeoutException e) {
             throw new ModelUnavailable("the model timed out after " + timeout.toSeconds() + " s");
@@ -99,7 +112,8 @@ public class OpenAiModel implements Model {
      * model's in-cluster certificate is signed by one, anything public by the other.
      */
     private static HttpClient client() {
-        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5));
+        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                .followRedirects(HttpClient.Redirect.NEVER);
         if (Files.exists(SERVICE_CA)) {
             try {
                 builder.sslContext(withServiceCa());

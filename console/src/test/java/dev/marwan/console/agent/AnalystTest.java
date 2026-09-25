@@ -228,6 +228,17 @@ class AnalystTest {
     }
 
     @Test
+    void theFallbackFilesUncleanBookingsAsCaughtNotAsWentWell() {
+        Report r = Fallback.from(baseline);   // F2 says 4 not clean
+        assertThat(r.caught()).anyMatch(c -> c.facts().contains("F2"));
+        assertThat(r.wentWell()).noneMatch(c -> c.facts().contains("F2"));
+
+        Facts clean = new Facts();
+        clean.add("k6", "Bookings: clean, rejected, not clean", "200 booked, 0 rejected, 0 not clean");
+        assertThat(Fallback.from(clean).wentWell()).anyMatch(c -> c.facts().contains("F1"));
+    }
+
+    @Test
     void theFallbackReportCitesOnlyRealFactsAndPassesValidation() {
         Report r = Fallback.from(baseline);
         assertThat(new Validator().problems(r, baseline)).isEmpty();
