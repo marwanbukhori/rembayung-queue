@@ -45,7 +45,14 @@ public class AgentConfiguration {
 
             @Override
             public void create(ConfigMap map) {
-                kubernetes.client().configMaps().inNamespace(kubernetes.namespace()).resource(map).create();
+                try {
+                    kubernetes.client().configMaps().inNamespace(kubernetes.namespace()).resource(map).create();
+                } catch (KubernetesClientException e) {
+                    if (e.getCode() == 409) {
+                        throw new AnalysisStore.Conflict();   // another console pod created it first
+                    }
+                    throw e;
+                }
             }
 
             @Override
@@ -62,7 +69,7 @@ public class AgentConfiguration {
         });
     }
 
-    @Bean
+    @Bean(destroyMethod = "close")
     RunAnalyst runAnalyst(ObjectSource objects, Analyst analyst, AnalysisStore analysisStore, Clock clock) {
         return new RunAnalyst(objects, analyst, analysisStore, clock);
     }

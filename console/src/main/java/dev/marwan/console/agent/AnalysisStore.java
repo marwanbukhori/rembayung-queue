@@ -51,26 +51,33 @@ public class AnalysisStore {
         this.port = port;
     }
 
-    public Set<String> jobs() {
+    /** The stored runs' keys: job name and start time. */
+    public Set<String> keys() {
         return data().keySet();
     }
 
-    public Optional<Analysis> get(String job) {
-        return Optional.ofNullable(data().get(job)).flatMap(AnalysisStore::read);
+    /** By key, or by Job name - then the newest run of that name, which is the Job that exists now. */
+    public Optional<Analysis> get(String id) {
+        Map<String, String> data = data();
+        if (data.containsKey(id)) {
+            return read(data.get(id));
+        }
+        return data.values().stream().map(AnalysisStore::read).flatMap(Optional::stream)
+                .filter(a -> a.job().equals(id)).max(Comparator.comparing(Analysis::end));
     }
 
-    /** Newest first. */
+    /** Newest run first - by when it ran, so re-analysing an old one does not move it. */
     public List<Analysis> list() {
         return data().values().stream().map(AnalysisStore::read).flatMap(Optional::stream)
-                .sorted(Comparator.comparing(Analysis::analysedAt).reversed()).toList();
+                .sorted(Comparator.comparing(Analysis::end).reversed()).toList();
     }
 
     public void put(Analysis analysis) {
         String entry = fit(analysis);
         try {
-            write(analysis.job(), entry);
+            write(analysis.key(), entry);
         } catch (Conflict e) {
-            write(analysis.job(), entry);
+            write(analysis.key(), entry);
         }
     }
 
@@ -80,7 +87,7 @@ public class AnalysisStore {
         data.put(job, entry);
         while (data.size() > KEEP) {
             data.entrySet().stream()
-                    .min(Comparator.comparing(e -> read(e.getValue()).map(Analysis::analysedAt)
+                    .min(Comparator.comparing(e -> read(e.getValue()).map(Analysis::end)
                             .orElse(java.time.Instant.EPOCH)))
                     .ifPresent(oldest -> data.remove(oldest.getKey()));
         }

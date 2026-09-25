@@ -66,7 +66,9 @@ public class Baseline {
         String why = "no K6_SUMMARY line in the load pod's log";
         try {
             Optional<Pod> pod = objects.pods("rembayung-load").stream()
-                    .filter(p -> w.job().equals(p.getMetadata().getLabels().get("job-name"))).findFirst();
+                    .filter(p -> w.job().equals(p.getMetadata().getLabels().get("job-name")))
+                    .min(java.util.Comparator.comparing(p -> p.getStatus() != null
+                            && "Succeeded".equals(p.getStatus().getPhase()) ? 0 : 1));
             summary = pod.flatMap(p -> K6Summary.parse(objects.podLog(p.getMetadata().getName(), 50)));
             if (pod.isEmpty()) {
                 why = "the load pod is gone";

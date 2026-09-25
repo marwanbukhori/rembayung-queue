@@ -63,7 +63,7 @@ class RunAnalystTest {
         assertThat(analysed).extracting(RunWindow::job).containsExactly("load-old", "load-new");
         r.reconcileOnce();
         assertThat(analysed).hasSize(2);
-        assertThat(store.jobs()).containsExactlyInAnyOrder("load-old", "load-new");
+        assertThat(store.list()).extracting(Analysis::job).containsExactlyInAnyOrder("load-old", "load-new");
     }
 
     @Test
@@ -93,6 +93,35 @@ class RunAnalystTest {
     }
 
     @Test
+    void aSecondRushOnTheSameDropGetsItsOwnReport() {
+        cluster.jobs.add(withDropEnv(FakeCluster.loadJob("load-d1", "d1", NOW.minusSeconds(900), NOW.minusSeconds(800), false), "d1"));
+        RunAnalyst r = reconciler();
+        r.reconcileOnce();
+        // The drop's Job is deleted and recreated under the same name for the next rush.
+        cluster.jobs.clear();
+        cluster.jobs.add(withDropEnv(FakeCluster.loadJob("load-d1", "d1", NOW.minusSeconds(300), NOW.minusSeconds(200), false), "d1"));
+        r.reconcileOnce();
+
+        assertThat(analysed).extracting(RunWindow::start).containsExactly(NOW.minusSeconds(900), NOW.minusSeconds(300));
+        assertThat(store.list()).hasSize(2);
+    }
+
+    @Test
+    void aRunThatKeepsFailingIsGivenUpAfterThreeTries() {
+        cluster.jobs.add(withDropEnv(FakeCluster.loadJob("load-bad", "b", NOW.minusSeconds(900), NOW.minusSeconds(800), false), "b"));
+        int[] attempts = {0};
+        Analyst exploding = new Analyst(w -> {
+            attempts[0]++;
+            throw new IllegalStateException("boom");
+        }, new Tools(cluster, (q, l, s, e, st) -> List.of()), new AnalystTest.Scripted(), Clock.fixed(NOW, ZoneOffset.UTC));
+        RunAnalyst r = new RunAnalyst(cluster, exploding, store, Clock.fixed(NOW, ZoneOffset.UTC));
+        for (int i = 0; i < 10; i++) {
+            r.reconcileOnce();
+        }
+        assertThat(attempts[0]).isEqualTo(3);
+    }
+
+    @Test
     void aClusterThatCannotBeReadIsSkippedQuietly() {
         RunAnalyst r = new RunAnalyst(new FakeCluster() {
             @Override
@@ -101,6 +130,6 @@ class RunAnalystTest {
             }
         }, null, store, Clock.fixed(NOW, ZoneOffset.UTC));
         r.reconcileOnce();
-        assertThat(store.jobs()).isEmpty();
+        assertThat(store.list()).isEmpty();
     }
 }

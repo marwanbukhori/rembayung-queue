@@ -44,6 +44,9 @@ public class RunAnalyst {
     private final AnalysisStore store;
     private final Clock clock;
     private final AtomicBoolean busy = new AtomicBoolean();
+    /** Runs whose analysis threw, and how often: given up after three, until the console restarts. */
+    private final java.util.Map<String, Integer> failures = new java.util.concurrent.ConcurrentHashMap<>();
+    static final int MAX_TRIES = 3;
     private final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
 
     public RunAnalyst(ObjectSource objects, Analyst analyst, AnalysisStore store, Clock clock) {
@@ -73,8 +76,8 @@ public class RunAnalyst {
      * one-at-a-time guard with the reconciler, so a re-analysis never doubles
      * the load on the shared model.
      */
-    public Rerun rerun(String job) {
-        Optional<Analysis> stored = store.get(job);
+    public Rerun rerun(String id) {
+        Optional<Analysis> stored = store.get(id);
         if (stored.isEmpty()) {
             return Rerun.UNKNOWN;
         }
@@ -86,7 +89,7 @@ public class RunAnalyst {
             try {
                 store.put(analyst.reanalyse(new RunWindow(a.job(), a.dropId(), a.start(), a.end()), a.facts()));
             } catch (RuntimeException e) {
-                log.warn("re-analysis of {} failed: {}", job, KubernetesAccess.summarise(e));
+                log.warn("re-analysis of {} failed: {}", id, KubernetesAccess.summarise(e));
             } finally {
                 busy.set(false);
             }
@@ -96,25 +99,39 @@ public class RunAnalyst {
 
     void reconcileOnce() {
         try {
-            Set<String> done = store.jobs();
+            Set<String> done = store.keys();
             Instant now = clock.instant();
             Optional<RunWindow> next = objects.jobs().stream()
                     .filter(j -> "rembayung-load".equals(label(j, "app")))
-                    .filter(j -> !done.contains(j.getMetadata().getName()))
                     .map(this::window).filter(Objects::nonNull)
+                    .filter(w -> !done.contains(w.key()))
+                    .filter(w -> failures.getOrDefault(w.key(), 0) < MAX_TRIES)
                     .filter(w -> !now.isBefore(w.end().minus(TAIL).plus(SETTLE)))
                     .min(Comparator.comparing(RunWindow::start));
             if (next.isEmpty()) {
                 return;
             }
             RunWindow w = next.get();
-            Analysis analysis = analyst.analyse(w);
-            store.put(analysis);
+            Analysis analysis;
+            try {
+                analysis = analyst.analyse(w);
+                store.put(analysis);
+            } catch (RuntimeException e) {
+                int tries = failures.merge(w.key(), 1, Integer::sum);
+                log.warn("analysis of {} failed (try {} of {}): {}", w.key(), tries, MAX_TRIES,
+                        KubernetesAccess.summarise(e));
+                return;
+            }
             log.info("analysed {}: {} report in {} ms{}", w.job(), analysis.source(), analysis.millis(),
                     analysis.note() == null ? "" : " (" + analysis.note() + ")");
         } catch (RuntimeException e) {
             log.warn("run analysis skipped this tick: {}", KubernetesAccess.summarise(e));
         }
+    }
+
+    /** Stops the worker with the application context. */
+    public void close() {
+        worker.shutdownNow();
     }
 
     /** Start to end plus the tail, or null while the run is still going. */

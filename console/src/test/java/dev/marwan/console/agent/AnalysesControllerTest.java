@@ -57,6 +57,23 @@ class AnalysesControllerTest {
                 .andExpect(jsonPath("$.report.wentWell[0].facts[0]").value("F1"));
     }
 
+    static Analysis withRawLogs() {
+        Analysis a = one();
+        return new Analysis(a.job(), a.dropId(), a.start(), a.end(),
+                List.of(a.facts().get(0), new Fact("F2", "tool: pod_logs", "pod_logs({})", "13:40:10 WARN raw stack line")),
+                a.trail(), a.report(), a.model(), a.source(), a.note(), a.problems(), a.analysedAt(), a.millis());
+    }
+
+    @Test
+    void rawLogLinesInAReportNeedTheKey() throws Exception {
+        when(store.get("load-a")).thenReturn(Optional.of(withRawLogs()));
+        mvc.perform(get("/api/analyses/load-a"))
+                .andExpect(jsonPath("$.facts[1].value").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("raw stack line"))));
+        mvc.perform(get("/api/analyses/load-a").header("X-Console-Key", "s3cret-demo-key"))
+                .andExpect(jsonPath("$.facts[1].value").value("13:40:10 WARN raw stack line"));
+    }
+
     @Test
     void anUnknownRunIs404() throws Exception {
         when(store.get("nope")).thenReturn(Optional.empty());

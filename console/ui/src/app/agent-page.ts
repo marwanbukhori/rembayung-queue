@@ -224,7 +224,7 @@ export class AgentPage implements OnInit {
       next: runs => {
         this.runs.set(runs);
         if (runs.length) {
-          this.analyses.get(runs[0].job).subscribe({ next: a => this.latest.set(a), error: () => {} });
+          this.analyses.get(runs[0].key).subscribe({ next: a => this.latest.set(a), error: () => {} });
         }
       },
       error: () => {}

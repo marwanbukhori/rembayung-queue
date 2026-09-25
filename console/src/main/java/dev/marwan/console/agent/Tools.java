@@ -77,7 +77,7 @@ public class Tools {
             value = "unavailable: " + KubernetesAccess.summarise(e);
         }
         String bounded = value.length() > MAX_VALUE ? value.substring(0, MAX_VALUE) + "…" : value;
-        return facts.add("tool: " + tool, describe(tool, args), LogLines.mask(bounded));
+        return facts.add("tool: " + tool, LogLines.mask(describe(tool, args)), LogLines.mask(bounded));
     }
 
     private String podLogs(JsonNode args, RunWindow w) {

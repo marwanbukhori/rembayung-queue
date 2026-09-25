@@ -18,7 +18,13 @@ import java.util.regex.Pattern;
  */
 public class Validator {
 
-    static final Pattern NUMBER = Pattern.compile("(?<![\\w.])\\d+(?:\\.\\d+)?(?![\\w.]|\\.\\d)");
+    /**
+     * A number standing on its own: not inside a word ("55bdc8", "p95", "5xx"),
+     * but still a number when a unit is stuck to it ("2400ms", "42s", "3.5x",
+     * "75%") or a sentence ends on it ("peaked at 7.").
+     */
+    static final Pattern NUMBER = Pattern.compile(
+            "(?<![\\w.])\\d+(?:\\.\\d+)?(?=(?:ms|s|m|h|x|k)?(?![\\w])(?!\\.\\d))");
     static final Pattern FACT_ID = Pattern.compile("\\bF\\d+\\b");
 
     public List<String> problems(Report report, Facts facts) {

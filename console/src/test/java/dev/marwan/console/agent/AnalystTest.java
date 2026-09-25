@@ -177,6 +177,32 @@ class AnalystTest {
     }
 
     @Test
+    void oddlyShapedJsonFallsBackRatherThanThrowing() {
+        model.then("{\"call\":{\"name\":\"pod_logs\"},\"args\":{}}")
+                .then("{\"went_well\":[{\"text\":{\"x\":1},\"facts\":[{\"id\":\"F1\"}]}],\"caught\":[],\"look_at\":[]}")
+                .then("{\"went_well\":\"none\"}");
+        Analysis a = analyst().analyse(WINDOW);
+        assertThat(a.report()).isNotNull();
+        assertThat(a.source()).isEqualTo("fallback");
+    }
+
+    @Test
+    void anUnexpectedFailureStillEndsInAReport() {
+        model.then(new IllegalStateException("something nobody planned for"));
+        Analysis a = analyst().analyse(WINDOW);
+        assertThat(a.source()).isEqualTo("fallback");
+        assertThat(a.note()).contains("something nobody planned for");
+    }
+
+    @Test
+    void theTrailIsMasked() {
+        model.then("{\"call\":\"pod_status\",\"args\":{\"pod\":\"booking-service-a\"},\"why\":\"customer +60123456789\"}")
+                .then("{\"done\":true}").then(GOOD_REPORT);
+        Analysis a = analyst().analyse(WINDOW);
+        assertThat(a.trail().get(0).why()).doesNotContain("123456789");
+    }
+
+    @Test
     void jsonInsideAFenceIsAccepted() {
         model.then("```json\n{\"done\":true}\n```").then("```json\n" + GOOD_REPORT + "\n```");
         assertThat(analyst().analyse(WINDOW).source()).isEqualTo("model");

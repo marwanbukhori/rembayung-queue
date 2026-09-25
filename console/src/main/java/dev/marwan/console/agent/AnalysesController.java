@@ -25,7 +25,7 @@ import dev.marwan.console.auth.KeyFilter;
 public class AnalysesController {
 
     /** One line per run for lists: enough to choose one without loading them all. */
-    public record Summary(String job, String dropId, Instant start, Instant end, Instant analysedAt,
+    public record Summary(String key, String job, String dropId, Instant start, Instant end, Instant analysedAt,
                           String source, String model, String note, int claims) { }
 
     private final AnalysisStore store;
@@ -40,23 +40,25 @@ public class AnalysesController {
 
     @GetMapping("/api/analyses")
     public List<Summary> list() {
-        return store.list().stream().map(a -> new Summary(a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
+        return store.list().stream().map(a -> new Summary(a.key(), a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
                 a.source(), a.model(), a.note(), a.report().all().size())).toList();
     }
 
+    /**
+     * One run's report. The pod_logs facts hold raw log lines, which on this
+     * console are for key holders only; without the key they are replaced by
+     * a line saying so, and the rest of the report is unchanged.
+     */
     @GetMapping("/api/analyses/{job}")
-    public ResponseEntity<?> one(@PathVariable String job) {
-        return store.get(job).<ResponseEntity<?>>map(ResponseEntity::ok)
+    public ResponseEntity<?> one(@PathVariable String job, HttpServletRequest request) {
+        boolean keyed = key.accepts(presented(request));
+        return store.get(job).map(a -> keyed ? a : withoutRawLogs(a)).<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "NOT_FOUND")));
     }
 
     @PostMapping("/api/analyses/{job}/rerun")
     public ResponseEntity<Map<String, String>> rerun(@PathVariable String job, HttpServletRequest request) {
-        String presented = request.getHeader(KeyFilter.HEADER);
-        if (presented == null) {
-            presented = request.getParameter(KeyFilter.QUERY_PARAM);
-        }
-        if (!key.accepts(presented)) {
+        if (!key.accepts(presented(request))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "KEY_REQUIRED"));
         }
         return switch (runAnalyst.rerun(job)) {
@@ -64,5 +66,19 @@ public class AnalysesController {
             case BUSY -> ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "BUSY"));
             case UNKNOWN -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "NOT_FOUND"));
         };
+    }
+
+    private static String presented(HttpServletRequest request) {
+        String presented = request.getHeader(KeyFilter.HEADER);
+        return presented != null ? presented : request.getParameter(KeyFilter.QUERY_PARAM);
+    }
+
+    static Analysis withoutRawLogs(Analysis a) {
+        List<Fact> facts = a.facts().stream().map(f -> f.source().equals("tool: pod_logs")
+                ? new Fact(f.id(), f.source(), f.label(), "raw log lines: shown with the console key ("
+                        + f.value().lines().count() + " lines)")
+                : f).toList();
+        return new Analysis(a.job(), a.dropId(), a.start(), a.end(), facts, a.trail(), a.report(), a.model(),
+                a.source(), a.note(), a.problems(), a.analysedAt(), a.millis());
     }
 }

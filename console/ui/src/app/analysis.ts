@@ -23,6 +23,7 @@ export interface Analysis {
   millis: number;
 }
 export interface AnalysisSummary {
+  key: string;
   job: string;
   dropId: string;
   start: string;

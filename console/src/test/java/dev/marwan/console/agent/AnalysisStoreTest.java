@@ -25,9 +25,19 @@ class AnalysisStoreTest {
             return Optional.ofNullable(stored).map(c -> new ConfigMapBuilder(c).build());
         }
 
+        boolean createRace;
+
         @Override
         public void create(ConfigMap map) {
             writes++;
+            if (createRace) {
+                // Another console pod created it a moment earlier.
+                createRace = false;
+                stored = new ConfigMapBuilder(map).build();
+                stored.getMetadata().setResourceVersion(String.valueOf(++version));
+                stored.setData(new java.util.LinkedHashMap<>(java.util.Map.of()));
+                throw new AnalysisStore.Conflict();
+            }
             map.getMetadata().setResourceVersion(String.valueOf(++version));
             stored = map;
         }
@@ -65,7 +75,7 @@ class AnalysisStoreTest {
         store.put(analysis("load-b", Instant.parse("2026-09-25T11:00:00Z"), null));
 
         assertThat(port.stored.getMetadata().getName()).isEqualTo("run-analyses");
-        assertThat(store.jobs()).containsExactlyInAnyOrder("load-a", "load-b");
+        assertThat(store.list()).extracting(Analysis::job).containsExactlyInAnyOrder("load-a", "load-b");
         assertThat(store.get("load-a")).isPresent();
         assertThat(store.list()).extracting(Analysis::job).containsExactly("load-b", "load-a");
     }
@@ -77,7 +87,7 @@ class AnalysisStoreTest {
         for (int i = 0; i < 15; i++) {
             store.put(analysis("load-" + i, Instant.parse("2026-09-25T10:00:00Z").plusSeconds(i * 60L), null));
         }
-        assertThat(store.jobs()).hasSize(12).doesNotContain("load-0", "load-1", "load-2").contains("load-14");
+        assertThat(store.list()).hasSize(12).extracting(Analysis::job).doesNotContain("load-0", "load-1", "load-2").contains("load-14");
     }
 
     @Test
@@ -89,7 +99,42 @@ class AnalysisStoreTest {
 
         store.put(analysis("load-b", Instant.parse("2026-09-25T11:00:00Z"), null));
 
-        assertThat(store.jobs()).contains("load-a", "load-b");
+        assertThat(store.list()).extracting(Analysis::job).contains("load-a", "load-b");
+    }
+
+    @Test
+    void twoRunsWithTheSameJobNameAreKeptApart() {
+        FakePort port = new FakePort();
+        AnalysisStore store = new AnalysisStore(port);
+        store.put(analysis("load-d1", Instant.parse("2026-09-25T10:00:00Z"), "first"));
+        store.put(analysis("load-d1", Instant.parse("2026-09-25T11:00:00Z"), "second"));
+
+        assertThat(store.keys()).hasSize(2);
+        assertThat(store.get("load-d1").orElseThrow().facts().get(0).value()).isEqualTo("second");
+        assertThat(store.get("load-d1-" + Instant.parse("2026-09-25T10:00:00Z").getEpochSecond())
+                .orElseThrow().facts().get(0).value()).isEqualTo("first");
+    }
+
+    @Test
+    void aCreateRaceWithAnotherPodStillStores() {
+        FakePort port = new FakePort();
+        port.createRace = true;
+        AnalysisStore store = new AnalysisStore(port);
+        store.put(analysis("load-a", Instant.parse("2026-09-25T10:00:00Z"), null));
+        assertThat(store.get("load-a")).isPresent();
+    }
+
+    @Test
+    void theListIsOrderedByWhenTheRunEndedNotWhenItWasAnalysed() {
+        FakePort port = new FakePort();
+        AnalysisStore store = new AnalysisStore(port);
+        Analysis older = analysis("load-old", Instant.parse("2026-09-25T10:00:00Z"), null);
+        Analysis newer = analysis("load-new", Instant.parse("2026-09-25T11:00:00Z"), null);
+        store.put(newer);
+        store.put(new Analysis(older.job(), older.dropId(), older.start(), older.end(), older.facts(), older.trail(),
+                older.report(), older.model(), older.source(), older.note(), older.problems(),
+                Instant.parse("2026-09-25T12:00:00Z"), 1));   // re-analysed later
+        assertThat(store.list()).extracting(Analysis::job).containsExactly("load-new", "load-old");
     }
 
     @Test
@@ -99,7 +144,7 @@ class AnalysisStoreTest {
 
         store.put(analysis("load-big", Instant.parse("2026-09-25T10:00:00Z"), "x".repeat(200_000)));
 
-        assertThat(port.stored.getData().get("load-big").length()).isLessThanOrEqualTo(AnalysisStore.MAX_ENTRY);
+        assertThat(port.stored.getData().get("load-big-" + Instant.parse("2026-09-25T10:00:00Z").getEpochSecond()).length()).isLessThanOrEqualTo(AnalysisStore.MAX_ENTRY);
         assertThat(store.get("load-big").orElseThrow().facts().get(0).value()).endsWith("…");
     }
 }

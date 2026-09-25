@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import dev.marwan.console.objects.LogLines;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ public class Analyst {
             Now write the report. Reply with exactly one JSON object and nothing else:
             {"went_well": [{"text": "...", "facts": ["F1"]}], "caught": [...], "look_at": [...]}
             Rules: every item cites the fact ids it rests on; every number you write must appear in a cited fact;
+            do not write clock times or dates;
             one or two sentences per item; at most 3 items per list; say what a reader should do in look_at.
             """;
 
@@ -89,12 +91,12 @@ public class Analyst {
             for (int calls = 0; calls < MAX_CALLS && clock.instant().isBefore(deadline); calls++) {
                 String reply = model.chat(messages, timeout(deadline));
                 JsonNode step = parse(reply);
-                if (step == null || !step.hasNonNull("call")) {
+                if (step == null || !step.path("call").isString()) {
                     break;
                 }
                 Fact fact = tools.call(step.path("call").asString(), step.path("args"), w, facts);
-                trail.add(new TrailStep(step.path("call").asString(), step.path("args").toString(),
-                        step.path("why").asString(""), fact.id()));
+                trail.add(new TrailStep(step.path("call").asString(), LogLines.mask(step.path("args").toString()),
+                        LogLines.mask(text(step.path("why"))), fact.id()));
                 messages.add(new Message("assistant", reply));
                 messages.add(new Message("user", render(List.of(fact)) + "\nCalls left: " + (MAX_CALLS - calls - 1)));
             }
@@ -117,6 +119,10 @@ public class Analyst {
             return fallback(w, facts, trail, "the model's report failed validation twice", problems, began);
         } catch (ModelUnavailable e) {
             return fallback(w, facts, trail, e.getMessage(), problems, began);
+        } catch (RuntimeException e) {
+            // Whatever nobody planned for still ends in a report, rather than a run retried every tick.
+            return fallback(w, facts, trail, "the analysis failed: " + e.getClass().getSimpleName()
+                    + (e.getMessage() == null ? "" : " " + e.getMessage()), problems, began);
         }
     }
 
@@ -158,6 +164,11 @@ public class Analyst {
         }
     }
 
+    /** A node's text, or its JSON when the model put an object where a string belongs. */
+    static String text(JsonNode node) {
+        return node == null || node.isMissingNode() || node.isNull() ? "" : node.isString() ? node.asString() : node.toString();
+    }
+
     static Report report(JsonNode node) {
         if (node == null || !(node.has("went_well") || node.has("caught") || node.has("look_at"))) {
             return null;
@@ -170,8 +181,8 @@ public class Analyst {
         if (list.isArray()) {
             for (JsonNode item : list) {
                 List<String> ids = new ArrayList<>();
-                item.path("facts").forEach(id -> ids.add(id.asString()));
-                out.add(new Claim(item.path("text").asString(""), ids));
+                item.path("facts").forEach(id -> ids.add(text(id)));
+                out.add(new Claim(text(item.path("text")), ids));
             }
         }
         return out;

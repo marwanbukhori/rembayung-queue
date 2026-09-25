@@ -82,7 +82,12 @@ public class OpenAiModel implements Model {
         if (response.statusCode() != 200) {
             throw new ModelUnavailable("the model answered HTTP " + response.statusCode());
         }
-        JsonNode content = JSON.readTree(response.body()).path("choices").path(0).path("message").path("content");
+        JsonNode content;
+        try {
+            content = JSON.readTree(response.body()).path("choices").path(0).path("message").path("content");
+        } catch (RuntimeException e) {
+            throw new ModelUnavailable("the model's answer was not JSON");
+        }
         if (!content.isString() || content.asString().isBlank()) {
             throw new ModelUnavailable("the model's answer had no content");
         }

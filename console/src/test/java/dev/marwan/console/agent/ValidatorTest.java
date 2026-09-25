@@ -44,6 +44,16 @@ class ValidatorTest {
     }
 
     @Test
+    void numbersEndingASentenceOrCarryingAUnitAreChecked() {
+        assertThat(check("The pool peaked at 9999.", "F1")).singleElement().asString().contains("9999");
+        assertThat(check("p95 reached 2400ms.", "F2")).singleElement().asString().contains("2400");
+        assertThat(check("It took 42s", "F2")).singleElement().asString().contains("42");
+        assertThat(check("Latency grew 3.5x", "F2")).singleElement().asString().contains("3.5");
+        assertThat(check("p95 reached 2100ms.", "F2")).isEmpty();
+        assertThat(check("The pool peaked at 5.", "F1")).isEmpty();
+    }
+
+    @Test
     void aClaimWithoutFactsIsAProblem() {
         assertThat(check("Everything was fine.")).singleElement().asString().contains("cites no facts");
     }
