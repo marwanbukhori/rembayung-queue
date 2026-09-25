@@ -29,3 +29,17 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
+    # The management port, for reading metrics only. Without this, the
+    # user-workload Prometheus could not scrape booking-service at all - this
+    # policy admitted queue-gate on 8081 and nothing else - so the DB pool
+    # series never existed. The console reads the same endpoint for its charts.
+    # Bookings still reach booking-service from queue-gate alone.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-user-workload-monitoring
+        - podSelector:
+            matchLabels: { app: console }
+      ports:
+        - protocol: TCP
+          port: 9090

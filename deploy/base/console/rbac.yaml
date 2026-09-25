@@ -50,6 +50,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # The charts strip (spec 2026-09-25, section 6.3). The Thanos tenancy port
+  # authorises a namespace query by asking whether the caller may get
+  # pods.metrics.k8s.io here; without this it answered 403 on 2026-09-25.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get"]
   # The CPU budget the constraints panel is about. compute-deploy is read by
   # name; the list verb is what makes a wrong name a visible 404 rather than a
   # 403 that reads as a broken deployment.
