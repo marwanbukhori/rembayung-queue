@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { CHARTS, MetricsService } from './metrics.service';
 import { ChartData, ChartKey } from './state';
+import { malaysiaTime } from './time';
 
 /** The plot's frame, in viewBox units: room on the right for end-of-line labels. */
 const W = 320;
@@ -318,7 +319,7 @@ export class ChartsStrip {
     this.hover.set({
       key: p.key, x: Math.max(L, Math.min(L + PLOT_W, vx)),
       leftPct: Math.max(15, Math.min(85, (vx / W) * 100)),
-      time: new Date(t * 1000).toLocaleTimeString([], { hour12: false }),
+      time: malaysiaTime(t * 1000),
       rows
     });
   }
@@ -359,7 +360,7 @@ export class ChartsStrip {
     const times = [...new Set(series.flatMap((s) => s.points.map((pt) => pt[0])))].sort((a, b) => b - a).slice(0, 8);
     return times.map((t) => ({
       t,
-      time: new Date(t * 1000).toLocaleTimeString([], { hour12: false }),
+      time: malaysiaTime(t * 1000),
       values: series.map((s) => {
         const pt = s.points.find((q) => q[0] === t);
         return pt ? this.format(p.key, pt[1]) : '—';

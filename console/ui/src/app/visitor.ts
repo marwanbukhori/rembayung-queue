@@ -79,7 +79,7 @@ import { StateService } from './state.service';
         -->
         <section class="platform card">
           <div class="why">The platform, live</div>
-          <p class="note">Last 15 minutes from Prometheus; the bold numbers are read from the pods right now.</p>
+          <p class="note">Last 15 minutes from Prometheus; the bold numbers are read from the pods right now. Times GMT+8.</p>
           <rb-charts-strip />
           <div class="spacer"></div>
           <p class="note">

@@ -1,5 +1,5 @@
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
+import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 import { LatencyStrip } from './latency-strip';
 import { ObservabilityLinks } from './observability-links';
 import { TrafficService } from './traffic.service';
@@ -17,13 +17,13 @@ import { TrafficService } from './traffic.service';
  */
 @Component({
   selector: 'rb-traffic-log',
-  imports: [DatePipe, LatencyStrip, ObservabilityLinks],
+  imports: [LatencyStrip, ObservabilityLinks],
   template: `
     <div class="card">
       <div class="head">
         <div>
           <div class="title">Live traffic</div>
-          <p class="sub">Every change since the last read, two seconds apart</p>
+          <p class="sub">Every change since the last read, two seconds apart · {{ zone }}</p>
         </div>
         <span class="status" [class.on]="traffic.flowing()">
           <span class="dot"></span>{{ traffic.flowing() ? 'moving' : 'idle' }}
@@ -36,7 +36,7 @@ import { TrafficService } from './traffic.service';
         <ol class="lines">
           @for (event of feed(); track event.seq) {
             <li class="line" [class]="event.kind">
-              <span class="at mono">{{ event.at | date: 'HH:mm:ss' }}</span>
+              <span class="at mono">{{ time(event.at) }}</span>
               <span class="tag mono">{{ label(event.kind) }}</span>
               <span class="text">{{ event.text }}</span>
             </li>
@@ -132,6 +132,8 @@ import { TrafficService } from './traffic.service';
 })
 export class TrafficLog {
   protected readonly traffic = inject(TrafficService);
+  protected readonly time = malaysiaTime;
+  protected readonly zone = TIME_ZONE_LABEL;
   protected readonly feed = computed(() => this.traffic.feed());
 
   protected label(kind: string): string {

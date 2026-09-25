@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { InspectorService } from './inspector.service';
 import { LogLine, ObjectLink } from './state';
+import { malaysiaTime } from './time';
 
 /**
  * The right-hand column of the cluster page: whatever object was clicked.
@@ -249,13 +250,9 @@ export class Inspector {
     return Object.entries(l.fields ?? {});
   }
 
-  /** The reader's own clock, like the traffic log. The kubelet's nanoseconds are trimmed to what Date parses. */
+  /** Malaysia time, like every other clock on the site. */
   protected localTime(at: string | null): string {
-    if (!at) {
-      return '—';
-    }
-    const d = new Date(at.slice(0, 23) + 'Z');
-    return isNaN(d.getTime()) ? at.slice(11, 19) : d.toLocaleTimeString([], { hour12: false });
+    return malaysiaTime(at);
   }
 
   /** Where a vanished pod came from, guessed from its name, so the reader has somewhere to go. */
@@ -276,6 +273,6 @@ export class Inspector {
   }
 
   protected time(at: string | null): string {
-    return at ? at.slice(11, 19) : '—';
+    return malaysiaTime(at);
   }
 }
