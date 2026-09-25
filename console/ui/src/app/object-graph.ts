@@ -94,7 +94,7 @@ interface GraphBox {
   `,
   styles: `
     .frame { width: 100%; overflow-x: auto; }
-    svg { width: 100%; height: auto; display: block; }
+    svg { width: 100%; height: auto; max-height: min(640px, 75vh); display: block; }
     /* Full width where there is room; below that it keeps a readable size and scrolls. */
     @media (max-width: 1279px) { svg { min-width: 860px; } }
 

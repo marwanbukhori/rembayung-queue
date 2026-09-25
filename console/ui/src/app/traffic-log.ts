@@ -1,4 +1,5 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { LoadMore } from './load-more';
 import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 import { LatencyStrip } from './latency-strip';
 import { ObservabilityLinks } from './observability-links';
@@ -13,11 +14,12 @@ import { TrafficService } from './traffic.service';
  * watch forty people arrive, then one get through, then a seat go.
  *
  * Newest at the top and capped, so it never grows without bound and never has
- * to be scrolled to see the thing that just happened.
+ * to be scrolled to see the thing that just happened. Five show; the rest load
+ * five at a time as the reader scrolls the list.
  */
 @Component({
   selector: 'rb-traffic-log',
-  imports: [LatencyStrip, ObservabilityLinks],
+  imports: [LatencyStrip, LoadMore, ObservabilityLinks],
   template: `
     <div class="card">
       <div class="head">
@@ -34,12 +36,15 @@ import { TrafficService } from './traffic.service';
 
       @if (feed().length) {
         <ol class="lines">
-          @for (event of feed(); track event.seq) {
+          @for (event of feed().slice(0, shown()); track event.seq) {
             <li class="line" [class]="event.kind">
               <span class="at mono">{{ time(event.at) }}</span>
               <span class="tag mono">{{ label(event.kind) }}</span>
               <span class="text">{{ event.text }}</span>
             </li>
+          }
+          @if (feed().length > shown()) {
+            <li class="more mono" rbLoadMore (more)="shown.set(shown() + 5)">Show more</li>
           }
         </ol>
       } @else {
@@ -93,9 +98,10 @@ import { TrafficService } from './traffic.service';
       margin: 0;
       padding: 0;
       list-style: none;
-      max-height: 320px;
+      max-height: 260px;
       overflow-y: auto;
     }
+    .more { padding: 8px 16px; font-size: 12px; color: var(--muted); cursor: pointer; text-align: center; }
     .line {
       display: flex;
       flex-wrap: wrap;
@@ -135,6 +141,7 @@ export class TrafficLog {
   protected readonly time = malaysiaTime;
   protected readonly zone = TIME_ZONE_LABEL;
   protected readonly feed = computed(() => this.traffic.feed());
+  protected readonly shown = signal(5);
 
   protected label(kind: string): string {
     switch (kind) {

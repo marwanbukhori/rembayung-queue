@@ -1,4 +1,5 @@
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { LoadMore } from './load-more';
 import { InspectorService } from './inspector.service';
 import { LogLine, ObjectLink } from './state';
 import { malaysiaTime } from './time';
@@ -16,6 +17,7 @@ import { malaysiaTime } from './time';
  */
 @Component({
   selector: 'rb-inspector',
+  imports: [LoadMore],
   template: `
     <aside class="inspector" [class.open]="!!inspector.selected()">
       @if (inspector.selected(); as ref) {
@@ -84,7 +86,10 @@ import { malaysiaTime } from './time';
                 <p class="pill bad">not readable: {{ page.detail }}</p>
               }
               <div class="log" #logBox (scroll)="follow = atBottom(logBox)">
-                @for (l of inspector.logLines(); track $index) {
+                @if (inspector.logLines().length > logsShown()) {
+                  <div class="more" rbLoadMore (more)="olderLogs()">Show older lines</div>
+                }
+                @for (l of shownLogs(); track $index) {
                   <div class="log-line" [class.warn]="l.level === 'WARN'" [class.err]="l.level === 'ERROR'">
                     <span class="when">{{ localTime(l.at) }}</span>
                     @if (l.event) {
@@ -106,12 +111,15 @@ import { malaysiaTime } from './time';
                 <p class="quiet">No recent events. Kubernetes keeps them for about an hour.</p>
               }
               <ol class="events">
-                @for (e of d.events; track $index) {
+                @for (e of d.events.slice(0, eventsShown()); track $index) {
                   <li [class.warn]="e.type === 'Warning'">
                     <span class="mono when">{{ time(e.at) }}</span>
                     <span class="reason">{{ e.reason }}{{ e.count > 1 ? ' ×' + e.count : '' }}</span>
                     <span class="msg">{{ e.message }}</span>
                   </li>
+                }
+                @if (d.events.length > eventsShown()) {
+                  <li class="more" rbLoadMore (more)="eventsShown.set(eventsShown() + 5)">Show more</li>
                 }
               </ol>
             }
@@ -187,6 +195,9 @@ import { malaysiaTime } from './time';
     .log-line.err .lvl, .log-line.err .msg { color: #ff8a80; }
     .log-line .kv { color: #9ab; margin-left: 6px; }
     .gone { font-size: 14px; }
+    .more { list-style: none; grid-template-columns: 1fr !important; text-align: center; font-size: 12px;
+            color: var(--muted); cursor: pointer; padding: 4px 0; }
+    .log .more { color: #8a9; }
     .link { background: none; border: 0; color: var(--chip-info-fg); cursor: pointer; padding: 0; font-size: 14px; }
     .empty .row { display: grid; grid-template-columns: 10px 1fr; gap: 2px 8px; width: 100%; text-align: left;
                   background: none; border: 0; border-bottom: 1px solid var(--line); padding: 8px 0; cursor: pointer; }
@@ -222,9 +233,23 @@ export class Inspector {
   protected readonly tab = signal<'overview' | 'logs' | 'events'>('overview');
   protected readonly filters = ['all', 'warn', 'events'] as const;
   protected follow = true;
+  /** Five at a time: events newest first, logs the newest five and older on scroll up. */
+  protected readonly eventsShown = signal(5);
+  protected readonly logsShown = signal(5);
+  protected readonly shownLogs = computed(() => {
+    const lines = this.inspector.logLines();
+    return lines.slice(Math.max(0, lines.length - this.logsShown()));
+  });
   private readonly logBox = viewChild<ElementRef<HTMLElement>>('logBox');
 
   constructor() {
+    effect(() => {
+      this.inspector.selected();
+      untracked(() => {
+        this.eventsShown.set(5);
+        this.logsShown.set(5);
+      });
+    });
     effect(() => this.inspector.logsOpen.set(this.tab() === 'logs'
       && this.inspector.selected()?.kind === 'pod'));
     // The graph selects objects directly, without going through open(); a
@@ -249,6 +274,16 @@ export class Inspector {
     this.follow = true;
     // The effect above flips logsOpen on the next tick; ask for lines after it.
     queueMicrotask(() => this.inspector.openLogs());
+  }
+
+  /** Reveal five older lines above, keeping the line the reader is on in place. */
+  protected olderLogs(): void {
+    const box = this.logBox()?.nativeElement;
+    const before = box ? box.scrollHeight - box.scrollTop : 0;
+    this.logsShown.update(n => n + 5);
+    if (box) {
+      requestAnimationFrame(() => (box.scrollTop = box.scrollHeight - before));
+    }
   }
 
   protected atBottom(box: HTMLElement): boolean {
