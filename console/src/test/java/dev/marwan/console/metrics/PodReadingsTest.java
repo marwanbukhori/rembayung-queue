@@ -40,35 +40,30 @@ class PodReadingsTest {
         return body;
     }, clock);
 
-    @Test
-    void poolIsReadFromEachBookingPod() {
-        given(source.pods("booking-service")).willReturn(List.of(pod("booking-a", "10.0.0.1"), pod("booking-b", "10.0.0.2")));
-        bodies.put("http://10.0.0.1:9090/actuator/prometheus", "hikaricp_connections_active{pool=\"HikariPool-1\"} 5.0\n");
-        bodies.put("http://10.0.0.2:9090/actuator/prometheus", "hikaricp_connections_active{pool=\"HikariPool-1\"} 0.0\n");
-
-        assertThat(readings.now(ChartName.POOL)).extracting(Reading::label, Reading::value)
-                .containsExactly(tuple("booking-a", 5.0), tuple("booking-b", 0.0));
-    }
-
-    @Test
-    void aPodThatCannotBeReadIsLeftOutNotFatal() {
-        given(source.pods("booking-service")).willReturn(List.of(pod("booking-a", "10.0.0.1"), pod("booking-b", "10.0.0.2")));
-        bodies.put("http://10.0.0.1:9090/actuator/prometheus", "hikaricp_connections_active{pool=\"HikariPool-1\"} 2.0\n");
-
-        assertThat(readings.now(ChartName.POOL)).extracting(Reading::label).containsExactly("booking-a");
-    }
-
     /**
-     * Every pod refusing is not "no data": it is the console being unable to
-     * reach them - a NetworkPolicy, say - and the chart must say so.
+     * booking-service's /actuator/prometheus evaluates four database-backed
+     * gauges per slot at scrape time (~4.6s, 20 Oracle round trips on the
+     * booking pool). Reading it every two seconds from the console added that
+     * load for every viewer, so pool's live value comes from Prometheus only
+     * until the gauges are cheap.
      */
     @Test
-    void noPodAnsweringIsAnErrorNotAnEmptyReading() {
+    void poolIsNotReadFromThePodsDirectly() {
         given(source.pods("booking-service")).willReturn(List.of(pod("booking-a", "10.0.0.1")));
+        bodies.put("http://10.0.0.1:9090/actuator/prometheus", "hikaricp_connections_active{pool=\"HikariPool-1\"} 5.0\n");
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> readings.now(ChartName.POOL))
+        assertThat(readings.now(ChartName.POOL)).isEmpty();
+        org.mockito.Mockito.verify(source, org.mockito.Mockito.never()).pods("booking-service");
+    }
+
+    /** Every queue-gate pod refusing is an error the chart shows, not an empty reading. */
+    @Test
+    void noPodAnsweringIsAnErrorNotAnEmptyReading() {
+        given(source.pods("queue-gate")).willReturn(List.of(pod("gate-a", "10.0.0.9")));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> readings.now(ChartName.REQUESTS))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("no booking-service pod answered on 9090");
+                .hasMessageContaining("no queue-gate pod answered on 9090");
     }
 
     @Test

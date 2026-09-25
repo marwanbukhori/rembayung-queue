@@ -62,30 +62,15 @@ public class PodReadings {
 
     public List<Reading> now(ChartName chart) {
         return switch (chart) {
-            case POOL -> pool();
+            // Not read directly for now: booking-service's scrape runs four
+            // database-backed gauges per slot (~4.6s, 20 Oracle round trips on
+            // the booking pool), and a read every two seconds per viewer added
+            // that load. Prometheus's history still covers the pool.
+            case POOL -> List.of();
             case REQUESTS -> requests();
             case REPLICAS -> replicas();
             case LATENCY -> List.of();
         };
-    }
-
-    private List<Reading> pool() {
-        List<Reading> out = new ArrayList<>();
-        List<Pod> pods = running("booking-service");
-        Map<Pod, String> bodies = readAll(pods);
-        int answered = 0;
-        for (Pod pod : pods) {
-            String body = bodies.get(pod);
-            if (body == null) {
-                continue;
-            }
-            answered++;
-            PromText.samples(body, "hikaricp_connections_active").stream().findFirst()
-                    .ifPresent(s -> out.add(new Reading(pod.getMetadata().getName(), s.value())));
-        }
-        unreachable("booking-service", pods.size(), answered);
-        out.sort((a, b) -> a.label().compareTo(b.label()));
-        return out;
     }
 
     private List<Reading> requests() {
