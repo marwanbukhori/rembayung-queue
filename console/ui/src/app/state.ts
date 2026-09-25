@@ -180,3 +180,52 @@ export interface ObservabilityStatus {
   dynatrace: DynatraceStatus;
   checkedAt: string;
 }
+
+/** One object the inspector can show, as it appears in a URL: `?inspect=pod/queue-gate-x`. */
+export interface ObjectRef {
+  kind: string;
+  name: string;
+}
+
+export type Tone = 'ok' | 'warn' | 'bad' | 'neutral';
+
+export interface ObjectFact {
+  label: string;
+  value: string;
+  tone: Tone | null;
+}
+
+export interface ObjectLink {
+  kind: string;
+  name: string;
+  label: string;
+  tone: Tone | null;
+}
+
+export interface ObjectEvent {
+  at: string | null;
+  type: string;
+  reason: string;
+  message: string;
+  count: number;
+}
+
+export interface ObjectDetail {
+  kind: string;
+  name: string;
+  available: boolean;
+  detail: string | null;
+  tone: Tone;
+  headline: string;
+  facts: ObjectFact[];
+  related: ObjectLink[];
+  events: ObjectEvent[];
+}
+
+export interface ObjectSummary {
+  kind: string;
+  name: string;
+  tone: Tone;
+  headline: string;
+  at: string | null;
+}
