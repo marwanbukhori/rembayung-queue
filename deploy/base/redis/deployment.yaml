@@ -9,6 +9,13 @@ metadata:
     app.openshift.io/runtime: redis
 spec:
   replicas: 1
+  # The other three deployments carry a limit for the same reason and redis was
+  # missed: the namespace allows 30 ReplicaSets, redis kept the default 10 old
+  # ones, and every keepalive restart adds one. By 2026-09-25 the namespace sat
+  # at 29 of 30, so a deploy could create the console's new ReplicaSet and then
+  # was refused queue-gate's, and CD timed out waiting on a rollout that never
+  # started. redis never changes image outside a pin in git, so 2 is plenty.
+  revisionHistoryLimit: 2
   selector:
     matchLabels: { app: redis }
   template:

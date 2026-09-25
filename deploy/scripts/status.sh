@@ -15,7 +15,10 @@ set -uo pipefail
 NS="${1:-marwanbukhori-dev}"
 APPS="apps.rm3.7wse.p1.openshiftapps.com"
 CONSOLE_URL="https://console-${NS}.${APPS}/"
-GATE_URL="https://queue-gate-${NS}.${APPS}/actuator/health"
+# The management port, and with it /actuator/health, is deliberately not on the
+# Route. So the gate is judged by who answers: a JSON body means the app itself
+# replied, even with a 404; the router's HTML page means nothing is behind it.
+GATE_URL="https://queue-gate-${NS}.${APPS}/"
 WORKLOADS=(console redis booking-service queue-gate)
 
 if [ -t 1 ]; then G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'
@@ -38,6 +41,8 @@ probe() {
   body="${body%$'\n'*}"
   if [ "${code}" = "200" ]; then
     ok "${name} ${code}"
+  elif [ "${code}" -lt 500 ] 2>/dev/null && [ "${body:0:1}" = "{" ]; then
+    ok "${name} answering (${code} from the app itself)"
   elif printf '%s' "${body}" | grep -q "Application is not available"; then
     bad "${name} ${code} — Route has no pod behind it (${url})"
   else
@@ -88,8 +93,11 @@ if [ "${cluster}" = 1 ]; then
   done < <(oc get hpa -n "${NS}" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.conditions[?(@.type=="ScalingActive")].status}{" "}{.status.conditions[?(@.type=="ScalingActive")].reason}{"\n"}{end}' 2>/dev/null)
 
   # Pods that exist but are not healthy: crash loops, pulls, pending on quota.
-  unhealthy="$(oc get pods -n "${NS}" --no-headers 2>/dev/null \
-    | awk '$3 != "Running" && $3 != "Completed" { print $1 " " $3 }')"
+  # Job pods are left out: a failed keepalive attempt lingers for days after a
+  # later run succeeded, and the keepalive gets its own line below.
+  unhealthy="$(oc get pods -n "${NS}" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.phase}{" "}{.metadata.ownerReferences[0].kind}{" "}{.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}' 2>/dev/null \
+    | awk '$3 != "Job" && ($2 != "Running" || $4 != "") { print $1 " " ($4 != "" ? $4 : $2) }')"
   if [ -n "${unhealthy}" ]; then
     while read -r p s; do bad "pod ${p}: ${s}"; done <<<"${unhealthy}"
   else
@@ -106,6 +114,14 @@ if [ "${cluster}" = 1 ]; then
     if [ "${jok}" = 1 ]; then ok "keepalive: last run ${jwhen} succeeded"
     else bad "keepalive: last run ${jwhen} did not succeed (oc logs job/${jname})"; fi
   fi
+
+  # count/replicasets.apps is capped at 30 in this sandbox, and a deploy needs
+  # room for three new ones at once. Past 27 the next deploy stalls with a
+  # rollout that never starts, which is how CD failed on 2026-09-25.
+  rs="$(oc get rs -n "${NS}" --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${rs}" -gt 27 ]; then bad "replicasets: ${rs} of 30 — a deploy will not fit"
+  elif [ "${rs}" -gt 24 ]; then warn "replicasets: ${rs} of 30"
+  else ok "replicasets: ${rs} of 30"; fi
 
   for s in splunk-hec dynatrace oracle-wallet oracle-credentials; do
     if oc get secret "${s}" -n "${NS}" >/dev/null 2>&1; then ok "secret ${s} present"
