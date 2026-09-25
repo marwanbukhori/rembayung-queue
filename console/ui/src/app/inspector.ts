@@ -104,7 +104,8 @@ import { ObjectLink } from './state';
     .name { font-size: 15px; font-weight: 700; word-break: break-all; }
     .mono { font-family: var(--mono); }
     .close { display: none; background: none; border: 0; font-size: 18px; cursor: pointer; color: var(--ink); }
-    .pill { display: inline-block; margin: 12px 0; padding: 4px 11px; border-radius: 999px; font-size: 13px;
+    .pill { display: inline-block; max-width: 100%; overflow-wrap: anywhere; margin: 12px 0; padding: 4px 11px;
+            border-radius: 12px; font-size: 13px;
             background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); }
     .pill.ok { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
     .pill.warn { background: var(--chip-warn-bg); color: var(--chip-warn-fg); }

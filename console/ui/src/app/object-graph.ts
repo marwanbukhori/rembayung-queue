@@ -1,5 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { ClusterService } from './cluster.service';
+import { InspectorService } from './inspector.service';
+import { ObjectRef } from './state';
 import { StateService } from './state.service';
 
 /**
@@ -20,6 +22,18 @@ import { StateService } from './state.service';
  * shows a dash rather than the manifest's number, because what is declared and
  * what is running are different claims.
  */
+interface GraphBox {
+  id: string;
+  ref: ObjectRef | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  tone: string;
+  label: string;
+  sub: string;
+}
+
 @Component({
   selector: 'rb-object-graph',
   template: `
@@ -52,7 +66,13 @@ import { StateService } from './state.service';
         </g>
 
         @for (box of boxes(); track box.id) {
-          <g [class]="'box ' + box.tone">
+          <g [class]="'box ' + box.tone + (box.ref ? ' clickable' : '') + (isSelected(box.ref) ? ' selected' : '')"
+             [attr.tabindex]="box.ref ? 0 : null"
+             [attr.role]="box.ref ? 'button' : null"
+             [attr.aria-label]="box.ref ? 'Inspect ' + box.ref.kind + ' ' + box.ref.name : null"
+             (click)="inspect(box.ref)"
+             (keydown.enter)="inspect(box.ref)"
+             (keydown.space)="inspect(box.ref); $event.preventDefault()">
             <rect [attr.x]="box.x" [attr.y]="box.y"
                   [attr.width]="box.w" [attr.height]="box.h" rx="6" />
             <text class="label" [attr.x]="box.x + 12" [attr.y]="box.y + 24">{{ box.label }}</text>
@@ -74,7 +94,7 @@ import { StateService } from './state.service';
   `,
   styles: `
     .frame { width: 100%; overflow-x: auto; }
-    svg { width: 100%; min-width: 860px; height: auto; display: block; }
+    svg { width: 100%; min-width: 640px; height: auto; display: block; }
 
     .zone { fill: var(--canvas); stroke: var(--muted); stroke-dasharray: 5 4; }
     .zone-label { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; fill: var(--muted); }
@@ -92,6 +112,11 @@ import { StateService } from './state.service';
     .box.store rect { fill: var(--canvas); stroke-dasharray: 4 3; }
     .box.outside rect { stroke: var(--ink); stroke-dasharray: 4 3; }
     .box.guard rect { fill: var(--chip-info-bg); stroke: var(--chip-info-fg); }
+    .box.clickable { cursor: pointer; }
+    .box.clickable:hover rect, .box.clickable:focus rect { stroke: var(--ink); stroke-width: 2; }
+    .box.clickable:focus { outline: none; }
+    /* After a click the box also has focus; selection must still win. */
+    .box.selected rect, .box.selected:focus rect, .box.selected:hover rect { stroke: var(--chip-bad-fg); stroke-width: 3; }
 
     .label { font-family: var(--mono); font-size: 12px; font-weight: 700; fill: var(--ink); }
     .sub { font-size: 11px; fill: var(--muted); }
@@ -101,6 +126,7 @@ import { StateService } from './state.service';
 export class ObjectGraph {
   private readonly clusterService = inject(ClusterService);
   private readonly state = inject(StateService);
+  private readonly inspector = inject(InspectorService);
 
   private static readonly ROWS = [68, 156, 244, 332];
   private static readonly H = 64;
@@ -157,53 +183,64 @@ export class ObjectGraph {
       : 'NAMESPACE';
   });
 
-  protected readonly boxes = computed(() => {
+  protected inspect(ref: ObjectRef | null): void {
+    if (ref) {
+      this.inspector.select(ref);
+    }
+  }
+
+  protected isSelected(ref: ObjectRef | null): boolean {
+    const s = this.inspector.selected();
+    return !!ref && !!s && s.kind === ref.kind && s.name === ref.name;
+  }
+
+  protected readonly boxes = computed((): GraphBox[] => {
     const rows = ObjectGraph.ROWS;
     const h = ObjectGraph.H;
     return [
-      { id: 'anyone', x: 8, y: 196, w: 120, h: 60, tone: 'outside',
+      { id: 'anyone', ref: null, x: 8, y: 196, w: 120, h: 60, tone: 'outside',
         label: 'Anyone', sub: 'the internet' },
 
-      { id: 'r-console', x: 176, y: rows[0], w: 140, h, tone: 'plain',
+      { id: 'r-console', ref: { kind: 'route', name: 'console' }, x: 176, y: rows[0], w: 140, h, tone: 'plain',
         label: 'Route', sub: 'console' },
-      { id: 'r-gate', x: 176, y: rows[1], w: 140, h, tone: 'plain',
+      { id: 'r-gate', ref: { kind: 'route', name: 'queue-gate' }, x: 176, y: rows[1], w: 140, h, tone: 'plain',
         label: 'Route', sub: 'queue-gate' },
 
-      { id: 's-console', x: 356, y: rows[0], w: 160, h, tone: 'plain',
+      { id: 's-console', ref: { kind: 'service', name: 'console' }, x: 356, y: rows[0], w: 160, h, tone: 'plain',
         label: 'Service', sub: 'console:8080' },
-      { id: 's-gate', x: 356, y: rows[1], w: 160, h, tone: 'plain',
+      { id: 's-gate', ref: { kind: 'service', name: 'queue-gate' }, x: 356, y: rows[1], w: 160, h, tone: 'plain',
         label: 'Service', sub: 'queue-gate:8080' },
-      { id: 's-booking', x: 356, y: rows[2], w: 160, h, tone: 'plain',
+      { id: 's-booking', ref: { kind: 'service', name: 'booking-service' }, x: 356, y: rows[2], w: 160, h, tone: 'plain',
         label: 'Service', sub: 'booking-service:8081' },
-      { id: 's-redis', x: 356, y: rows[3], w: 160, h, tone: 'store',
+      { id: 's-redis', ref: { kind: 'service', name: 'redis' }, x: 356, y: rows[3], w: 160, h, tone: 'store',
         label: 'Service', sub: 'redis:6379' },
 
-      { id: 'd-console', x: 556, y: rows[0], w: 190, h, tone: 'plain',
+      { id: 'd-console', ref: { kind: 'deployment', name: 'console' }, x: 556, y: rows[0], w: 190, h, tone: 'plain',
         label: 'console', sub: this.podCount('console') },
-      { id: 'd-gate', x: 556, y: rows[1], w: 190, h, tone: 'plain',
+      { id: 'd-gate', ref: { kind: 'deployment', name: 'queue-gate' }, x: 556, y: rows[1], w: 190, h, tone: 'plain',
         label: 'queue-gate', sub: this.podCount('queue-gate') },
-      { id: 'd-booking', x: 556, y: rows[2], w: 190, h, tone: 'plain',
+      { id: 'd-booking', ref: { kind: 'deployment', name: 'booking-service' }, x: 556, y: rows[2], w: 190, h, tone: 'plain',
         label: 'booking-service', sub: this.podCount('booking-service') },
-      { id: 'd-redis', x: 556, y: rows[3], w: 190, h, tone: 'store',
+      { id: 'd-redis', ref: { kind: 'deployment', name: 'redis' }, x: 556, y: rows[3], w: 190, h, tone: 'store',
         label: 'redis', sub: this.podCount('redis') },
 
-      { id: 'g-console', x: 786, y: rows[0], w: 190, h, tone: 'guard',
+      { id: 'g-console', ref: null, x: 786, y: rows[0], w: 190, h, tone: 'guard',
         label: 'ServiceAccount', sub: 'reads this namespace' },
-      { id: 'g-gate', x: 786, y: rows[1], w: 190, h, tone: 'guard',
+      { id: 'g-gate', ref: { kind: 'hpa', name: 'queue-gate' }, x: 786, y: rows[1], w: 190, h, tone: 'guard',
         label: 'HPA', sub: this.hpa('queue-gate') },
-      { id: 'g-booking', x: 786, y: rows[2], w: 190, h, tone: 'guard',
+      { id: 'g-booking', ref: { kind: 'hpa', name: 'booking-service' }, x: 786, y: rows[2], w: 190, h, tone: 'guard',
         label: 'HPA + NetworkPolicy', sub: this.hpa('booking-service') },
-      { id: 'g-redis', x: 786, y: rows[3], w: 190, h, tone: 'guard',
+      { id: 'g-redis', ref: null, x: 786, y: rows[3], w: 190, h, tone: 'guard',
         label: 'NetworkPolicy', sub: 'from queue-gate only' },
 
       // Namespace-wide, so along the bottom rather than on a row.
-      { id: 'cm', x: 176, y: 420, w: 180, h: 56, tone: 'plain',
+      { id: 'cm', ref: null, x: 176, y: 420, w: 180, h: 56, tone: 'plain',
         label: 'ConfigMap', sub: 'queue-gate-config' },
-      { id: 'sm', x: 376, y: 420, w: 180, h: 56, tone: 'plain',
+      { id: 'sm', ref: null, x: 376, y: 420, w: 180, h: 56, tone: 'plain',
         label: 'ServiceMonitor', sub: 'scrapes :9090' },
-      { id: 'pr', x: 576, y: 420, w: 180, h: 56, tone: 'plain',
+      { id: 'pr', ref: null, x: 576, y: 420, w: 180, h: 56, tone: 'plain',
         label: 'PrometheusRule', sub: 'alerts on oversold' },
-      { id: 'cj', x: 776, y: 420, w: 200, h: 56, tone: 'plain',
+      { id: 'cj', ref: { kind: 'cronjob', name: 'keepalive' }, x: 776, y: 420, w: 200, h: 56, tone: 'plain',
         label: 'CronJob', sub: 'keepalive, 3x a day' }
     ];
   });

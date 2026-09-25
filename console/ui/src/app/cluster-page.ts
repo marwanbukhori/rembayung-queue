@@ -2,6 +2,7 @@ import { Component, computed, inject, output } from '@angular/core';
 import { ClusterResources } from './cluster-resources';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { ClusterService } from './cluster.service';
+import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
 import { LogScenarios } from './log-scenarios';
 import { ObservabilityPanel } from './observability-panel';
@@ -9,8 +10,8 @@ import { PodPulse } from './pod-pulse';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ArchitectureDiagram, ClusterResources, LogScenarios, ObjectGraph, ObservabilityPanel,
-    PodPulse],
+  imports: [ArchitectureDiagram, ClusterResources, Inspector, LogScenarios, ObjectGraph,
+    ObservabilityPanel, PodPulse],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -58,9 +59,13 @@ import { PodPulse } from './pod-pulse';
         <p class="note">
           The list above is what is running. This is why: which Route publishes what, which
           Service fronts which Deployment, and what governs each one. booking-service and redis
-          have no Route. They are reachable only from inside the namespace.
+          have no Route. They are reachable only from inside the namespace. Click any of them to
+          inspect it live.
         </p>
-        <rb-object-graph />
+        <div class="graph-and-inspector">
+          <rb-object-graph />
+          <rb-inspector />
+        </div>
       </div>
       <div class="card">
         <div class="why">Why the budget matters here</div>
@@ -76,6 +81,9 @@ import { PodPulse } from './pod-pulse';
     .stack-24 { display: flex; flex-direction: column; gap: 24px; }
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .graph-and-inspector { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+                           gap: 20px; align-items: start; }
+    @media (max-width: 899px) { .graph-and-inspector { grid-template-columns: minmax(0, 1fr); } }
   `
 })
 export class ClusterPage {
