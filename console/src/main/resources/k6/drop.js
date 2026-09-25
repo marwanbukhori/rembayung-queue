@@ -101,3 +101,29 @@ export default function () {
     bookingsRejected.add(1);
   }
 }
+
+// One machine-readable line at the end, which the console's run agent reads
+// instead of k6's own table: that table is for people, and its shape changes
+// between k6 versions. "notClean" counts bookings that ended in anything other
+// than 201, 403 or 409 - the 503s of a saturated pool, and any real fault.
+export function handleSummary(data) {
+  const m = data.metrics;
+  const count = (name) => (m[name] ? m[name].values.count : 0);
+  const trend = (key) => (m.http_req_duration ? Number(m.http_req_duration.values[key] || 0) : 0);
+  const clean = (data.root_group.checks || []).find((c) => c.name === 'booking resolved cleanly');
+  const summary = {
+    vus: Number(__ENV.VUS || 0),
+    iterations: count('iterations'),
+    booked: count('bookings_created'),
+    rejected: count('bookings_rejected'),
+    notClean: clean ? clean.fails : 0,
+    p50: Math.round(trend('med')),
+    p95: Math.round(trend('p(95)')),
+    max: Math.round(trend('max')),
+    durationMs: Math.round(data.state.testRunDurationMs),
+  };
+  return {
+    stdout: `booked ${summary.booked}, rejected ${summary.rejected}, not clean ${summary.notClean}, `
+      + `p95 ${summary.p95} ms\nK6_SUMMARY ${JSON.stringify(summary)}\n`,
+  };
+}
