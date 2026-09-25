@@ -31,7 +31,7 @@ interface Step { tool: string; why: string; found: string }
         <h1>AI Agent <span class="badge">In progress</span></h1>
         <p class="lede">
           After every rush, an agent inside the console gathers the facts, investigates with up to
-          five read-only tools, and writes a short report on what went well, what it caught, and what
+          five read-only tool calls, and writes a short report on what went well, what it caught, and what
           to look at. Every number in the report must come from a fact it cites; when the model cannot
           manage that, the run still gets a plain report built from the facts alone. This page is the
           design. The agent itself is being built.
@@ -77,7 +77,7 @@ interface Step { tool: string; why: string; found: string }
         <h2>The model</h2>
         <p class="note">
           Qwen3 8B, served free inside the OpenShift Developer Sandbox (<span class="mono">sandbox-shared-models</span>),
-          called over plain HTTP from the console's Java code. No LangChain and no Python service: a
+          called with a plain HTTP client from the console's Java code. No LangChain and no Python service: a
           run needs one to seven model calls, which does not justify another Deployment on a 3-CPU quota.
           Reaching it from this namespace was verified on 25 September 2026. Granite 3.1 8B is the
           configured alternative.
@@ -101,11 +101,11 @@ interface Step { tool: string; why: string; found: string }
               <li>
                 <span>{{ claim.text }}</span>
                 @for (id of claim.facts; track id) {
-                  <button class="chip mono" [class.on]="openFact() === id" (click)="toggle(id)"
-                          [attr.aria-expanded]="openFact() === id">{{ id }}</button>
+                  <button class="chip mono" [class.on]="openFact() === claim.text + '/' + id" (click)="toggle(claim.text + '/' + id)"
+                          [attr.aria-expanded]="openFact() === claim.text + '/' + id">{{ id }}</button>
                 }
                 @for (id of claim.facts; track id) {
-                  @if (openFact() === id) {
+                  @if (openFact() === claim.text + '/' + id) {
                     <div class="fact">
                       <span class="fact-src mono">{{ id }} · {{ fact(id).source }}</span>
                       <span>{{ fact(id).label }}: <b>{{ fact(id).value }}</b></span>
@@ -123,6 +123,11 @@ interface Step { tool: string; why: string; found: string }
             <li><span class="mono">{{ s.tool }}</span> because {{ s.why }} → {{ s.found }}</li>
           }
         </ol>
+        <p class="note trail-note">
+          F6 is not a tool result: a scrape's cost appears in no log, so it was timed by hand while
+          diagnosing. The agent's tools would stop at F5, and the report would ask what else was holding
+          the pool.
+        </p>
         <p class="fixed">
           Fixed since: the slot gauges now read every slot in one query, reused for five seconds, and a
           scrape takes about 0.8 seconds instead of 4.6.
@@ -154,14 +159,15 @@ interface Step { tool: string; why: string; found: string }
     .report-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
     .report-head h2 { margin: 0; }
     .claims { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; }
-    .chip { margin-left: 6px; font-size: 12px; border: 1px solid var(--line); background: var(--white); color: var(--ink);
+    .chip { margin-left: 6px; font-size: 12px; font-weight: 400; border: 1px solid var(--line); background: var(--white); color: var(--ink);
             border-radius: 6px; padding: 1px 7px; cursor: pointer; }
-    .chip.on { border-color: var(--ink); font-weight: 700; }
+    .chip.on { border-color: var(--ink); background: var(--ink); color: var(--white); }
     .fact { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding: 8px 12px; border-left: 3px solid var(--ink);
             background: var(--canvas); font-size: 13px; overflow-wrap: anywhere; }
     .fact-src { font-size: 11px; color: var(--muted); }
     .trail { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-soft); }
     .trail .mono { color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+    .trail-note { margin-top: 12px; }
     .fixed { margin: 16px 0 0; font-size: 14px; padding: 10px 14px; border-radius: 4px;
              background: var(--chip-ok-bg); color: var(--ink); }
     @media (max-width: 599px) {
@@ -175,6 +181,7 @@ interface Step { tool: string; why: string; found: string }
 export class AgentPage {
   readonly home = output<void>();
 
+  /** Which chip is open, keyed by claim and fact, so one click opens one place. */
   protected readonly openFact = signal<string | null>(null);
 
   protected readonly loop = [
@@ -198,8 +205,8 @@ export class AgentPage {
     { id: 'F2', source: 'invariant', label: 'Seats oversold', value: '0' },
     { id: 'F3', source: 'Prometheus', label: 'Peak DB pool in use, booking-service pod A', value: '5 of 5' },
     { id: 'F4', source: 'Prometheus', label: 'Peak DB pool in use, booking-service pod B', value: '0 of 5' },
-    { id: 'F5', source: 'tool: pod_logs', label: 'Who held pod A\'s pool connections', value: 'booking requests and /actuator/prometheus scrapes' },
-    { id: 'F6', source: 'tool: pod_logs', label: 'One /actuator/prometheus scrape on pod A', value: '4.6 s, 20 slot queries against Oracle' }
+    { id: 'F5', source: 'tool: pod_logs', label: 'WARN lines on pod A during the rush', value: 'Hikari pool timeouts: connection not available within 2 s' },
+    { id: 'F6', source: 'measured by hand, commit c3c1e49', label: 'Cost of one /actuator/prometheus scrape', value: 'about 4.6 s; 4 gauges × 5 slots = 20 queries on the booking pool' }
   ];
 
   protected readonly report: { title: string; claims: Claim[] }[] = [
@@ -209,7 +216,7 @@ export class AgentPage {
     ] },
     { title: 'Caught', claims: [
       { text: '4 bookings failed with 503 while pod A\'s pool sat at 5 of 5 and pod B\'s at 0 of 5.', facts: ['F1', 'F3', 'F4'] },
-      { text: 'Metrics scrapes competed with bookings for pod A\'s pool: one scrape ran 20 queries and took 4.6 s.', facts: ['F5', 'F6'] }
+      { text: 'Metrics scrapes competed with bookings for pod A\'s pool: one scrape ran 20 queries and took about 4.6 s.', facts: ['F5', 'F6'] }
     ] },
     { title: 'Look at', claims: [
       { text: 'Make a scrape cost one query rather than 20, so it cannot hold the pool.', facts: ['F6'] },
@@ -219,9 +226,8 @@ export class AgentPage {
 
   protected readonly trail: Step[] = [
     { tool: 'pod_logs(pod A, WARN, "Connection is not available")', why: 'the 503s came while pod A\'s pool was full',
-      found: 'F5: the pool was shared by bookings and metrics scrapes' },
-    { tool: 'pod_logs(pod A, INFO, "/actuator/prometheus")', why: 'the metrics endpoint was waiting on the pool too',
-      found: 'F6: one scrape took 4.6 s and ran 20 slot queries' }
+      found: 'F5: requests timed out waiting 2 s for a connection' }
+
   ];
 
   protected fact(id: string): Fact {

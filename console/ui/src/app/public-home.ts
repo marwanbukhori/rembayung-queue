@@ -70,7 +70,7 @@ interface Outward {
 
         <!--
           Where to go next. One obvious action - run a rush - and the rest as
-          equals. CI/CD and AI Agent tiles join as their pages ship.
+          equals, in the same order as the nav.
         -->
         <div class="band tiles">
           <button class="tile primary" (click)="visitor.emit()">

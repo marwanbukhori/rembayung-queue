@@ -90,7 +90,6 @@ import { ToolsList } from './tools-list';
     </div>
   `,
   styles: `
-    .stack-24 { display: flex; flex-direction: column; gap: 24px; }
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 
     .list {

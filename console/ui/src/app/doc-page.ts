@@ -39,7 +39,6 @@ import { DocsService } from './docs.service';
     </div>
   `,
   styles: `
-    .stack-24 { display: flex; flex-direction: column; gap: 24px; }
     .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     /*
      * Full content width. It used to be capped at 78ch, which left a third of a
