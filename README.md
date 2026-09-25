@@ -82,7 +82,7 @@ autoscalers live, and can start a k6 load run as a Kubernetes Job.
 | **GitHub Actions** | CI/CD | Every commit tested, built per service, and deployed. CD is separate from CI so a rollback needs no rebuild. |
 | **k6** | load | Runs in-cluster as a Job, so the load is subject to the same quota as everything else. |
 | **Splunk** | logs | Every pod's structured events over HEC. What happened. |
-| **Dynatrace** | traces | Application-only OneAgent. Where the time went. |
+| **Dynatrace** | traces | Application-only OneAgent. Where the time went. **Switched off since the trial ended**; it is a kustomize component in `deploy/base/dynatrace`, one line to turn back on. |
 
 ---
 

@@ -70,6 +70,12 @@ spec:
             - name: SPRING_PROFILES_INCLUDE
               valueFrom:
                 secretKeyRef: { name: splunk-hec, key: profile, optional: true }
+            # The Dynatrace agent is left out of the sandbox overlay, and this
+            # says why on the monitoring panel. Without it the panel reads NO
+            # AGENTS, which looks like an outage. Remove it when the component
+            # in base/dynatrace is switched back on.
+            - name: DYNATRACE_DISABLED_REASON
+              value: "Trial ended 2026-09-24. The tenant stopped serving the agent, so it is switched off rather than left to stop both JVMs from starting."
             # Stated, never inferred. The console introspects this namespace
             # for pods, the quota and its own load Jobs, and the default in
             # application.yml was wrong once — the pods panel reported

@@ -171,6 +171,8 @@ export interface DynatraceStatus {
   mode: string;
   instrumented: Feed[];
   detail: string;
+  /** Why the agent is switched off on purpose, or null when it is meant to be on. */
+  disabled: string | null;
 }
 
 export interface ObservabilityStatus {

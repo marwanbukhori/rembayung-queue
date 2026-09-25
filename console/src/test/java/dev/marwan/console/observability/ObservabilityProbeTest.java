@@ -1,6 +1,10 @@
 package dev.marwan.console.observability;
 
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodBuilder;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,5 +80,43 @@ class ObservabilityProbeTest {
         assertThat(ObservabilityProbe.saidBy("Service Unavailable"))
                 .isEqualTo("Service Unavailable");
         assertThat(ObservabilityProbe.saidBy("")).isEmpty();
+    }
+
+    /**
+     * An agent switched off on purpose must not read like one that failed. With
+     * no reason configured, a namespace without the agent is reported as
+     * uninstrumented; with one, every JVM says it is disabled and the panel
+     * carries the reason instead.
+     */
+    @Test
+    void aDisabledAgentSaysSoAndWhy() {
+        List<Pod> pods = List.of(pod("queue-gate", "spring-boot"), pod("redis", "redis"));
+
+        ObservabilityStatus.Dynatrace off = probe("Trial ended").dynatrace(pods);
+        assertThat(off.disabled()).isEqualTo("Trial ended");
+        assertThat(off.mode()).isEqualTo("disabled");
+        assertThat(off.instrumented()).extracting(ObservabilityStatus.Feed::detail).containsExactly(
+                "OneAgent disabled - no traces from it",
+                "not a Java workload - nothing to attach to");
+
+        ObservabilityStatus.Dynatrace on = probe("").dynatrace(pods);
+        assertThat(on.disabled()).isNull();
+        assertThat(on.instrumented().getFirst().detail())
+                .isEqualTo("a JVM, but not instrumented - no traces from it");
+    }
+
+    private static ObservabilityProbe probe(String disabledReason) {
+        return new ObservabilityProbe(null, "", "", "https://abc12345.apps.dynatrace.com",
+                disabledReason, true);
+    }
+
+    private static Pod pod(String app, String runtime) {
+        return new PodBuilder()
+                .withNewMetadata().withName(app + "-0")
+                    .addToLabels("app", app)
+                    .addToLabels("app.openshift.io/runtime", runtime)
+                .endMetadata()
+                .withNewSpec().addNewContainer().withName(app).endContainer().endSpec()
+                .build();
     }
 }

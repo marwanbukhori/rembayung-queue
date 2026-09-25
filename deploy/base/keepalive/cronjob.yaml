@@ -22,10 +22,11 @@
 # and the public URL served "Application is not available" while the other three
 # stayed perfectly healthy — the failure invisible from every other page.
 #
-# So the console is handled first, and differently. The others are restored by
-# their HPA, which holds a minimum of 2 and puts pods back on its own; the
-# console has no HPA, so a replica count of 0 is absorbing and permanent until
-# something writes 1 back. That write is a patch rather than `oc scale` on
+# So the console is handled first, since it is the one whose URL is handed out.
+# It was believed that the others were safe because their HPAs hold a minimum
+# of 2. They are not: an HPA does not scale up from 0, so a replica count of 0
+# is absorbing for every workload here until something writes a number back,
+# and this job now writes one for all four. That write is a patch rather than `oc scale` on
 # purpose: the CD account holds `patch` on deployments and no rights over the
 # scale subresource, so this needs no new permission.
 apiVersion: batch/v1
@@ -81,19 +82,31 @@ spec:
                   # would take the gate out for the sum of both rollouts rather
                   # than the longer of the two.
                   echo "restarting redis"
+                  oc patch deploy/redis --type=merge -p '{"spec":{"replicas":1}}'
                   oc rollout restart deploy/redis
                   oc rollout status deploy/redis --timeout=180s
 
                   # These roll with maxUnavailable 0, so each is replaced without
                   # dropping a request. booking-service takes ~60s to start, so
                   # the generous timeout is expected rather than slack.
+                  #
+                  # An HPA does not scale up from zero. Once the platform sets
+                  # these to 0 replicas their HPAs report ScalingActive=False and
+                  # stand still, so "the HPA restores it" is false at exactly the
+                  # moment it matters: on 2026-09-24 both sat at 0/0 behind a
+                  # green keepalive until someone patched them by hand. Written
+                  # only when 0, so a count the HPA has scaled up is left alone.
                   for d in booking-service queue-gate; do
+                    if [ "$(oc get "deploy/${d}" -o jsonpath='{.spec.replicas}')" = "0" ]; then
+                      echo "${d} was scaled to 0; giving it back its HPA minimum"
+                      oc patch "deploy/${d}" --type=merge -p '{"spec":{"replicas":2}}'
+                    fi
                     echo "restarting ${d}"
                     oc rollout restart "deploy/${d}"
                     oc rollout status "deploy/${d}" --timeout=420s
                   done
 
-                  echo "all four workloads restarted, console has a replica"
+                  echo "all four workloads restarted, and none left at 0 replicas"
               resources:
                 requests: { cpu: 10m, memory: 64Mi }
                 limits:   { cpu: 100m, memory: 128Mi }

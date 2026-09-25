@@ -1,0 +1,22 @@
+# Points queue-gate's JVM at the agent the init container unpacked.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-gate
+spec:
+  template:
+    spec:
+      containers:
+        - name: queue-gate
+          env:
+            # The agent is loaded by the JVM itself, so this is a hard
+            # dependency: `optional: true` on the secret only changes how the
+            # failure reads, not whether the pod can start. The path is the one
+            # the initContainer's `find` reports — checked by running
+            # `java -agentpath:... -version` inside a live container before any
+            # rollout was allowed to depend on it.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-agentpath:/dynatrace/agent/agent/lib64/liboneagentloader.so"
+          volumeMounts:
+            - name: dynatrace-agent
+              mountPath: /dynatrace

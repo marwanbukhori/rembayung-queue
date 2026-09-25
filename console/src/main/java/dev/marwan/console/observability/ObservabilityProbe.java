@@ -71,6 +71,7 @@ public class ObservabilityProbe {
     private final String hecUrl;
     private final String hecToken;
     private final String dynatraceTenant;
+    private final String dynatraceDisabled;
     private final boolean trustSelfSigned;
 
     private volatile Snapshot cache;
@@ -82,12 +83,15 @@ public class ObservabilityProbe {
                               @Value("${SPLUNK_HEC_TOKEN:}") String hecToken,
                               @Value("${console.dynatrace-tenant:https://icp44821.apps.dynatrace.com}")
                               String dynatraceTenant,
+                              @Value("${DYNATRACE_DISABLED_REASON:}") String dynatraceDisabled,
                               @Value("${console.splunk.trust-self-signed:true}")
                               boolean trustSelfSigned) {
         this.kube = kube;
         this.hecUrl = hecUrl == null ? "" : hecUrl.trim();
         this.hecToken = hecToken == null ? "" : hecToken.trim();
         this.dynatraceTenant = dynatraceTenant;
+        this.dynatraceDisabled = dynatraceDisabled == null || dynatraceDisabled.isBlank()
+                ? null : dynatraceDisabled.trim();
         this.trustSelfSigned = trustSelfSigned;
     }
 
@@ -165,7 +169,22 @@ public class ObservabilityProbe {
 
     // ------------------------------------------------------------- Dynatrace
 
-    private ObservabilityStatus.Dynatrace dynatrace(List<Pod> pods) {
+    ObservabilityStatus.Dynatrace dynatrace(List<Pod> pods) {
+        // Switched off on purpose is a different fact from switched on and
+        // failing, and the panel used to be unable to tell them apart. With the
+        // agent removed from the deployments every JVM read "not instrumented"
+        // and the badge read NO AGENTS, which looks like an outage to anyone who
+        // opens the page. The reason is configuration because only a person
+        // knows it: nothing in the cluster can tell an ended trial from a
+        // deliberate choice.
+        if (dynatraceDisabled != null) {
+            List<ObservabilityStatus.Feed> off = feedsFrom(pods, (pod, container) ->
+                    new ObservabilityStatus.Feed(workloadOf(pod), false,
+                            isJvm(pod) ? "OneAgent disabled - no traces from it"
+                                       : "not a Java workload - nothing to attach to"));
+            return new ObservabilityStatus.Dynatrace(hostOf(dynatraceTenant),
+                    "disabled", off, dynatraceDisabled, dynatraceDisabled);
+        }
         List<ObservabilityStatus.Feed> instrumented = feedsFrom(pods, (pod, container) -> {
             String options = env(container, "JAVA_TOOL_OPTIONS");
             boolean injected = options != null && options.contains(AGENT_MARKER);
@@ -192,7 +211,8 @@ public class ObservabilityProbe {
                 "application-only OneAgent",
                 instrumented,
                 "Traces and the service map. This flavour ships no logs at all, "
-                        + "which is why log searches in Dynatrace are empty by design.");
+                        + "which is why log searches in Dynatrace are empty by design.",
+                null);
     }
 
     // ----------------------------------------------------------------- Plumbing

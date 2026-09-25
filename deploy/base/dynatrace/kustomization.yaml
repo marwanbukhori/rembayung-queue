@@ -1,0 +1,25 @@
+# Dynatrace application-only OneAgent, as a component an overlay opts into.
+#
+# A component rather than part of base because the agent is a hard dependency
+# of the JVM it is attached to. -agentpath cannot be made conditional, so when
+# the tenant stops serving the installer every new queue-gate and
+# booking-service pod crash loops in its init container, and the site goes down
+# with them. That happened on 2026-09-24: the trial tenant icp44821 ended, the
+# installer URL began answering 404, and neither service could start.
+#
+# It lives under base, not deploy/components, because CD and check-drift render
+# from a scratch copy of base and overlays/sandbox only. Anywhere else, the
+# overlay's reference to it would not resolve in either.
+#
+# To turn it back on: uncomment it in overlays/sandbox, write the `dynatrace`
+# Secret for the new tenant (dynatrace.sh), update console.dynatrace-tenant, and
+# remove DYNATRACE_DISABLED_REASON from the console deployment.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: agent.yaml
+    target:
+      kind: Deployment
+      name: queue-gate|booking-service
+  - path: queue-gate.yaml
+  - path: booking-service.yaml

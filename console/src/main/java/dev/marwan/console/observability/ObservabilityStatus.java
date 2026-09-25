@@ -45,8 +45,10 @@ public record ObservabilityStatus(Splunk splunk, Dynatrace dynatrace, Instant ch
      * @param mode         which OneAgent flavour, because it decides what exists to look at
      * @param instrumented one entry per workload, saying whether the agent reached its JVM
      * @param detail       why the reading is what it is
+     * @param disabled     why the agent is switched off, or null when it is meant to be on
      */
-    public record Dynatrace(String tenant, String mode, List<Feed> instrumented, String detail) { }
+    public record Dynatrace(String tenant, String mode, List<Feed> instrumented, String detail,
+                            String disabled) { }
 
     /**
      * One workload's relationship with one vendor.

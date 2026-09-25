@@ -45,7 +45,7 @@ import { Feed } from './state';
           </div>
           <span class="pill" [class.ok]="bothUp()" [class.bad]="!bothUp()">
             <span class="dot" [class.beat]="bothUp()"></span>
-            {{ bothUp() ? 'Both monitors online' : 'Check the rows below' }}
+            {{ bothUp() ? (dynatraceOff() ? 'Splunk online, Dynatrace off' : 'Both monitors online') : 'Check the rows below' }}
           </span>
         </header>
 
@@ -103,10 +103,14 @@ import { Feed } from './state';
             <div class="vendor-id">
               <div class="vendor-name-row">
                 <span class="vendor-name">Dynatrace</span>
-                <span class="pill sm" [class.ok]="agentCount() > 0" [class.bad]="agentCount() === 0">
-                  <span class="dot" [class.beat]="agentCount() > 0"></span>
-                  {{ agentCount() > 0 ? agentCount() + ' agents loaded' : 'No agents' }}
-                </span>
+                @if (dynatraceOff()) {
+                  <span class="pill sm off"><span class="dot"></span>Disabled</span>
+                } @else {
+                  <span class="pill sm" [class.ok]="agentCount() > 0" [class.bad]="agentCount() === 0">
+                    <span class="dot" [class.beat]="agentCount() > 0"></span>
+                    {{ agentCount() > 0 ? agentCount() + ' agents loaded' : 'No agents' }}
+                  </span>
+                }
               </div>
               <p class="vendor-what">
                 Where the time went: the Oracle round trip, hop by hop. Open <strong>Services</strong>
@@ -115,10 +119,15 @@ import { Feed } from './state';
               <dl class="facts">
                 <dt>Tenant</dt><dd class="mono">{{ s.dynatrace.tenant }}</dd>
                 <dt>Mode</dt><dd class="mono soft">{{ s.dynatrace.mode }}</dd>
+                @if (s.dynatrace.disabled) {
+                  <dt>Why</dt><dd>{{ s.dynatrace.disabled }}</dd>
+                }
               </dl>
-              <a class="open" [href]="dynatraceHref()" target="_blank" rel="noreferrer">
-                Open Dynatrace {{ arrow }}
-              </a>
+              @if (!dynatraceOff()) {
+                <a class="open" [href]="dynatraceHref()" target="_blank" rel="noreferrer">
+                  Open Dynatrace {{ arrow }}
+                </a>
+              }
             </div>
 
             <div class="feeds">
@@ -171,6 +180,7 @@ import { Feed } from './state';
     .pill.sm { font-size: 12px; padding: 4px 11px; }
     .pill.ok { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
     .pill.bad { background: var(--chip-bad-bg); color: var(--chip-bad-fg); }
+    .pill.off { background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); }
     .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; }
     .beat { animation: livePulse 2s ease-in-out infinite; }
     @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
@@ -305,9 +315,18 @@ export class ObservabilityPanel {
     () => (this.status()?.dynatrace.instrumented ?? []).filter((f: Feed) => f.on).length
   );
 
-  /** Both halves alive: the collector answered, and at least one JVM is traced. */
+  /**
+   * Switched off on purpose, with a reason. Kept apart from "no agents" so an
+   * ended trial reads as a decision rather than as an outage.
+   */
+  protected readonly dynatraceOff = computed(() => !!this.status()?.dynatrace.disabled);
+
+  /**
+   * Everything that is meant to be on is on: the collector answered, and at
+   * least one JVM is traced unless tracing is switched off.
+   */
   protected readonly bothUp = computed(
-    () => (this.status()?.splunk.reachable ?? false) && this.agentCount() > 0
+    () => (this.status()?.splunk.reachable ?? false) && (this.dynatraceOff() || this.agentCount() > 0)
   );
 
   protected onCount(feeds: Feed[]): number {

@@ -3,6 +3,11 @@ kind: Kustomization
 namespace: marwanbukhori-dev
 resources:
   - ../../base
+# Off since 2026-09-24, when the Dynatrace trial ended and its agent download
+# began to 404 — which, with the agent wired in, stops both JVMs from starting.
+# See base/dynatrace/kustomization.yaml before turning it back on.
+# components:
+#   - ../../base/dynatrace
 # These tags are a bootstrap default. CD does NOT read them.
 #
 # They used to be a trap. Two systems wrote the image field — this file, and the
