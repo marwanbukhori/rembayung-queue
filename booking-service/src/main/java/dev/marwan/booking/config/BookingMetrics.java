@@ -7,9 +7,15 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -32,15 +38,50 @@ import java.util.function.ToDoubleFunction;
 @Component
 public class BookingMetrics implements MeterBinder {
 
+    /**
+     * How old a gauge value may be. Scrape-time reads were current but cost a
+     * query per slot per gauge on the booking pool; five seconds of staleness
+     * is nothing next to a 15-second scrape interval, and oversold - the value
+     * that matters - is impossible to persist anyway (ck_slots_seats).
+     */
+    static final Duration MAX_AGE = Duration.ofSeconds(5);
+
     private final SlotStateProvider provider;
+    private final Supplier<Instant> now;
+    private volatile Snapshot snapshot;
+
+    private record Snapshot(Map<Long, SlotState> states, Instant at) { }
 
     private MultiGauge capacity;
     private MultiGauge seatsTaken;
     private MultiGauge remaining;
     private MultiGauge oversold;
 
+    @Autowired
     public BookingMetrics(SlotStateProvider provider) {
+        this(provider, Instant::now);
+    }
+
+    BookingMetrics(SlotStateProvider provider, Supplier<Instant> now) {
         this.provider = provider;
+        this.now = now;
+    }
+
+    /** Every slot's state, from one query at most every MAX_AGE, however many gauges read it. */
+    private Map<Long, SlotState> states() {
+        Snapshot held = snapshot;
+        Instant at = now.get();
+        if (held != null && held.at().plus(MAX_AGE).isAfter(at)) {
+            return held.states();
+        }
+        synchronized (this) {
+            held = snapshot;
+            if (held == null || !held.at().plus(MAX_AGE).isAfter(at)) {
+                held = new Snapshot(provider.permanentStates(), at);
+                snapshot = held;
+            }
+            return held.states();
+        }
     }
 
     @Override
@@ -61,7 +102,7 @@ public class BookingMetrics implements MeterBinder {
         if (capacity == null) {
             return; // not bound yet
         }
-        List<Long> slotIds = provider.trackedSlotIds();
+        List<Long> slotIds = List.copyOf(states().keySet());
         rebuild(capacity, slotIds, SlotState::capacity);
         rebuild(seatsTaken, slotIds, SlotState::seatsTaken);
         rebuild(remaining, slotIds, SlotState::remaining);
@@ -75,9 +116,9 @@ public class BookingMetrics implements MeterBinder {
                         .map(id -> MultiGauge.Row.of(
                                 Tags.of("slot", String.valueOf(id)),
                                 id,
-                                // Evaluated at scrape time, not here, so the value
-                                // is current rather than 30s stale.
-                                slotId -> provider.stateFor((Long) slotId)
+                                // Read from the snapshot at scrape time: at most
+                                // MAX_AGE old, and one query for every slot.
+                                slotId -> Optional.ofNullable(states().get((Long) slotId))
                                         .map(value::applyAsDouble)
                                         // A slot that disappeared has no value,
                                         // which is not the same as zero. Reporting

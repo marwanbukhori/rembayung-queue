@@ -5,7 +5,9 @@ import dev.marwan.booking.repository.SlotRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -45,5 +47,19 @@ public class SlotStateProvider {
         // console can read a sandbox it owns — it is the gauges, whose label set
         // must stay bounded, that exclude them.
         return slotRepository.findPermanentSlotIds();
+    }
+
+    /**
+     * Every permanent slot's state, from one query. The gauges read this rather
+     * than stateFor per slot: four gauges per slot, each a round trip to Oracle
+     * in another region on the booking pool, made one scrape take 4.6 seconds.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, SlotState> permanentStates() {
+        Map<Long, SlotState> states = new LinkedHashMap<>();
+        for (var slot : slotRepository.findPermanentSlots()) {
+            states.put(slot.getId(), SlotState.of(slot.getId(), slot.getCapacity(), slot.getSeatsTaken()));
+        }
+        return states;
     }
 }

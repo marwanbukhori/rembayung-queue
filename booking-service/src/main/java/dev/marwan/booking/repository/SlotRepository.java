@@ -43,6 +43,13 @@ public interface SlotRepository extends JpaRepository<Slot, Long> {
     @Query("select s.id from Slot s where s.sandboxExpiresAt is null")
     List<Long> findPermanentSlotIds();
 
+    /**
+     * Every permanent slot, whole, in one query: what a metrics scrape reads.
+     * One round trip for all of them rather than one per slot per gauge.
+     */
+    @Query("select s from Slot s where s.sandboxExpiresAt is null")
+    List<Slot> findPermanentSlots();
+
     /** Sandbox slots whose lifetime has lapsed. Read-only; the sweeper deletes by id. */
     @Query("select s.id from Slot s where s.sandboxExpiresAt is not null and s.sandboxExpiresAt < :now")
     List<Long> findExpiredSandboxIds(@Param("now") Instant now);
