@@ -9,6 +9,10 @@ import io.fabric8.kubernetes.api.model.apps.ReplicaSet;
 import io.fabric8.kubernetes.api.model.apps.ReplicaSetBuilder;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscaler;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscalerBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.CronJob;
+import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -124,6 +128,33 @@ class WorkloadDescriberTest {
         ObjectDetail detail = WorkloadDescriber.hpa(hpa, NOW);
 
         assertThat(detail.headline()).isEqualTo("0 of 2-4");
+    }
+
+    @Test
+    void aCompletedJobReportsItsDuration() {
+        Job job = new JobBuilder().withNewMetadata().withName("load-d-3fa951d5")
+                .addToLabels("app", "rembayung-load").endMetadata()
+                .withNewStatus().withSucceeded(1)
+                    .withStartTime("2026-09-25T07:23:00Z").withCompletionTime("2026-09-25T07:24:50Z")
+                .endStatus().build();
+
+        ObjectDetail detail = WorkloadDescriber.job(job, List.of(), NOW);
+
+        assertThat(detail.tone()).isEqualTo(ObjectDetail.OK);
+        assertThat(detail.headline()).isEqualTo("Complete in 110s");
+    }
+
+    /** The keepalive's schedule is five-field cron in UTC. The next run is what a reader wants. */
+    @Test
+    void theCronJobSaysWhenItNextRuns() {
+        CronJob keepalive = new CronJobBuilder().withNewMetadata().withName("keepalive").endMetadata()
+                .withNewSpec().withSchedule("0 2,10,18 * * *").endSpec()
+                .withNewStatus().withLastSuccessfulTime("2026-09-25T02:00:49Z").endStatus().build();
+
+        ObjectDetail detail = WorkloadDescriber.cronJob(keepalive, List.of(), NOW);
+
+        assertThat(detail.facts()).extracting(ObjectDetail.Fact::label, ObjectDetail.Fact::value)
+                .contains(tuple("Next run", "2026-09-25T10:00:00Z"));
     }
 
     private static Deployment deployment(String name, int desired, Integer available) {

@@ -10,8 +10,14 @@ import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscaler;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.HorizontalPodAutoscalerCondition;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.MetricSpec;
 import io.fabric8.kubernetes.api.model.autoscaling.v2.MetricStatus;
+import io.fabric8.kubernetes.api.model.batch.v1.CronJob;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import org.springframework.scheduling.support.CronExpression;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -182,6 +188,101 @@ final class WorkloadDescriber {
         List<ObjectDetail.Link> related = List.of(
                 new ObjectDetail.Link("deployment", target, "Deployment", null));
         return new ObjectDetail("hpa", name, true, null, tone, headline, facts, related, List.of());
+    }
+
+    static ObjectDetail job(Job j, List<Pod> pods, Instant now) {
+        String name = j.getMetadata().getName();
+        var status = j.getStatus();
+        int succeeded = status == null ? 0 : orZero(status.getSucceeded());
+        int failed = status == null ? 0 : orZero(status.getFailed());
+        int active = status == null ? 0 : orZero(status.getActive());
+        String started = status == null ? null : status.getStartTime();
+        String finished = status == null ? null : status.getCompletionTime();
+
+        String tone;
+        String headline;
+        if (succeeded > 0 && finished != null) {
+            tone = OK;
+            headline = "Complete in " + seconds(started, finished) + "s";
+        } else if (active > 0) {
+            tone = WARN;
+            headline = "Running for " + Facts.age(started, now);
+        } else if (failed > 0) {
+            tone = BAD;
+            headline = "Failed after " + failed + (failed == 1 ? " attempt" : " attempts");
+        } else {
+            tone = WARN;
+            headline = "Waiting to start";
+        }
+
+        List<ObjectDetail.Fact> facts = List.of(
+                new ObjectDetail.Fact("Started", started == null ? NONE : started),
+                new ObjectDetail.Fact("Finished", finished == null ? NONE : finished),
+                new ObjectDetail.Fact("Attempts", succeeded + " succeeded, " + failed + " failed",
+                        failed > 0 ? WARN : null),
+                new ObjectDetail.Fact("Kind of run", isLoad(j) ? "load run (a rush)" : "keepalive"));
+
+        List<ObjectDetail.Link> related = new ArrayList<>();
+        for (Pod pod : pods) {
+            related.add(new ObjectDetail.Link("pod", pod.getMetadata().getName(), "Pod", podTone(pod)));
+        }
+        if (!isLoad(j)) {
+            related.add(new ObjectDetail.Link("cronjob", "keepalive", "CronJob", null));
+        }
+        return new ObjectDetail("job", name, true, null, tone, headline, facts, related, List.of());
+    }
+
+    static ObjectSummary jobSummary(Job j) {
+        ObjectDetail detail = job(j, List.of(), Instant.now());
+        return new ObjectSummary("job", j.getMetadata().getName(), detail.tone(),
+                (isLoad(j) ? "rush: " : "keepalive: ") + detail.headline(),
+                j.getStatus() == null ? null : j.getStatus().getStartTime());
+    }
+
+    static ObjectDetail cronJob(CronJob c, List<Job> runs, Instant now) {
+        String name = c.getMetadata().getName();
+        String schedule = c.getSpec().getSchedule();
+        boolean suspended = Boolean.TRUE.equals(c.getSpec().getSuspend());
+        String lastSuccess = c.getStatus() == null ? null : c.getStatus().getLastSuccessfulTime();
+        String lastScheduled = c.getStatus() == null ? null : c.getStatus().getLastScheduleTime();
+
+        String next;
+        try {
+            // Kubernetes cron has five fields; Spring's has six, seconds first.
+            ZonedDateTime at = CronExpression.parse("0 " + schedule).next(now.atZone(ZoneOffset.UTC));
+            next = at == null ? NONE : at.toInstant().toString();
+        } catch (IllegalArgumentException e) {
+            next = "unreadable schedule";
+        }
+
+        String tone = suspended ? WARN : OK;
+        String headline = suspended ? "suspended" : "next run " + next;
+
+        List<ObjectDetail.Fact> facts = List.of(
+                new ObjectDetail.Fact("Schedule", schedule + " (UTC)"),
+                new ObjectDetail.Fact("Next run", next),
+                new ObjectDetail.Fact("Last scheduled", lastScheduled == null ? NONE : lastScheduled),
+                new ObjectDetail.Fact("Last success", lastSuccess == null ? NONE : lastSuccess));
+
+        List<ObjectDetail.Link> related = runs.stream()
+                .sorted(Comparator.comparing((Job j) -> j.getMetadata().getName()).reversed())
+                .map(j -> new ObjectDetail.Link("job", j.getMetadata().getName(), "Run",
+                        job(j, List.of(), now).tone()))
+                .toList();
+        return new ObjectDetail("cronjob", name, true, null, tone, headline, facts, related, List.of());
+    }
+
+    static boolean isLoad(Job j) {
+        var labels = j.getMetadata().getLabels();
+        return labels != null && "rembayung-load".equals(labels.get("app"));
+    }
+
+    private static long seconds(String from, String to) {
+        try {
+            return Duration.between(Instant.parse(from), Instant.parse(to)).toSeconds();
+        } catch (RuntimeException e) {
+            return 0;
+        }
     }
 
     /** "2 of 2-4": current replicas of the allowed range. */
