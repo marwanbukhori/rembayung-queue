@@ -97,4 +97,48 @@ class MetricsServiceTest {
 
         assertThat(start.get()).isEqualTo(Instant.parse("2026-09-25T09:00:00Z"));
     }
+
+    /**
+     * Review finding 2: a slow pod read must not hold every viewer. Once a chart
+     * has a value, a refresh runs in the background and callers get the last
+     * value straight away.
+     */
+    @Test
+    void aSlowRefreshServesTheLastValueInsteadOfWaiting() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-09-25T10:00:00Z"));
+        Clock moving = new Clock() {
+            @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public Instant instant() { return now.get(); }
+        };
+        MetricsService metrics = new MetricsService((q, l, s, e, st) -> List.of(), pods, moving);
+        given(pods.now(ChartName.POOL)).willReturn(List.of(new Reading("booking-a", 1)));
+        metrics.chart(ChartName.POOL, 15);
+
+        now.set(now.get().plusSeconds(5));
+        given(pods.now(ChartName.POOL)).willAnswer(inv -> {
+            Thread.sleep(1500);
+            return List.of(new Reading("booking-a", 5));
+        });
+        long started = System.nanoTime();
+        Chart chart = metrics.chart(ChartName.POOL, 15);
+        long millis = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(millis).isLessThan(500);
+        assertThat(chart.now()).extracting(Reading::value).containsExactly(1.0);
+    }
+
+    /** Review finding 7: a public caller cannot fan out queries by cycling the window. */
+    @Test
+    void theWindowSnapsToAFewFixedSizes() {
+        AtomicReference<Instant> start = new AtomicReference<>();
+        MetricsService metrics = new MetricsService((q, l, s, e, st) -> {
+            start.set(s);
+            return List.of();
+        }, pods, clock);
+
+        metrics.chart(ChartName.POOL, 37);
+
+        assertThat(start.get()).isEqualTo(Instant.parse("2026-09-25T09:30:00Z"));
+    }
 }

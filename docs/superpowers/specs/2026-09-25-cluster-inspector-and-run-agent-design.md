@@ -441,3 +441,18 @@ booking-service had never been scraped. Each chart also shows a "now" reading
 taken straight from the pods' `/actuator/prometheus` every two seconds, fresher
 than the 15-second scrape. Either source can fail alone; the chart says which.
 Latency has no live reading: a quantile needs Prometheus's windowed histogram.
+
+### 12.6 Charts strip as shipped (deferrals from §5.2)
+
+Shipped: requests/s by status, latency p95, DB pool per pod with the pool-size
+line, and current replicas per autoscaler, each with a live reading from the
+pods. Deferred to a later step, deliberately rather than by omission:
+
+- **Desired vs current replicas.** Only current is drawn; the inspector's HPA
+  view already shows desired.
+- **Rush start/end markers** across the four charts.
+- **Highlighting the selected pod's line** when a pod is inspected.
+
+Colours are fixed per series (2xx/4xx/5xx; gate/booking) and sticky per pod,
+so a series appearing never repaints another. The window snaps to 5, 15, 30 or
+60 minutes, so a public caller cannot fan out queries by cycling it.

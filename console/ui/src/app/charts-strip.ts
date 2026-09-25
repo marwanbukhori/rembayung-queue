@@ -21,6 +21,17 @@ const TITLES: Record<ChartKey, string> = {
   pool: 'DB pool in use',
   replicas: 'Replicas'
 };
+/**
+ * Colour follows the series, never its rank: a 4xx line appearing mid-rush
+ * must not repaint 5xx. Pods have no fixed names, so they keep the slot they
+ * were first given for as long as they exist (see ChartsStrip.slot).
+ */
+const FIXED_SLOTS: Partial<Record<ChartKey, Record<string, number>>> = {
+  requests: { '2xx': 1, '4xx': 2, '5xx': 3, '1xx': 4, '3xx': 4 },
+  latency: { 'queue-gate': 1, 'booking-service': 2 },
+  replicas: { 'queue-gate': 1, 'booking-service': 2 }
+};
+
 const SOURCES: Record<ChartKey, string> = {
   requests: 'queue-gate, by status',
   latency: 'queue-gate and booking-service, ms',
@@ -51,8 +62,8 @@ interface Plot {
  * from Prometheus, and the live value read straight from the pods.
  *
  * Drawn by hand in SVG rather than with a chart library - four line charts do
- * not earn a dependency. One y axis each, from zero; 2px lines in a fixed
- * categorical order (colour follows the series label, never its rank); a label
+ * not earn a dependency. One y axis each, from zero; 2px lines, each series
+ * keeping one colour however many others come and go; a label
  * at the end of every line, because two of the four colours are below 3:1 on
  * white; a crosshair tooltip; and a table view for anyone who would rather
  * read numbers than lines.
@@ -202,6 +213,8 @@ interface Plot {
 })
 export class ChartsStrip {
   private readonly metrics = inject(MetricsService);
+  /** Pod label to colour slot, kept while the pod exists so no other line changes colour. */
+  private readonly podSlots = new Map<string, number>();
 
   protected readonly W = W;
   protected readonly H = H;
@@ -238,7 +251,8 @@ export class ChartsStrip {
       : series.length === 0 ? (data.history ?? 'No data in the last 15 minutes.')
       : null;
 
-    const lines: Line[] = series.map((s, i) => {
+    const slots = this.slots(key, series.map((s) => s.label));
+    const lines: Line[] = series.map((s) => {
       const segments: string[] = [];
       let current: string[] = [];
       let prev: number | null = null;
@@ -258,7 +272,7 @@ export class ChartsStrip {
       }
       const lastPoint = s.points[s.points.length - 1];
       return {
-        label: s.label, slot: i + 1, segments,
+        label: s.label, slot: slots.get(s.label) ?? 4, segments,
         last: lastPoint ? { x: x(lastPoint[0]), y: y(lastPoint[1] * scale), v: lastPoint[1] } : null
       };
     });
@@ -289,7 +303,8 @@ export class ChartsStrip {
     const vx = ((event.clientX - box.left) / box.width) * W;
     const t = p.start + ((vx - L) / PLOT_W) * WINDOW_S;
     const series = (p.data?.series ?? []).slice().sort((a, b) => a.label.localeCompare(b.label)).slice(0, 4);
-    const rows = series.map((s, i) => {
+    const slots = this.slots(p.key, series.map((s) => s.label));
+    const rows = series.map((s) => {
       let best: [number, number] | null = null;
       for (const pt of s.points) {
         if (!best || Math.abs(pt[0] - t) < Math.abs(best[0] - t)) {
@@ -297,7 +312,7 @@ export class ChartsStrip {
         }
       }
       return best && Math.abs(best[0] - t) <= GAP_S
-        ? { label: s.label, slot: i + 1, text: this.format(p.key, best[1]) }
+        ? { label: s.label, slot: slots.get(s.label) ?? 4, text: this.format(p.key, best[1]) }
         : null;
     }).filter((r): r is { label: string; slot: number; text: string } => r !== null);
     this.hover.set({
@@ -306,6 +321,24 @@ export class ChartsStrip {
       time: new Date(t * 1000).toLocaleTimeString([], { hour12: false }),
       rows
     });
+  }
+
+  /** Each label's colour slot: fixed for named series, sticky for pods. */
+  private slots(key: ChartKey, labels: string[]): Map<string, number> {
+    const fixed = FIXED_SLOTS[key];
+    if (fixed) {
+      return new Map(labels.map((l) => [l, fixed[l] ?? 4]));
+    }
+    for (const gone of [...this.podSlots.keys()].filter((l) => !labels.includes(l))) {
+      this.podSlots.delete(gone);
+    }
+    for (const label of labels) {
+      if (!this.podSlots.has(label)) {
+        const used = new Set(this.podSlots.values());
+        this.podSlots.set(label, [1, 2, 3, 4].find((s) => !used.has(s)) ?? 4);
+      }
+    }
+    return new Map(labels.map((l) => [l, this.podSlots.get(l)!]));
   }
 
   protected toggleTable(key: ChartKey): void {

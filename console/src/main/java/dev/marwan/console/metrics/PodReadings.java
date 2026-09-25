@@ -17,6 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Each chart's "now", read straight from the pods rather than from Prometheus:
@@ -40,6 +44,8 @@ public class PodReadings {
     private final Fetch fetch;
     private final Clock clock;
     private final Map<String, Counts> previous = new ConcurrentHashMap<>();
+    /** Pods are read side by side, so four slow pods cost one timeout, not four. */
+    private final ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor();
 
     private record Counts(Map<String, Double> byPodAndClass, Instant at) { }
 
@@ -66,9 +72,10 @@ public class PodReadings {
     private List<Reading> pool() {
         List<Reading> out = new ArrayList<>();
         List<Pod> pods = running("booking-service");
+        Map<Pod, String> bodies = readAll(pods);
         int answered = 0;
         for (Pod pod : pods) {
-            String body = read(pod);
+            String body = bodies.get(pod);
             if (body == null) {
                 continue;
             }
@@ -84,9 +91,10 @@ public class PodReadings {
     private List<Reading> requests() {
         Map<String, Double> counts = new TreeMap<>();
         List<Pod> pods = running("queue-gate");
+        Map<Pod, String> bodies = readAll(pods);
         int answered = 0;
         for (Pod pod : pods) {
-            String body = read(pod);
+            String body = bodies.get(pod);
             if (body == null) {
                 continue;
             }
@@ -145,6 +153,27 @@ public class PodReadings {
                 .filter(p -> p.getStatus() != null && p.getStatus().getPodIP() != null
                         && "Running".equals(p.getStatus().getPhase()))
                 .toList();
+    }
+
+    private Map<Pod, String> readAll(List<Pod> pods) {
+        Map<Pod, Future<String>> pending = new java.util.LinkedHashMap<>();
+        for (Pod pod : pods) {
+            pending.put(pod, readers.submit(() -> read(pod)));
+        }
+        Map<Pod, String> out = new java.util.HashMap<>();
+        pending.forEach((pod, f) -> {
+            try {
+                String body = f.get(TIMEOUT.toMillis() * 2, TimeUnit.MILLISECONDS);
+                if (body != null) {
+                    out.put(pod, body);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                f.cancel(true);
+            }
+        });
+        return out;
     }
 
     /** One pod's exposition, or null if it would not answer: one quiet pod must not blank the reading. */
