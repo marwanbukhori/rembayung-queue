@@ -33,6 +33,14 @@ public final class AccessKey {
      * that, because the alternative — an unconfigured deployment serving
      * everything to everyone — is the failure nobody notices.
      */
+    /**
+     * The key itself, or null when unset. Only DemoKeyController reads it, and
+     * only while CONSOLE_SHARE_KEY is on.
+     */
+    public String value() {
+        return expected.length == 0 ? null : new String(expected, StandardCharsets.UTF_8);
+    }
+
     public boolean configured() {
         return expected.length > 0;
     }

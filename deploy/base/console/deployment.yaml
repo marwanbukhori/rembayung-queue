@@ -79,6 +79,12 @@ spec:
             # Splunk Cloud's trial host stopped resolving by 2026-09-25. Set, the
             # console stops probing it and the panel shows it as ended. Remove
             # this, with a fresh splunk-hec Secret, to turn it back on.
+            # Hands the console key to any visitor through a button, so whoever
+            # opens the demo can start a rush. The guards on a run - one per
+            # drop, the CPU quota, expiring sandboxes - limit a stranger, not the
+            # key. Set to "false" to make the key private again.
+            - name: CONSOLE_SHARE_KEY
+              value: "true"
             - name: SPLUNK_DISABLED_REASON
               value: "Trial ended 2026-09-25. The Splunk Cloud host no longer resolves, so the console stopped probing it."
             # Stated, never inferred. The console introspects this namespace
