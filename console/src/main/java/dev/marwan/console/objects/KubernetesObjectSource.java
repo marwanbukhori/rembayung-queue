@@ -122,6 +122,14 @@ class KubernetesObjectSource implements ObjectSource {
     }
 
     @Override
+    public String podLog(String pod, int tailLines, int limitBytes) {
+        // usingTimestamps puts the kubelet's own time on every line, JSON or not,
+        // which is what the page's cursor needs: redis prints plain text.
+        return kubernetes.client().pods().inNamespace(ns()).withName(pod)
+                .usingTimestamps().limitBytes(limitBytes).tailingLines(tailLines).getLog();
+    }
+
+    @Override
     public RouteProbe probe(String host) {
         long start = System.nanoTime();
         try {

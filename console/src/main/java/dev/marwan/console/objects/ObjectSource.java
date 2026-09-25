@@ -49,6 +49,9 @@ public interface ObjectSource {
 
     RouteProbe probe(String host);
 
+    /** The pod's last lines, each prefixed with the kubelet's timestamp. */
+    String podLog(String pod, int tailLines, int limitBytes);
+
     /** Drop a client whose call failed. */
     void reset();
 }

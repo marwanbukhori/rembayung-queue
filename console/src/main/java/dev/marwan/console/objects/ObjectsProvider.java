@@ -7,7 +7,6 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
-import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -77,7 +76,7 @@ public class ObjectsProvider {
             remember(key, new Cached(null, e.getMessage(), clock.instant()));
             throw e;
         } catch (Throwable e) {
-            if (resetsTheClient(e)) {
+            if (Failures.resetsTheClient(e)) {
                 source.reset();
             }
             log.debug("could not describe {}: {}", key, e.toString());
@@ -104,15 +103,6 @@ public class ObjectsProvider {
         cache.put(key, entry);
     }
 
-    /**
-     * A 4xx is the API server answering over a working connection - most often
-     * a 403 because RBAC has not been applied yet. Dropping the shared client
-     * for it would churn the client every other panel uses, for nothing.
-     */
-    private static boolean resetsTheClient(Throwable e) {
-        return !(e instanceof KubernetesClientException k && k.getCode() >= 400 && k.getCode() < 500);
-    }
-
     /** Empty, not an error, when the cluster cannot be read: the page shows "no runs" and polls again. */
     public List<ObjectSummary> recentJobs() {
         CachedJobs held = jobsCache;
@@ -129,7 +119,7 @@ public class ObjectsProvider {
                     .limit(RECENT_JOBS)
                     .toList();
         } catch (Throwable e) {
-            if (resetsTheClient(e)) {
+            if (Failures.resetsTheClient(e)) {
                 source.reset();
             }
             fresh = List.of();
