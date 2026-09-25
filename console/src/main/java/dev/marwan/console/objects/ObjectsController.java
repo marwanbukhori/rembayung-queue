@@ -1,5 +1,8 @@
 package dev.marwan.console.objects;
 
+import dev.marwan.console.auth.AccessKey;
+import dev.marwan.console.auth.KeyFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +24,31 @@ import java.util.Map;
 public class ObjectsController {
 
     private final ObjectsProvider objects;
+    private final PodLogs logs;
+    private final AccessKey key;
 
-    public ObjectsController(ObjectsProvider objects) {
+    public ObjectsController(ObjectsProvider objects, PodLogs logs, AccessKey key) {
         this.objects = objects;
+        this.logs = logs;
+        this.key = key;
+    }
+
+    /**
+     * A pod's log lines since a cursor. Public like every GET, but what it
+     * returns depends on the key: without one, app events only. The rule is
+     * applied in PodLogs, here only decided - by the key the request presents,
+     * never by what it asks for.
+     */
+    @GetMapping("/api/pods/{name}/logs")
+    public LogPage logs(@PathVariable String name,
+                        @RequestParam(required = false) String since,
+                        @RequestParam(defaultValue = "all") String filter,
+                        HttpServletRequest request) {
+        String presented = request.getHeader(KeyFilter.HEADER);
+        if (presented == null) {
+            presented = request.getParameter(KeyFilter.QUERY_PARAM);
+        }
+        return logs.read(name, since, filter, key.accepts(presented));
     }
 
     @GetMapping("/api/objects/{kind}/{name}")

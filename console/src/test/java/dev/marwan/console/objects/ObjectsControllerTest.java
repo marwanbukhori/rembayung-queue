@@ -12,7 +12,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Duration;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
@@ -30,6 +35,9 @@ class ObjectsControllerTest {
 
     @MockitoBean
     ObjectsProvider objects;
+
+    @MockitoBean
+    PodLogs logs;
 
     /** Public, unkeyed: a GET, like every other read on this console. */
     @Test
@@ -80,7 +88,52 @@ class ObjectsControllerTest {
         mvc.perform(get("/api/objects").param("kind", "secret")).andExpect(status().isNotFound());
     }
 
+    /** Review focus 3: the key decides, not the request's filter. */
+    @Test
+    void logsWithoutTheKeyAreReadAsAPublicViewer() throws Exception {
+        given(logs.read(any(), any(), any(), anyBoolean())).willReturn(
+                new LogPage("p", true, null, "events", true, null, List.of(), null));
+
+        mvc.perform(get("/api/pods/p/logs").param("filter", "all"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.restricted").value(true));
+        then(logs).should().read(eq("p"), isNull(), eq("all"), eq(false));
+    }
+
+    @Test
+    void logsWithTheKeyAreReadAsAKeyHolder() throws Exception {
+        given(logs.read(any(), any(), any(), anyBoolean())).willReturn(
+                new LogPage("p", true, null, "all", false, null, List.of(), null));
+
+        mvc.perform(get("/api/pods/p/logs").header("X-Console-Key", "s3cret-demo-key"))
+                .andExpect(status().isOk());
+        then(logs).should().read(eq("p"), isNull(), eq("all"), eq(true));
+    }
+
+    @Test
+    void aWrongKeyIsNoKey() throws Exception {
+        given(logs.read(any(), any(), any(), anyBoolean())).willReturn(
+                new LogPage("p", true, null, "events", true, null, List.of(), null));
+
+        mvc.perform(get("/api/pods/p/logs").header("X-Console-Key", "guess"));
+        then(logs).should().read(eq("p"), isNull(), eq("all"), eq(false));
+    }
+
+    @Test
+    void logsOfAPodThatIsNotOursAre404Json() throws Exception {
+        given(logs.read(any(), any(), any(), anyBoolean())).willThrow(new ObjectNotFound("pod x does not exist here"));
+
+        mvc.perform(get("/api/pods/x/logs"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("NOT_FOUND"));
+    }
+
     static class Properties {
+        @Bean
+        dev.marwan.console.auth.AccessKey accessKey() {
+            return new dev.marwan.console.auth.AccessKey("s3cret-demo-key");
+        }
+
         @Bean
         ConsoleProperties consoleProperties() {
             return new ConsoleProperties("http://booking-service:8081", "http://queue-gate:8080",
