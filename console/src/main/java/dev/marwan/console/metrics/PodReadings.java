@@ -65,25 +65,32 @@ public class PodReadings {
 
     private List<Reading> pool() {
         List<Reading> out = new ArrayList<>();
-        for (Pod pod : running("booking-service")) {
+        List<Pod> pods = running("booking-service");
+        int answered = 0;
+        for (Pod pod : pods) {
             String body = read(pod);
             if (body == null) {
                 continue;
             }
+            answered++;
             PromText.samples(body, "hikaricp_connections_active").stream().findFirst()
                     .ifPresent(s -> out.add(new Reading(pod.getMetadata().getName(), s.value())));
         }
+        unreachable("booking-service", pods.size(), answered);
         out.sort((a, b) -> a.label().compareTo(b.label()));
         return out;
     }
 
     private List<Reading> requests() {
         Map<String, Double> counts = new TreeMap<>();
-        for (Pod pod : running("queue-gate")) {
+        List<Pod> pods = running("queue-gate");
+        int answered = 0;
+        for (Pod pod : pods) {
             String body = read(pod);
             if (body == null) {
                 continue;
             }
+            answered++;
             for (PromText.Sample s : PromText.samples(body, "http_server_requests_seconds_count")) {
                 String uri = s.labels().getOrDefault("uri", "");
                 String status = s.labels().getOrDefault("status", "");
@@ -93,6 +100,7 @@ public class PodReadings {
                 counts.merge(pod.getMetadata().getName() + "|" + status.charAt(0) + "xx", s.value(), Double::sum);
             }
         }
+        unreachable("queue-gate", pods.size(), answered);
         Instant at = clock.instant();
         Counts last = previous.put("requests", new Counts(counts, at));
         if (last == null) {
@@ -119,6 +127,17 @@ public class PodReadings {
                             ? 0 : h.getStatus().getCurrentReplicas())));
         }
         return out;
+    }
+
+    /**
+     * Every pod refusing is not "no data": it is the console being unable to
+     * reach them - a NetworkPolicy, or running outside the cluster - and the
+     * chart has to say so rather than show an empty reading.
+     */
+    private static void unreachable(String app, int pods, int answered) {
+        if (pods > 0 && answered == 0) {
+            throw new IllegalStateException("no " + app + " pod answered on 9090");
+        }
     }
 
     private List<Pod> running(String app) {

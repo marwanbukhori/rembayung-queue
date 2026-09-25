@@ -250,3 +250,15 @@ export interface LogPage {
   lines: LogLine[];
   latest: string | null;
 }
+
+export type ChartKey = 'requests' | 'latency' | 'pool' | 'replicas';
+export interface ChartSeries { label: string; points: [number, number][]; }
+export interface ChartReading { label: string; value: number; }
+export interface ChartData {
+  name: ChartKey;
+  unit: string;
+  history: string | null;
+  series: ChartSeries[];
+  live: string | null;
+  now: ChartReading[];
+}

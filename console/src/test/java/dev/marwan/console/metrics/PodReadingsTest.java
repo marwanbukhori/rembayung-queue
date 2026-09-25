@@ -58,6 +58,19 @@ class PodReadingsTest {
         assertThat(readings.now(ChartName.POOL)).extracting(Reading::label).containsExactly("booking-a");
     }
 
+    /**
+     * Every pod refusing is not "no data": it is the console being unable to
+     * reach them - a NetworkPolicy, say - and the chart must say so.
+     */
+    @Test
+    void noPodAnsweringIsAnErrorNotAnEmptyReading() {
+        given(source.pods("booking-service")).willReturn(List.of(pod("booking-a", "10.0.0.1")));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> readings.now(ChartName.POOL))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no booking-service pod answered on 9090");
+    }
+
     @Test
     void requestsPerSecondComeFromTheCounterDeltaBetweenReads() {
         given(source.pods("queue-gate")).willReturn(List.of(pod("gate-a", "10.0.0.9")));

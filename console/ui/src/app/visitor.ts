@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
+import { ChartsStrip } from './charts-strip';
 import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
 import { RunBanner } from './run-banner';
@@ -26,7 +27,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, Inspector, ObjectGraph, PodPulse, RunBanner, RunPanel, TrafficLog],
+  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, PodPulse, RunBanner, RunPanel, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -73,10 +74,14 @@ import { StateService } from './state.service';
         <!--
           The platform side, always shown: it is the namespace, not the visitor's
           sandbox, so there is something to look at before a rush as well as
-          during one. The charts strip (step 3) lands at the top of this column.
+          during one. The charts sit on top: what the rush is doing to the
+          platform, before the objects that explain it.
         -->
         <section class="platform card">
           <div class="why">The platform, live</div>
+          <p class="note">Last 15 minutes from Prometheus; the bold numbers are read from the pods right now.</p>
+          <rb-charts-strip />
+          <div class="spacer"></div>
           <p class="note">
             Every object behind the simulation. Click one to inspect it; start a rush and watch the
             autoscalers and pods move.
@@ -152,6 +157,7 @@ import { StateService } from './state.service';
     .business { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
     .platform { min-width: 0; }
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .spacer { height: 20px; }
     .graph-and-inspector { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
     @media (min-width: 1280px) {
       .live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }

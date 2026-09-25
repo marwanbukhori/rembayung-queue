@@ -45,6 +45,9 @@ class ThanosTenancy implements RangeQuery {
     @Override
     public List<Series> range(String promql, String labelKey, Instant start, Instant end, Duration step)
             throws Exception {
+        if (!Files.exists(TOKEN)) {
+            throw new IllegalStateException("Prometheus is reachable only from inside the cluster");
+        }
         // Read per request: the projected service-account token rotates.
         String token = Files.readString(TOKEN).trim();
         String query = "namespace=" + enc(kubernetes.namespace())
