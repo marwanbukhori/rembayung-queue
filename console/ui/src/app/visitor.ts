@@ -155,8 +155,6 @@ import { StateService } from './state.service';
     .graph-and-inspector { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
     @media (min-width: 1280px) {
       .live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
-      /* The platform column stays in view while the reader scrolls the rush. */
-      .platform { position: sticky; top: 72px; }
     }
     /*
       Side by side only where the graph keeps its 640px: below that its labels
@@ -164,6 +162,13 @@ import { StateService } from './state.service';
     */
     @media (min-width: 1650px) {
       .graph-and-inspector { grid-template-columns: minmax(640px, 1fr) minmax(300px, 340px); }
+      /*
+        Sticky only here, where graph and inspector sit side by side. Below
+        1650px the inspector is stacked under the graph, and a stuck card would
+        pin it below the fold for as long as the rush column is taller. 120px
+        clears the 104px sticky navbar with a little air.
+      */
+      .platform { position: sticky; top: 120px; }
     }
 
     .exit {

@@ -245,8 +245,15 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
 export class LogScenarios {
   private readonly observability = inject(ObservabilityService);
 
-  /** Splunk switched off on purpose: the card keeps its title and says why it is empty. */
-  protected readonly ended = computed(() => !!this.observability.status()?.splunk.disabled);
+  /**
+   * Splunk switched off on purpose: the card keeps its title and says why it is
+   * empty. Ended until the status says otherwise, so a page load never flashes
+   * searches and captures of a tenant that no longer exists.
+   */
+  protected readonly ended = computed(() => {
+    const status = this.observability.status();
+    return !status || !!status.splunk.disabled;
+  });
 
   private readonly all: Scenario[] = [
     {

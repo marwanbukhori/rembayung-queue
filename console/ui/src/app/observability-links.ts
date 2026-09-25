@@ -107,7 +107,7 @@ export class ObservabilityLinks {
       {
         name: 'Splunk',
         note: 'application logs',
-        ended: !!this.observability.status()?.splunk.disabled,
+        ended: this.ended('splunk'),
         href: `${ObservabilityLinks.SPLUNK}/en-US/app/search/search`
           + `?earliest=-30m&latest=now&q=${query}`
       },
@@ -120,7 +120,7 @@ export class ObservabilityLinks {
         // expression directly.
         name: 'Dynatrace',
         note: 'open Services or Kubernetes, not Logs; this agent ships none',
-        ended: !!this.observability.status()?.dynatrace.disabled,
+        ended: this.ended('dynatrace'),
         // The tenant root. The deep link this used to carry named an app id that
         // is not installed in this environment, and Dynatrace answered "This
         // application doesn't exist" rather than falling back to anything.
@@ -128,4 +128,10 @@ export class ObservabilityLinks {
       }
     ];
   });
+
+  /** Ended until the status says otherwise: a link to a dead tenant must not flash on load. */
+  private ended(vendor: 'splunk' | 'dynatrace'): boolean {
+    const status = this.observability.status();
+    return !status || !!status[vendor].disabled;
+  }
 }

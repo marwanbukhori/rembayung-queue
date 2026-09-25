@@ -388,14 +388,16 @@ Each step ships and is useful alone.
 
 The graph and inspector move from the cluster page to the simulation page, so
 a rush and what it does to the platform are watched on one screen. On desktop
-(≥1100px) the simulation page becomes two columns, chosen as layout A in the
-companion:
+(≥1280px) the simulation page becomes two columns, chosen as layout A in the
+companion. Graph and inspector sit side by side from 1650px, the width at
+which the graph keeps its 640px; between 1280 and 1649px the inspector sits
+under the graph. Measured, not estimated, on 2026-09-25:
 
 - **Left, the business side:** run panel, seat map and queue, live traffic.
 - **Right, the platform side:** the charts strip (step 3) on top, then the
   object graph and the inspector side by side.
 
-Under 1100px it is one column and the inspector is a drawer, as in step 1.
+Under 1280px it is one column and the inspector is a drawer, as in step 1.
 The cluster page keeps what explains rather than moves: the architecture
 diagram, the workloads table, the monitoring panel, the log scenarios and the
 CPU budget note. `?inspect=` deep links open the simulation page.
