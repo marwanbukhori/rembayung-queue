@@ -29,6 +29,7 @@ class FakeObjectSource implements ObjectSource {
     String log = "";
     RuntimeException failLogWith;
     int logReads;
+    int lastTail;
 
     @Override public Optional<GenericKubernetesResource> route(String name) { read(); return Optional.empty(); }
     @Override public Optional<Service> service(String name) { read(); return Optional.empty(); }
@@ -69,9 +70,10 @@ class FakeObjectSource implements ObjectSource {
     }
 
     @Override
-    public String podLog(String pod, int tailLines, int limitBytes) {
+    public String podLog(String pod, int tailLines) {
         read();
         logReads++;
+        lastTail = tailLines;
         if (failLogWith != null) {
             throw failLogWith;
         }

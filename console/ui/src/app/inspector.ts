@@ -65,7 +65,7 @@ import { LogLine, ObjectLink } from './state';
                   }
                 </div>
               }
-            } @else if (tab() === 'logs') {
+            } @else if (tab() === 'logs' && d.kind === 'pod') {
               @let page = inspector.logPage();
               <div class="log-filters" role="group" aria-label="Which lines">
                 @for (f of filters; track f) {
@@ -217,6 +217,13 @@ export class Inspector {
   constructor() {
     effect(() => this.inspector.logsOpen.set(this.tab() === 'logs'
       && this.inspector.selected()?.kind === 'pod'));
+    // The graph selects objects directly, without going through open(); a
+    // Deployment clicked while a pod's Logs tab was up must not inherit it.
+    effect(() => {
+      if (this.inspector.selected()?.kind !== 'pod' && this.tab() === 'logs') {
+        this.tab.set('overview');
+      }
+    });
     // Stay at the newest line unless the reader has scrolled up to read.
     effect(() => {
       this.inspector.logLines();

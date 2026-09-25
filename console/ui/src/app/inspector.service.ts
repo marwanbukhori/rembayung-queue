@@ -32,6 +32,14 @@ export class InspectorService {
   readonly logPage = signal<LogPage | null>(null);
   readonly logLines = signal<LogLine[]>([]);
   private cursor: string | null = null;
+  /**
+   * Bumped by every reset. A response from an older generation - sent before a
+   * filter change, a new pod, or the tab reopening - is dropped rather than
+   * appended with its cursor. Only one request is in flight at a time, so the
+   * 2s poll and a first-page request cannot both return the same lines.
+   */
+  private generation = 0;
+  private logsInFlight = false;
 
   constructor() {
     this.poll();
@@ -67,6 +75,8 @@ export class InspectorService {
   }
 
   private resetLogs(): void {
+    this.generation++;
+    this.logsInFlight = false;
     this.cursor = null;
     this.logLines.set([]);
     this.logPage.set(null);
@@ -74,15 +84,21 @@ export class InspectorService {
 
   private pollLogs(): void {
     const ref = this.selected();
-    if (!ref || ref.kind !== 'pod' || !this.logsOpen()) {
+    if (!ref || ref.kind !== 'pod' || !this.logsOpen() || this.logsInFlight) {
       return;
     }
+    const generation = this.generation;
+    this.logsInFlight = true;
     const params: Record<string, string> = { filter: this.logFilter() };
     if (this.cursor) {
       params['since'] = this.cursor;
     }
     this.http.get<LogPage>(`/api/pods/${encodeURIComponent(ref.name)}/logs`, { params }).subscribe({
       next: (page) => {
+        if (generation !== this.generation) {
+          return;
+        }
+        this.logsInFlight = false;
         if (this.selected() !== ref) {
           return;
         }
@@ -93,7 +109,11 @@ export class InspectorService {
           this.logLines.update((was) => [...was, ...page.lines].slice(-500));
         }
       },
-      error: () => {}
+      error: () => {
+        if (generation === this.generation) {
+          this.logsInFlight = false;
+        }
+      }
     });
   }
 

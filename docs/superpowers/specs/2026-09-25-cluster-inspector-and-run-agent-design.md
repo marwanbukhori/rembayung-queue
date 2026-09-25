@@ -416,3 +416,18 @@ trials ended.
 
 Step 2 is split: **2a** is §12.1 and §12.2; **2b** is the Logs tab (§5.4,
 §6.1, §6.2) and redis's "what it holds" line.
+
+### 12.4 Log rules as built (supersedes parts of §6.2)
+
+- **App events** are JSON lines carrying an `event` field (`queue.arrival`,
+  `booking.claimed`, …), not "our loggers at INFO plus any WARN/ERROR". Every
+  business moment in both services already logs one, and excluding WARN/ERROR
+  from the public view keeps raw exception text - which can carry anything -
+  behind the key.
+- **Masking** covers `+60` followed by 3–11 digits (the load test's short
+  numbers included) and bare `60` runs of 8–10 digits; a match keeps its first
+  five characters then `••••`. The spec's `\+?60\d{7,10}` missed the load
+  test's numbers.
+- **Redis pods** are shown whole to everyone: redis logs only its lifecycle.
+- The log read is capped by line count (500), not bytes: the API applies
+  `limitBytes` from the start of the tail, which dropped the newest lines.

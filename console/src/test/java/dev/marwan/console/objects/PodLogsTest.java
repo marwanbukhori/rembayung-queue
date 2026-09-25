@@ -126,4 +126,16 @@ class PodLogsTest {
         assertThat(page.detail()).contains("API server refused");
         assertThat(source.resets).isEqualTo(1);
     }
+
+    /**
+     * Review finding 1: the API applies limitBytes from the start of the tail,
+     * so a byte cap dropped the newest lines - and cut the last one in half -
+     * exactly during an error burst. The tail alone bounds the read.
+     */
+    @Test
+    void theReadAsksForTheTailByLineCountAlone() {
+        logs.read("booking-1", null, "all", true);
+
+        assertThat(source.lastTail).isEqualTo(PodLogs.TAIL);
+    }
 }

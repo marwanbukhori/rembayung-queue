@@ -122,11 +122,16 @@ class KubernetesObjectSource implements ObjectSource {
     }
 
     @Override
-    public String podLog(String pod, int tailLines, int limitBytes) {
+    public String podLog(String pod, int tailLines) {
         // usingTimestamps puts the kubelet's own time on every line, JSON or not,
         // which is what the page's cursor needs: redis prints plain text.
+        //
+        // No limitBytes. The API counts it from the start of the tail, so a byte
+        // cap dropped the newest lines - and cut the last one in half - during
+        // exactly the error bursts someone is watching. The tail bounds the read;
+        // LogLines cuts each message.
         return kubernetes.client().pods().inNamespace(ns()).withName(pod)
-                .usingTimestamps().limitBytes(limitBytes).tailingLines(tailLines).getLog();
+                .usingTimestamps().tailingLines(tailLines).getLog();
     }
 
     @Override

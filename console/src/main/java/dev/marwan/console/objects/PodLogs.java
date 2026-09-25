@@ -25,7 +25,6 @@ public class PodLogs {
 
     static final Duration TTL = Duration.ofSeconds(2);
     static final int TAIL = LogLines.MAX_LINES;
-    static final int LIMIT_BYTES = 512 * 1024;
     static final int FIRST_PAGE = 200;
     static final int MAX_PODS = 64;
     static final String REDIS_NOTE =
@@ -85,7 +84,7 @@ public class PodLogs {
         boolean redis = labels != null && "redis".equals(labels.get("app"));
         Snapshot fresh;
         try {
-            fresh = new Snapshot(LogLines.parse(source.podLog(pod, TAIL, LIMIT_BYTES)), redis, null, clock.instant());
+            fresh = new Snapshot(LogLines.parse(source.podLog(pod, TAIL)), redis, null, clock.instant());
         } catch (KubernetesClientException e) {
             if (e.getCode() == 400 && String.valueOf(e.getMessage()).contains("waiting to start")) {
                 fresh = new Snapshot(List.of(), redis, NOT_STARTED, clock.instant());
