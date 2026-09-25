@@ -85,6 +85,10 @@ spec:
             # key. Set to "false" to make the key private again.
             - name: CONSOLE_SHARE_KEY
               value: "true"
+            # The run agent: analyses each finished load run with the sandbox's
+            # shared Qwen3 model and stores the report in ConfigMap run-analyses.
+            - name: CONSOLE_AGENT_ENABLED
+              value: "true"
             - name: SPLUNK_DISABLED_REASON
               value: "Trial ended 2026-09-25. The Splunk Cloud host no longer resolves, so the console stopped probing it."
             # Stated, never inferred. The console introspects this namespace

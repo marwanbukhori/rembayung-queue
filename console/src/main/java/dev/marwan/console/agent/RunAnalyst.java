@@ -1,0 +1,127 @@
+package dev.marwan.console.agent;
+
+import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.api.model.batch.v1.JobCondition;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import dev.marwan.console.cluster.KubernetesAccess;
+import dev.marwan.console.objects.ObjectSource;
+
+/**
+ * Finds finished load runs that have no report and analyses them, one at a time.
+ *
+ * It reconciles rather than reacting to an event: every tick asks "which
+ * finished runs have no report?", so a console restart mid-analysis loses
+ * nothing - the next tick finds the same run again. A run is left alone until
+ * forty-five seconds after it ended, so the thirty seconds of tail the facts
+ * cover have been scraped by Prometheus.
+ *
+ * One analysis at a time, off the request path, on a virtual thread; a tick
+ * that finds one still going does nothing.
+ */
+public class RunAnalyst {
+
+    private static final Logger log = LoggerFactory.getLogger(RunAnalyst.class);
+    static final Duration TAIL = Duration.ofSeconds(30);
+    static final Duration SETTLE = Duration.ofSeconds(45);
+
+    private final ObjectSource objects;
+    private final Analyst analyst;
+    private final AnalysisStore store;
+    private final Clock clock;
+    private final AtomicBoolean busy = new AtomicBoolean();
+    private final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
+
+    public RunAnalyst(ObjectSource objects, Analyst analyst, AnalysisStore store, Clock clock) {
+        this.objects = objects;
+        this.analyst = analyst;
+        this.store = store;
+        this.clock = clock;
+    }
+
+    /** The scheduled entry point: start one reconcile unless one is already running. */
+    public void tick() {
+        if (busy.compareAndSet(false, true)) {
+            worker.submit(() -> {
+                try {
+                    reconcileOnce();
+                } finally {
+                    busy.set(false);
+                }
+            });
+        }
+    }
+
+    void reconcileOnce() {
+        try {
+            Set<String> done = store.jobs();
+            Instant now = clock.instant();
+            Optional<RunWindow> next = objects.jobs().stream()
+                    .filter(j -> "rembayung-load".equals(label(j, "app")))
+                    .filter(j -> !done.contains(j.getMetadata().getName()))
+                    .map(this::window).filter(Objects::nonNull)
+                    .filter(w -> !now.isBefore(w.end().minus(TAIL).plus(SETTLE)))
+                    .min(Comparator.comparing(RunWindow::start));
+            if (next.isEmpty()) {
+                return;
+            }
+            RunWindow w = next.get();
+            Analysis analysis = analyst.analyse(w);
+            store.put(analysis);
+            log.info("analysed {}: {} report in {} ms{}", w.job(), analysis.source(), analysis.millis(),
+                    analysis.note() == null ? "" : " (" + analysis.note() + ")");
+        } catch (RuntimeException e) {
+            log.warn("run analysis skipped this tick: {}", KubernetesAccess.summarise(e));
+        }
+    }
+
+    /** Start to end plus the tail, or null while the run is still going. */
+    private RunWindow window(Job job) {
+        if (job.getStatus() == null || job.getStatus().getStartTime() == null) {
+            return null;
+        }
+        Instant end = null;
+        if (job.getStatus().getCompletionTime() != null) {
+            end = Instant.parse(job.getStatus().getCompletionTime());
+        } else if (job.getStatus().getFailed() != null && job.getStatus().getFailed() > 0) {
+            end = Optional.ofNullable(job.getStatus().getConditions()).orElse(java.util.List.of()).stream()
+                    .filter(c -> "Failed".equals(c.getType()) && c.getLastTransitionTime() != null)
+                    .map(JobCondition::getLastTransitionTime).map(Instant::parse).findFirst()
+                    .orElse(clock.instant().minus(SETTLE));
+        }
+        if (end == null) {
+            return null;
+        }
+        return new RunWindow(job.getMetadata().getName(), dropId(job),
+                Instant.parse(job.getStatus().getStartTime()), end.plus(TAIL));
+    }
+
+    /** The drop as the run was given it; the label is a DNS-safe copy that may differ in case. */
+    private static String dropId(Job job) {
+        try {
+            return job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv().stream()
+                    .filter(e -> "DROP_ID".equals(e.getName())).map(EnvVar::getValue).findFirst()
+                    .orElse(label(job, "rembayung.dev/drop"));
+        } catch (RuntimeException e) {
+            return label(job, "rembayung.dev/drop");
+        }
+    }
+
+    private static String label(Job job, String key) {
+        return job.getMetadata().getLabels() == null ? null : job.getMetadata().getLabels().get(key);
+    }
+}

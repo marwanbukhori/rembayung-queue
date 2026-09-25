@@ -73,6 +73,13 @@ console:
     # here, so the pool cannot be grown out of the problem.
     cap: 20
   static-path: ${CONSOLE_STATIC_PATH:./ui/dist/ui/browser/}
+  # The run agent (dev.marwan.console.agent). Off by default: only the deployed
+  # console, which can see the namespace and reach the model, switches it on.
+  agent:
+    enabled: ${CONSOLE_AGENT_ENABLED:false}
+    base-url: ${CONSOLE_AGENT_BASE_URL:https://isvc-qwen3-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1}
+    model: ${CONSOLE_AGENT_MODEL:isvc-qwen3-8b-fp8}
+    interval: 10s
 
 management:
   server:
