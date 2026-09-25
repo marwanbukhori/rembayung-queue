@@ -89,7 +89,7 @@ public class RunAnalyst {
             try {
                 store.put(analyst.reanalyse(new RunWindow(a.job(), a.dropId(), a.start(), a.end()), a.facts()));
             } catch (RuntimeException e) {
-                log.warn("re-analysis of {} failed: {}", id, KubernetesAccess.summarise(e));
+                log.warn("re-analysis of {} failed: {}", id, rootCause(e));
             } finally {
                 busy.set(false);
             }
@@ -118,8 +118,7 @@ public class RunAnalyst {
                 store.put(analysis);
             } catch (RuntimeException e) {
                 int tries = failures.merge(w.key(), 1, Integer::sum);
-                log.warn("analysis of {} failed (try {} of {}): {}", w.key(), tries, MAX_TRIES,
-                        KubernetesAccess.summarise(e));
+                log.warn("analysis of {} failed (try {} of {}): {}", w.key(), tries, MAX_TRIES, rootCause(e));
                 return;
             }
             log.info("analysed {}: {} report in {} ms{}", w.job(), analysis.source(), analysis.millis(),
@@ -127,6 +126,15 @@ public class RunAnalyst {
         } catch (RuntimeException e) {
             log.warn("run analysis skipped this tick: {}", KubernetesAccess.summarise(e));
         }
+    }
+
+    /** fabric8 wraps everything in "An error has occurred."; the innermost cause says what happened. */
+    static String rootCause(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        return KubernetesAccess.summarise(e) + (t == e ? "" : " (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ")");
     }
 
     /** Stops the worker with the application context. */

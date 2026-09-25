@@ -42,9 +42,12 @@ class AnalysisStoreTest {
             stored = map;
         }
 
+        ConfigMap lastUpdate;
+
         @Override
         public void update(ConfigMap map) {
             writes++;
+            lastUpdate = map;
             if (conflictsToThrow > 0) {
                 // Someone else wrote first: the stored object moves to a newer version.
                 conflictsToThrow--;
@@ -78,6 +81,21 @@ class AnalysisStoreTest {
         assertThat(store.list()).extracting(Analysis::job).containsExactlyInAnyOrder("load-a", "load-b");
         assertThat(store.get("load-a")).isPresent();
         assertThat(store.list()).extracting(Analysis::job).containsExactly("load-b", "load-a");
+    }
+
+    /** fabric8's serialiser fails on managedFields as read back from the API; an update must not carry them. */
+    @Test
+    void anUpdateSendsACleanObjectWithoutTheServersBookkeeping() {
+        FakePort port = new FakePort();
+        AnalysisStore store = new AnalysisStore(port);
+        store.put(analysis("load-a", Instant.parse("2026-09-25T10:00:00Z"), null));
+        port.stored.getMetadata().setManagedFields(List.of(new io.fabric8.kubernetes.api.model.ManagedFieldsEntry()));
+
+        store.put(analysis("load-b", Instant.parse("2026-09-25T11:00:00Z"), null));
+
+        assertThat(port.lastUpdate.getMetadata().getManagedFields()).isNullOrEmpty();
+        assertThat(port.lastUpdate.getMetadata().getResourceVersion()).isNotNull();
+        assertThat(port.lastUpdate.getMetadata().getLabels()).containsEntry("app.kubernetes.io/component", "run-analysis");
     }
 
     @Test

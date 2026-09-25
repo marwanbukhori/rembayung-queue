@@ -91,13 +91,16 @@ public class AnalysisStore {
                             .orElse(java.time.Instant.EPOCH)))
                     .ifPresent(oldest -> data.remove(oldest.getKey()));
         }
+        // A fresh object either way, carrying only what this owns plus the version it read:
+        // fabric8's serialiser fails on the managedFields the API returns with every object.
+        ConfigMapBuilder map = new ConfigMapBuilder().withNewMetadata().withName(NAME)
+                .addToLabels("app.kubernetes.io/component", "run-analysis")
+                .withResourceVersion(existing.map(c -> c.getMetadata().getResourceVersion()).orElse(null))
+                .endMetadata().withData(data);
         if (existing.isEmpty()) {
-            port.create(new ConfigMapBuilder().withNewMetadata().withName(NAME)
-                    .addToLabels("app.kubernetes.io/component", "run-analysis").endMetadata().withData(data).build());
+            port.create(map.build());
         } else {
-            ConfigMap map = existing.get();
-            map.setData(data);
-            port.update(map);
+            port.update(map.build());
         }
     }
 
