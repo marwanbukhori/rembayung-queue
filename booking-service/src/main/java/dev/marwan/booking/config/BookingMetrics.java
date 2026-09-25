@@ -46,6 +46,8 @@ public class BookingMetrics implements MeterBinder {
      */
     static final Duration MAX_AGE = Duration.ofSeconds(5);
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BookingMetrics.class);
+
     private final SlotStateProvider provider;
     private final Supplier<Instant> now;
     private volatile Snapshot snapshot;
@@ -77,7 +79,19 @@ public class BookingMetrics implements MeterBinder {
         synchronized (this) {
             held = snapshot;
             if (held == null || !held.at().plus(MAX_AGE).isAfter(at)) {
-                held = new Snapshot(provider.permanentStates(), at);
+                Map<Long, SlotState> states;
+                try {
+                    states = provider.permanentStates();
+                } catch (RuntimeException e) {
+                    // Remembered for MAX_AGE like a success. Otherwise every
+                    // gauge retries in turn, under this lock, against a pool
+                    // that is already exhausted - twenty tries at Hikari's
+                    // timeout, during the rush that caused the failure. The last
+                    // known states stand in meanwhile.
+                    log.warn("slot gauges could not be refreshed, keeping the last reading: {}", e.toString());
+                    states = held == null ? Map.of() : held.states();
+                }
+                held = new Snapshot(states, at);
                 snapshot = held;
             }
             return held.states();

@@ -13,9 +13,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -93,22 +93,51 @@ class BookingMetricsTest {
      */
     @Test
     void aScrapeOfEverySlotCostsOneQuery() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-09-25T10:00:00Z"));
         SlotStateProvider provider = mock(SlotStateProvider.class);
         when(provider.permanentStates()).thenReturn(Map.of(
                 1L, SlotState.of(1L, 250, 10), 2L, SlotState.of(2L, 100, 5), 3L, SlotState.of(3L, 50, 50)));
         MeterRegistry registry = new SimpleMeterRegistry();
-        new BookingMetrics(provider, () -> Instant.parse("2026-09-25T10:00:00Z")).bindTo(registry);
+        new BookingMetrics(provider, now::get).bindTo(registry);
+        // Stale, so this scrape must load - exactly once for all twelve values.
+        now.set(now.get().plusSeconds(6));
         clearInvocations(provider);
 
+        readAll(registry);
+
+        verify(provider, times(1)).permanentStates();
+        verify(provider, never()).stateFor(anyLong());
+    }
+
+    /**
+     * Review finding: a failing query was retried by every gauge in turn, under
+     * the lock - twenty tries at Hikari's two-second timeout, against the pool,
+     * during the rush that exhausted it. A failure is remembered for MAX_AGE too.
+     */
+    @Test
+    void aFailingQueryIsTriedOncePerScrapeNotOncePerGauge() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-09-25T10:00:00Z"));
+        SlotStateProvider provider = mock(SlotStateProvider.class);
+        when(provider.permanentStates()).thenReturn(Map.of(
+                1L, SlotState.of(1L, 250, 10), 2L, SlotState.of(2L, 100, 5), 3L, SlotState.of(3L, 50, 50)));
+        MeterRegistry registry = new SimpleMeterRegistry();
+        new BookingMetrics(provider, now::get).bindTo(registry);
+        when(provider.permanentStates()).thenThrow(new IllegalStateException("Connection is not available"));
+        now.set(now.get().plusSeconds(6));
+        clearInvocations(provider);
+
+        readAll(registry);
+
+        verify(provider, times(1)).permanentStates();
+    }
+
+    private static void readAll(MeterRegistry registry) {
         for (String name : List.of("rembayung_slot_capacity", "rembayung_slot_seats_taken",
                 "rembayung_slot_remaining", "rembayung_slot_oversold")) {
             for (String slot : List.of("1", "2", "3")) {
                 registry.get(name).tag("slot", slot).gauge().value();
             }
         }
-
-        verify(provider, atMost(1)).permanentStates();
-        verify(provider, never()).stateFor(anyLong());
     }
 
     /** The trade for that: a value is at most five seconds old, not computed at the scrape. */
