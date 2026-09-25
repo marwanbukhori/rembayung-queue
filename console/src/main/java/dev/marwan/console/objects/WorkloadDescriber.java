@@ -181,7 +181,7 @@ final class WorkloadDescriber {
                 ? NONE : Facts.age(h.getStatus().getLastScaleTime(), now) + " ago"));
         conditions(h).forEach(c -> facts.add(new ObjectDetail.Fact(c.getType(),
                 c.getStatus() + (c.getReason() == null ? "" : " (" + c.getReason() + ")"),
-                "True".equals(c.getStatus()) ? null : BAD)));
+                conditionTone(c))));
 
         String target = h.getSpec().getScaleTargetRef() == null
                 ? name : h.getSpec().getScaleTargetRef().getName();
@@ -283,6 +283,19 @@ final class WorkloadDescriber {
         } catch (RuntimeException e) {
             return 0;
         }
+    }
+
+    /**
+     * AbleToScale and ScalingActive are healthy when True. ScalingLimited is the
+     * other way round: True means the autoscaler is pinned at min or max, which
+     * is worth a look but is not a failure.
+     */
+    private static String conditionTone(HorizontalPodAutoscalerCondition c) {
+        boolean isTrue = "True".equals(c.getStatus());
+        if ("ScalingLimited".equals(c.getType())) {
+            return isTrue ? WARN : null;
+        }
+        return isTrue ? null : BAD;
     }
 
     /** "2 of 2-4": current replicas of the allowed range. */

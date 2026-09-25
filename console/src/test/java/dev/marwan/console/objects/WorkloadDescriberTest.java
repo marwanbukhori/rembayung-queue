@@ -157,6 +157,33 @@ class WorkloadDescriberTest {
                 .contains(tuple("Next run", "2026-09-25T10:00:00Z"));
     }
 
+    /**
+     * ScalingLimited reads the other way round from the rest: True means the
+     * autoscaler is being held at min or max, False is the healthy state. It was
+     * shown red on a healthy HPA on the live site on 2026-09-25.
+     */
+    @Test
+    void scalingLimitedFalseIsHealthyAndTrueIsAWarning() {
+        HorizontalPodAutoscaler healthy = hpaWithCondition("ScalingLimited", "False", "DesiredWithinRange");
+        HorizontalPodAutoscaler pinned = hpaWithCondition("ScalingLimited", "True", "TooManyReplicas");
+
+        assertThat(fact(WorkloadDescriber.hpa(healthy, NOW), "ScalingLimited").tone()).isNull();
+        assertThat(fact(WorkloadDescriber.hpa(pinned, NOW), "ScalingLimited").tone()).isEqualTo(ObjectDetail.WARN);
+    }
+
+    private static HorizontalPodAutoscaler hpaWithCondition(String type, String status, String reason) {
+        return new HorizontalPodAutoscalerBuilder()
+                .withNewMetadata().withName("queue-gate").endMetadata()
+                .withNewSpec().withMinReplicas(2).withMaxReplicas(10).endSpec()
+                .withNewStatus().withCurrentReplicas(2)
+                    .addNewCondition().withType(type).withStatus(status).withReason(reason).endCondition()
+                .endStatus().build();
+    }
+
+    private static ObjectDetail.Fact fact(ObjectDetail detail, String label) {
+        return detail.facts().stream().filter(f -> f.label().equals(label)).findFirst().orElseThrow();
+    }
+
     private static Deployment deployment(String name, int desired, Integer available) {
         return new DeploymentBuilder()
                 .withNewMetadata().withName(name).endMetadata()

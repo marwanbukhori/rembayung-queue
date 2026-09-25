@@ -172,7 +172,8 @@ export class ObjectGraph {
     if (!cluster?.available) {
       return '—';
     }
-    const scaler = cluster.autoscalers.find((a) => a.name === name);
+    // /api/cluster names them hpa/<name>; matching the bare name found none.
+    const scaler = cluster.autoscalers.find((a) => a.name === name || a.name === `hpa/${name}`);
     return scaler ? `${scaler.current} of ${scaler.min}–${scaler.max}` : '—';
   }
 
