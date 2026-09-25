@@ -1,6 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { InspectorService } from './inspector.service';
-import { ObjectLink } from './state';
+import { LogLine, ObjectLink } from './state';
 
 /**
  * The right-hand column of the cluster page: whatever object was clicked.
@@ -41,6 +41,9 @@ import { ObjectLink } from './state';
 
             <div class="tabs" role="tablist">
               <button role="tab" [class.on]="tab() === 'overview'" (click)="tab.set('overview')">Overview</button>
+              @if (d.kind === 'pod') {
+                <button role="tab" [class.on]="tab() === 'logs'" (click)="showLogs()">Logs</button>
+              }
               <button role="tab" [class.on]="tab() === 'events'" (click)="tab.set('events')">
                 Events ({{ d.events.length }})
               </button>
@@ -62,6 +65,40 @@ import { ObjectLink } from './state';
                   }
                 </div>
               }
+            } @else if (tab() === 'logs') {
+              @let page = inspector.logPage();
+              <div class="log-filters" role="group" aria-label="Which lines">
+                @for (f of filters; track f) {
+                  <button [class.on]="(page?.filter ?? inspector.logFilter()) === f"
+                          [disabled]="!!page?.restricted && f !== 'events'"
+                          [title]="page?.restricted && f !== 'events' ? 'Needs the console key' : ''"
+                          (click)="inspector.setLogFilter(f)">{{ f }}</button>
+                }
+              </div>
+              @if (page?.note) {
+                <p class="quiet">{{ page?.note }}</p>
+              }
+              @if (page && !page.available) {
+                <p class="pill bad">not readable: {{ page.detail }}</p>
+              }
+              <div class="log" #logBox (scroll)="follow = atBottom(logBox)">
+                @for (l of inspector.logLines(); track $index) {
+                  <div class="log-line" [class.warn]="l.level === 'WARN'" [class.err]="l.level === 'ERROR'">
+                    <span class="when">{{ localTime(l.at) }}</span>
+                    @if (l.event) {
+                      <span class="ev">{{ l.event }}</span>
+                    } @else if (l.level) {
+                      <span class="lvl">{{ l.level }}</span>
+                    }
+                    <span class="msg">{{ l.message }}</span>
+                    @for (kv of fieldsOf(l); track kv[0]) {
+                      <span class="kv">{{ kv[0] }}={{ kv[1] }}</span>
+                    }
+                  </div>
+                } @empty {
+                  <p class="quiet">{{ page ? 'Nothing yet. New lines appear here as they are written.' : 'Reading…' }}</p>
+                }
+              </div>
             } @else {
               @if (d.events.length === 0) {
                 <p class="quiet">No recent events. Kubernetes keeps them for about an hour.</p>
@@ -132,6 +169,21 @@ import { ObjectLink } from './state';
     .events li.warn .reason { color: var(--chip-bad-fg); font-weight: 700; }
     .when { color: var(--muted); font-size: 12px; }
     .quiet { color: var(--muted); font-size: 13px; }
+    .log-filters { display: flex; gap: 6px; margin-bottom: 8px; }
+    .log-filters button { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+                          background: var(--white); color: var(--ink); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+    .log-filters button.on { border-color: var(--ink); font-weight: 700; }
+    .log-filters button:disabled { opacity: .45; cursor: not-allowed; }
+    .log { max-height: 420px; overflow: auto; background: #1d1d1d; color: #d7e6df; border-radius: 6px;
+           padding: 8px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+    .log .quiet { color: #9aa; }
+    .log-line { white-space: pre-wrap; word-break: break-word; }
+    .log-line .when { color: #8a9; margin-right: 8px; }
+    .log-line .ev { color: #7fd1a8; margin-right: 6px; }
+    .log-line .lvl { color: #9ab; margin-right: 6px; }
+    .log-line.warn .lvl, .log-line.warn .msg { color: #f6c26b; }
+    .log-line.err .lvl, .log-line.err .msg { color: #ff8a80; }
+    .log-line .kv { color: #9ab; margin-left: 6px; }
     .gone { font-size: 14px; }
     .link { background: none; border: 0; color: var(--chip-info-fg); cursor: pointer; padding: 0; font-size: 14px; }
     .empty .row { display: grid; grid-template-columns: 10px 1fr; gap: 2px 8px; width: 100%; text-align: left;
@@ -157,7 +209,47 @@ import { ObjectLink } from './state';
 })
 export class Inspector {
   protected readonly inspector = inject(InspectorService);
-  protected readonly tab = signal<'overview' | 'events'>('overview');
+  protected readonly tab = signal<'overview' | 'logs' | 'events'>('overview');
+  protected readonly filters = ['all', 'warn', 'events'] as const;
+  protected follow = true;
+  private readonly logBox = viewChild<ElementRef<HTMLElement>>('logBox');
+
+  constructor() {
+    effect(() => this.inspector.logsOpen.set(this.tab() === 'logs'
+      && this.inspector.selected()?.kind === 'pod'));
+    // Stay at the newest line unless the reader has scrolled up to read.
+    effect(() => {
+      this.inspector.logLines();
+      const box = this.logBox()?.nativeElement;
+      if (box && this.follow) {
+        queueMicrotask(() => (box.scrollTop = box.scrollHeight));
+      }
+    });
+  }
+
+  protected showLogs(): void {
+    this.tab.set('logs');
+    this.follow = true;
+    // The effect above flips logsOpen on the next tick; ask for lines after it.
+    queueMicrotask(() => this.inspector.openLogs());
+  }
+
+  protected atBottom(box: HTMLElement): boolean {
+    return box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  }
+
+  protected fieldsOf(l: LogLine): [string, string][] {
+    return Object.entries(l.fields ?? {});
+  }
+
+  /** The reader's own clock, like the traffic log. The kubelet's nanoseconds are trimmed to what Date parses. */
+  protected localTime(at: string | null): string {
+    if (!at) {
+      return '—';
+    }
+    const d = new Date(at.slice(0, 23) + 'Z');
+    return isNaN(d.getTime()) ? at.slice(11, 19) : d.toLocaleTimeString([], { hour12: false });
+  }
 
   /** Where a vanished pod came from, guessed from its name, so the reader has somewhere to go. */
   protected readonly owner = computed<ObjectLink | null>(() => {

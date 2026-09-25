@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
-import { ObjectDetail, ObjectRef, ObjectSummary } from './state';
+import { LogLine, LogPage, ObjectDetail, ObjectRef, ObjectSummary } from './state';
 
 /** Matches the console's two-second cache; faster would only re-read it. */
 const POLL_MILLIS = 2000;
@@ -26,6 +26,13 @@ export class InspectorService {
   readonly gone = signal(false);
   readonly recentJobs = signal<ObjectSummary[]>([]);
 
+  /** Set by the inspector while a pod's Logs tab is on screen; only then are logs polled. */
+  readonly logsOpen = signal(false);
+  readonly logFilter = signal<'all' | 'warn' | 'events'>('all');
+  readonly logPage = signal<LogPage | null>(null);
+  readonly logLines = signal<LogLine[]>([]);
+  private cursor: string | null = null;
+
   constructor() {
     this.poll();
     const timer = setInterval(() => this.poll(), POLL_MILLIS);
@@ -36,6 +43,7 @@ export class InspectorService {
     this.selected.set(ref);
     this.detail.set(null);
     this.gone.set(false);
+    this.resetLogs();
     const url = new URL(window.location.href);
     if (ref) {
       url.searchParams.set(PARAM, `${ref.kind}/${ref.name}`);
@@ -46,7 +54,51 @@ export class InspectorService {
     this.poll();
   }
 
+  setLogFilter(filter: 'all' | 'warn' | 'events'): void {
+    this.logFilter.set(filter);
+    this.resetLogs();
+    this.pollLogs();
+  }
+
+  /** Called when the Logs tab opens, so the reader does not wait a whole poll for the first lines. */
+  openLogs(): void {
+    this.resetLogs();
+    this.pollLogs();
+  }
+
+  private resetLogs(): void {
+    this.cursor = null;
+    this.logLines.set([]);
+    this.logPage.set(null);
+  }
+
+  private pollLogs(): void {
+    const ref = this.selected();
+    if (!ref || ref.kind !== 'pod' || !this.logsOpen()) {
+      return;
+    }
+    const params: Record<string, string> = { filter: this.logFilter() };
+    if (this.cursor) {
+      params['since'] = this.cursor;
+    }
+    this.http.get<LogPage>(`/api/pods/${encodeURIComponent(ref.name)}/logs`, { params }).subscribe({
+      next: (page) => {
+        if (this.selected() !== ref) {
+          return;
+        }
+        this.logPage.set(page);
+        if (page.available) {
+          this.cursor = page.latest;
+          // The tab keeps at most 500 lines, newest last, like the server.
+          this.logLines.update((was) => [...was, ...page.lines].slice(-500));
+        }
+      },
+      error: () => {}
+    });
+  }
+
   private poll(): void {
+    this.pollLogs();
     const ref = this.selected();
     if (!ref) {
       this.http.get<ObjectSummary[]>('/api/objects', { params: { kind: 'job' } }).subscribe({

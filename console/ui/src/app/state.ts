@@ -231,3 +231,22 @@ export interface ObjectSummary {
   headline: string;
   at: string | null;
 }
+
+export interface LogLine {
+  at: string | null;
+  level: string | null;
+  message: string;
+  event: string | null;
+  fields: Record<string, string>;
+}
+
+export interface LogPage {
+  pod: string;
+  available: boolean;
+  detail: string | null;
+  filter: 'all' | 'warn' | 'events';
+  restricted: boolean;
+  note: string | null;
+  lines: LogLine[];
+  latest: string | null;
+}
