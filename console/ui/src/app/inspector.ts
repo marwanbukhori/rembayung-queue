@@ -1,5 +1,8 @@
-import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { LoadMore } from './load-more';
+import { Analysis, AnalysisService } from './analysis';
+import { AnalysisReport } from './analysis-report';
+import { hasConsoleKey } from './key';
 import { InspectorService } from './inspector.service';
 import { LogLine, ObjectLink } from './state';
 import { malaysiaTime } from './time';
@@ -17,7 +20,7 @@ import { malaysiaTime } from './time';
  */
 @Component({
   selector: 'rb-inspector',
-  imports: [LoadMore],
+  imports: [AnalysisReport, LoadMore],
   template: `
     <aside class="inspector" [class.open]="!!inspector.selected()">
       @if (inspector.selected(); as ref) {
@@ -51,6 +54,9 @@ import { malaysiaTime } from './time';
               <button role="tab" [class.on]="tab() === 'events'" (click)="tab.set('events')">
                 Events ({{ d.events.length }})
               </button>
+              @if (isLoadRun()) {
+                <button role="tab" [class.on]="tab() === 'analysis'" (click)="showAnalysis()">Analysis</button>
+              }
             </div>
 
             @if (tab() === 'overview') {
@@ -68,6 +74,25 @@ import { malaysiaTime } from './time';
                     </button>
                   }
                 </div>
+              }
+            } @else if (tab() === 'analysis' && isLoadRun()) {
+              @let state = analysis();
+              @if (state === 'loading') {
+                <p class="quiet">Reading…</p>
+              } @else if (state === 'pending') {
+                <p class="quiet">
+                  No report yet. The agent writes one within about a minute of a run finishing;
+                  this checks again every ten seconds.
+                </p>
+              } @else if (state === 'error') {
+                <p class="pill bad">The report could not be read.</p>
+              } @else if (state) {
+                <rb-analysis-report [analysis]="state" />
+                @if (keyed) {
+                  <button class="link rerun" [disabled]="rerunning()" (click)="rerun(state.job)">
+                    {{ rerunning() ? 'Re-analysing…' : 'Re-analyse this run' }}
+                  </button>
+                }
               }
             } @else if (tab() === 'logs' && d.kind === 'pod') {
               @let page = inspector.logPage();
@@ -195,6 +220,7 @@ import { malaysiaTime } from './time';
     .log-line.err .lvl, .log-line.err .msg { color: #ff8a80; }
     .log-line .kv { color: #9ab; margin-left: 6px; }
     .gone { font-size: 14px; }
+    .rerun { margin-top: 14px; }
     .more { list-style: none; grid-template-columns: 1fr !important; text-align: center; font-size: 12px;
             color: var(--muted); cursor: pointer; padding: 4px 0; }
     .log .more { color: #8a9; }
@@ -230,9 +256,20 @@ import { malaysiaTime } from './time';
 })
 export class Inspector {
   protected readonly inspector = inject(InspectorService);
-  protected readonly tab = signal<'overview' | 'logs' | 'events'>('overview');
+  protected readonly tab = signal<'overview' | 'logs' | 'events' | 'analysis'>('overview');
   protected readonly filters = ['all', 'warn', 'events'] as const;
   protected follow = true;
+  private readonly analyses = inject(AnalysisService);
+  protected readonly keyed = hasConsoleKey();
+  /** The Analysis tab's report, or where fetching it has got to. */
+  protected readonly analysis = signal<Analysis | 'loading' | 'pending' | 'error' | null>(null);
+  protected readonly rerunning = signal(false);
+  private analysisTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly stopTimer = inject(DestroyRef).onDestroy(() => clearTimeout(this.analysisTimer));
+  protected readonly isLoadRun = computed(() => {
+    const ref = this.inspector.selected();
+    return ref?.kind === 'job' && ref.name.startsWith('load-');
+  });
   /** Five at a time: events newest first, logs the newest five and older on scroll up. */
   protected readonly eventsShown = signal(5);
   protected readonly logsShown = signal(5);
@@ -251,6 +288,11 @@ export class Inspector {
         this.logsShown.set(5);
         this.logCount = 0;
         this.follow = true;
+        clearTimeout(this.analysisTimer);
+        this.analysis.set(null);
+        if (this.tab() === 'analysis' && this.isLoadRun()) {
+          queueMicrotask(() => this.showAnalysis());
+        }
       });
     });
     effect(() => this.inspector.logsOpen.set(this.tab() === 'logs'
@@ -259,6 +301,9 @@ export class Inspector {
     // Deployment clicked while a pod's Logs tab was up must not inherit it.
     effect(() => {
       if (this.inspector.selected()?.kind !== 'pod' && this.tab() === 'logs') {
+        this.tab.set('overview');
+      }
+      if (!this.isLoadRun() && this.tab() === 'analysis') {
         this.tab.set('overview');
       }
     });
@@ -281,6 +326,48 @@ export class Inspector {
       if (box && this.follow) {
         queueMicrotask(() => (box.scrollTop = box.scrollHeight));
       }
+    });
+  }
+
+  protected showAnalysis(): void {
+    this.tab.set('analysis');
+    this.analysis.set('loading');
+    this.fetchAnalysis();
+  }
+
+  /** Fetch the selected run's report; while there is none yet, look again every ten seconds. */
+  private fetchAnalysis(): void {
+    clearTimeout(this.analysisTimer);
+    const ref = this.inspector.selected();
+    if (!ref || this.tab() !== 'analysis') {
+      return;
+    }
+    this.analyses.get(ref.name).subscribe({
+      next: a => {
+        if (this.inspector.selected() === ref) {
+          this.analysis.set(a);
+        }
+      },
+      error: (e: { status?: number }) => {
+        if (this.inspector.selected() !== ref) {
+          return;
+        }
+        this.analysis.set(e.status === 404 ? 'pending' : 'error');
+        if (e.status === 404) {
+          this.analysisTimer = setTimeout(() => this.fetchAnalysis(), 10_000);
+        }
+      }
+    });
+  }
+
+  protected rerun(job: string): void {
+    this.rerunning.set(true);
+    this.analyses.rerun(job).subscribe({
+      next: () => setTimeout(() => {
+        this.rerunning.set(false);
+        this.fetchAnalysis();
+      }, 20_000),
+      error: () => this.rerunning.set(false)
     });
   }
 

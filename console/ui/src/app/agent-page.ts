@@ -1,4 +1,6 @@
-import { Component, output, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { Analysis, AnalysisService, AnalysisSummary } from './analysis';
+import { AnalysisReport } from './analysis-report';
 
 interface Fact { id: string; source: string; label: string; value: string }
 interface Claim { text: string; facts: string[] }
@@ -20,6 +22,7 @@ interface Step { tool: string; why: string; found: string }
  */
 @Component({
   selector: 'rb-agent-page',
+  imports: [AnalysisReport],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -28,15 +31,42 @@ interface Step { tool: string; why: string; found: string }
         <span style="color: var(--ink);">AI Agent</span>
       </div>
       <div>
-        <h1>AI Agent <span class="badge">In progress</span></h1>
+        <h1>AI Agent
+          @if (live()) {
+            <span class="badge live">Live</span>
+          } @else {
+            <span class="badge">In progress</span>
+          }
+        </h1>
         <p class="lede">
           After every rush, an agent inside the console gathers the facts, investigates with up to
           five read-only tool calls, and writes a short report on what went well, what it caught, and what
           to look at. Every number in the report must come from a fact it cites; when the model cannot
-          manage that, the run still gets a plain report built from the facts alone. This page is the
-          design. The agent itself is being built.
+          manage that, the run still gets a plain report built from the facts alone.
+          @if (latest()) {
+            It is running: below is the report on the latest rush, then how it works.
+          } @else {
+            Nothing has been analysed yet, so this page shows the design and a hand-written example;
+            start a rush and its report appears here about a minute after it ends.
+          }
         </p>
       </div>
+
+      @if (latest(); as a) {
+        <section class="card pad">
+          <div class="report-head">
+            <h2>Latest real report</h2>
+            <span class="badge soft mono">{{ a.job }}</span>
+          </div>
+          <rb-analysis-report [analysis]="a" />
+          @if (runs().length > 1) {
+            <p class="note older">
+              {{ runs().length - 1 }} earlier {{ runs().length === 2 ? 'run is' : 'runs are' }} kept; open any
+              load run in the simulation page's inspector to read its report.
+            </p>
+          }
+        </section>
+      }
 
       <section class="card pad">
         <h2>The loop</h2>
@@ -86,7 +116,7 @@ interface Step { tool: string; why: string; found: string }
 
       <section class="card pad">
         <div class="report-head">
-          <h2>An example report</h2>
+          <h2>{{ latest() ? 'The example this was designed from' : 'An example report' }}</h2>
           <span class="badge soft">Example, written by hand</span>
         </div>
         <p class="note">
@@ -143,6 +173,8 @@ interface Step { tool: string; why: string; found: string }
     .pad { padding: 20px 24px; }
     .badge { font-size: 13px; font-weight: 700; letter-spacing: .02em; padding: 4px 10px; border-radius: 999px;
              background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
+    .badge.live { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+    .older { margin-top: 12px; }
     .badge.soft { background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); font-weight: 600; }
     .note { font-size: 14px; color: var(--ink-soft); margin: 0 0 8px; text-wrap: pretty; }
     .mono { font-family: var(--mono); }
@@ -178,8 +210,26 @@ interface Step { tool: string; why: string; found: string }
     }
   `
 })
-export class AgentPage {
+export class AgentPage implements OnInit {
   readonly home = output<void>();
+
+  private readonly analyses = inject(AnalysisService);
+  protected readonly runs = signal<AnalysisSummary[]>([]);
+  protected readonly latest = signal<Analysis | null>(null);
+  /** Live once the model itself has written a report that passed validation. */
+  protected readonly live = computed(() => this.runs().some(r => r.source === 'model'));
+
+  ngOnInit(): void {
+    this.analyses.list().subscribe({
+      next: runs => {
+        this.runs.set(runs);
+        if (runs.length) {
+          this.analyses.get(runs[0].job).subscribe({ next: a => this.latest.set(a), error: () => {} });
+        }
+      },
+      error: () => {}
+    });
+  }
 
   /** Which chip is open, keyed by claim and fact, so one click opens one place. */
   protected readonly openFact = signal<string | null>(null);
