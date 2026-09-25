@@ -105,9 +105,28 @@ class ObservabilityProbeTest {
                 .isEqualTo("a JVM, but not instrumented - no traces from it");
     }
 
+    /**
+     * An ended trial is a decision, not an outage. With a reason configured the
+     * collector is not probed at all - its host no longer resolves, and asking
+     * it every fifteen seconds only produced "Could not reach the collector",
+     * which reads as broken.
+     */
+    @Test
+    void aDisabledSplunkSaysWhyAndIsNotProbed() {
+        ObservabilityProbe probe = new ObservabilityProbe(null, "https://splunk.invalid:8088", "t",
+                "https://abc12345.apps.dynatrace.com", "", "Trial ended 2026-09-25", true);
+
+        ObservabilityStatus.Splunk splunk = probe.splunk(List.of(pod("queue-gate", "spring-boot")));
+
+        assertThat(splunk.disabled()).isEqualTo("Trial ended 2026-09-25");
+        assertThat(splunk.reachable()).isFalse();
+        assertThat(splunk.detail()).isEqualTo("Trial ended 2026-09-25");
+        assertThat(splunk.latencyMs()).isEqualTo(-1);
+    }
+
     private static ObservabilityProbe probe(String disabledReason) {
         return new ObservabilityProbe(null, "", "", "https://abc12345.apps.dynatrace.com",
-                disabledReason, true);
+                disabledReason, "", true);
     }
 
     private static Pod pod(String app, String runtime) {

@@ -72,6 +72,7 @@ public class ObservabilityProbe {
     private final String hecToken;
     private final String dynatraceTenant;
     private final String dynatraceDisabled;
+    private final String splunkDisabled;
     private final boolean trustSelfSigned;
 
     private volatile Snapshot cache;
@@ -84,6 +85,7 @@ public class ObservabilityProbe {
                               @Value("${console.dynatrace-tenant:https://icp44821.apps.dynatrace.com}")
                               String dynatraceTenant,
                               @Value("${DYNATRACE_DISABLED_REASON:}") String dynatraceDisabled,
+                              @Value("${SPLUNK_DISABLED_REASON:}") String splunkDisabled,
                               @Value("${console.splunk.trust-self-signed:true}")
                               boolean trustSelfSigned) {
         this.kube = kube;
@@ -92,6 +94,8 @@ public class ObservabilityProbe {
         this.dynatraceTenant = dynatraceTenant;
         this.dynatraceDisabled = dynatraceDisabled == null || dynatraceDisabled.isBlank()
                 ? null : dynatraceDisabled.trim();
+        this.splunkDisabled = splunkDisabled == null || splunkDisabled.isBlank()
+                ? null : splunkDisabled.trim();
         this.trustSelfSigned = trustSelfSigned;
     }
 
@@ -135,17 +139,26 @@ public class ObservabilityProbe {
 
     // ---------------------------------------------------------------- Splunk
 
-    private ObservabilityStatus.Splunk splunk(List<Pod> pods) {
+    ObservabilityStatus.Splunk splunk(List<Pod> pods) {
         List<ObservabilityStatus.Feed> shippers = feedsFrom(pods, (pod, container) -> {
             boolean wired = env(container, SPLUNK_ENV) != null;
             return new ObservabilityStatus.Feed(workloadOf(pod), wired,
                     wired ? "ships logs over HEC" : "no " + SPLUNK_ENV + " in the container");
         });
 
+        // Switched off on purpose: say why and do not ask. The Splunk Cloud
+        // trial's host stopped resolving on 2026-09-25, and probing a name that
+        // no longer exists every fifteen seconds only reported "Could not reach
+        // the collector", which reads as an outage rather than a decision.
+        if (splunkDisabled != null) {
+            return new ObservabilityStatus.Splunk(hecUrl.isEmpty() ? "not configured" : hostOf(hecUrl),
+                    false, splunkDisabled, -1, shippers, splunkDisabled);
+        }
+
         if (hecUrl.isEmpty()) {
             return new ObservabilityStatus.Splunk("not configured", false,
                     "This console has no " + SPLUNK_ENV + ", so it cannot reach the collector.",
-                    -1, shippers);
+                    -1, shippers, null);
         }
 
         String endpoint = hostOf(hecUrl);
@@ -157,11 +170,11 @@ public class ObservabilityProbe {
             return new ObservabilityStatus.Splunk(endpoint, healthy,
                     healthy ? saidBy(reply.body())
                             : "The collector answered HTTP " + reply.status() + ".",
-                    millis, shippers);
+                    millis, shippers, null);
         } catch (Exception e) {
             return new ObservabilityStatus.Splunk(endpoint, false,
                     "Could not reach the collector: " + KubernetesAccess.summarise(e),
-                    -1, shippers);
+                    -1, shippers, null);
         }
     }
 

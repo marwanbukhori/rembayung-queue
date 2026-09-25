@@ -76,6 +76,11 @@ spec:
             # in base/dynatrace is switched back on.
             - name: DYNATRACE_DISABLED_REASON
               value: "Trial ended 2026-09-24. The tenant stopped serving the agent, so it is switched off rather than left to stop both JVMs from starting."
+            # Splunk Cloud's trial host stopped resolving by 2026-09-25. Set, the
+            # console stops probing it and the panel shows it as ended. Remove
+            # this, with a fresh splunk-hec Secret, to turn it back on.
+            - name: SPLUNK_DISABLED_REASON
+              value: "Trial ended 2026-09-25. The Splunk Cloud host no longer resolves, so the console stopped probing it."
             # Stated, never inferred. The console introspects this namespace
             # for pods, the quota and its own load Jobs, and the default in
             # application.yml was wrong once — the pods panel reported

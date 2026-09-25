@@ -36,9 +36,10 @@ public record ObservabilityStatus(Splunk splunk, Dynatrace dynatrace, Instant ch
      *                  four seconds away" are different states and only one of
      *                  them is worth interrupting a demo for.
      * @param shippers  one entry per workload, saying whether it is configured to ship
+     * @param disabled  why Splunk is switched off, or null when it is meant to be on
      */
     public record Splunk(String endpoint, boolean reachable, String detail,
-                         long latencyMs, List<Feed> shippers) { }
+                         long latencyMs, List<Feed> shippers, String disabled) { }
 
     /**
      * @param tenant       the Dynatrace environment these traces land in
