@@ -184,7 +184,7 @@ import { malaysiaTime } from './time';
                           background: var(--white); color: var(--ink); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
     .log-filters button.on { border-color: var(--ink); font-weight: 700; }
     .log-filters button:disabled { opacity: .45; cursor: not-allowed; }
-    .log { max-height: 420px; overflow: auto; background: #1d1d1d; color: #d7e6df; border-radius: 6px;
+    .log { overflow-anchor: none; max-height: 420px; overflow: auto; background: #1d1d1d; color: #d7e6df; border-radius: 6px;
            padding: 8px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
     .log .quiet { color: #9aa; }
     .log-line { white-space: pre-wrap; word-break: break-word; }
@@ -236,6 +236,7 @@ export class Inspector {
   /** Five at a time: events newest first, logs the newest five and older on scroll up. */
   protected readonly eventsShown = signal(5);
   protected readonly logsShown = signal(5);
+  private logCount = 0;
   protected readonly shownLogs = computed(() => {
     const lines = this.inspector.logLines();
     return lines.slice(Math.max(0, lines.length - this.logsShown()));
@@ -248,6 +249,8 @@ export class Inspector {
       untracked(() => {
         this.eventsShown.set(5);
         this.logsShown.set(5);
+        this.logCount = 0;
+        this.follow = true;
       });
     });
     effect(() => this.inspector.logsOpen.set(this.tab() === 'logs'
@@ -258,6 +261,18 @@ export class Inspector {
       if (this.inspector.selected()?.kind !== 'pod' && this.tab() === 'logs') {
         this.tab.set('overview');
       }
+    });
+    // A reader scrolled up keeps their lines: new ones extend the window at the
+    // bottom rather than sliding it.
+    effect(() => {
+      const count = this.inspector.logLines().length;
+      untracked(() => {
+        const added = count - this.logCount;
+        this.logCount = count;
+        if (!this.follow && added > 0) {
+          this.logsShown.update(n => n + added);
+        }
+      });
     });
     // Stay at the newest line unless the reader has scrolled up to read.
     effect(() => {

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { LoadMore } from './load-more';
 import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 import { LatencyStrip } from './latency-strip';
@@ -35,7 +35,7 @@ import { TrafficService } from './traffic.service';
       <rb-latency-strip />
 
       @if (feed().length) {
-        <ol class="lines">
+        <ol class="lines" #list>
           @for (event of feed().slice(0, shown()); track event.seq) {
             <li class="line" [class]="event.kind">
               <span class="at mono">{{ time(event.at) }}</span>
@@ -100,6 +100,8 @@ import { TrafficService } from './traffic.service';
       list-style: none;
       max-height: 260px;
       overflow-y: auto;
+      /* The component keeps the reader's place itself; the browser must not do it twice. */
+      overflow-anchor: none;
     }
     .more { padding: 8px 16px; font-size: 12px; color: var(--muted); cursor: pointer; text-align: center; }
     .line {
@@ -142,6 +144,28 @@ export class TrafficLog {
   protected readonly zone = TIME_ZONE_LABEL;
   protected readonly feed = computed(() => this.traffic.feed());
   protected readonly shown = signal(5);
+  private readonly list = viewChild<ElementRef<HTMLElement>>('list');
+  private lastFirst: number | null = null;
+
+  constructor() {
+    // New events arrive at the top. A reader at the top sees them; a reader who
+    // has scrolled down keeps the line they were on: the list grows by the new
+    // events and the scroll moves down by their height.
+    effect(() => {
+      const feed = this.feed();
+      untracked(() => {
+        const box = this.list()?.nativeElement;
+        const added = this.lastFirst === null ? -1 : feed.findIndex(e => e.seq === this.lastFirst);
+        this.lastFirst = feed[0]?.seq ?? null;
+        if (!box || box.scrollTop <= 0 || added <= 0) {
+          return;
+        }
+        const before = box.scrollHeight;
+        this.shown.update(n => n + added);
+        requestAnimationFrame(() => (box.scrollTop += box.scrollHeight - before));
+      });
+    });
+  }
 
   protected label(kind: string): string {
     switch (kind) {

@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { PodStatus } from './state';
+import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 import { StateService } from './state.service';
 
 /**
@@ -328,8 +329,7 @@ export class ClusterResources {
   });
 }
 
-/** Local wall clock, seconds included: it is there to be watched changing. */
+/** Malaysia wall clock, seconds included: it is there to be watched changing. */
 function clock(at: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+  return `${malaysiaTime(at)} ${TIME_ZONE_LABEL}`;
 }

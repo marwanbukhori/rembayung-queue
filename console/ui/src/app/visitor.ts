@@ -3,6 +3,7 @@ import { CanonicalDrop } from './canonical-drop';
 import { ChartsStrip } from './charts-strip';
 import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
+import { RecentRuns } from './recent-runs';
 import { RunBanner } from './run-banner';
 import { RunPanel } from './run-panel';
 import { TrafficLog } from './traffic-log';
@@ -25,7 +26,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, RunBanner, RunPanel, TrafficLog],
+  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, RecentRuns, RunBanner, RunPanel, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -92,6 +93,7 @@ import { StateService } from './state.service';
           <rb-object-graph />
           <rb-inspector />
         </div>
+        <rb-recent-runs />
       </section>
 
       <!--
