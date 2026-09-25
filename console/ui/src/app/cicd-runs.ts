@@ -11,6 +11,9 @@ export interface CapturedStep {
 }
 
 export interface CapturedRun {
+  kind: 'ci' | 'cd' | 'rollback';
+  /** Shown above the steps; empty for the normal runs. */
+  note: string;
   workflow: string;
   job: string;
   runId: number;
@@ -25,6 +28,8 @@ export interface CapturedRun {
 
 export const CAPTURED_RUNS: CapturedRun[] = [
  {
+  "kind": "ci",
+  "note": "",
   "workflow": "ci",
   "job": "build",
   "runId": 36157265585,
@@ -441,7 +446,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "[INFO] Total time:  01:54 min"
      ]
     ],
-    "explain": "The slowest step, on purpose: Testcontainers starts a real Oracle and a real Redis and the tests run against them. A mock would accept SQL that Oracle rejects, and the seat-claiming query is exactly the SQL that matters."
+    "explain": "The slowest step, on purpose: Testcontainers starts a real Oracle Free and the tests run against it. A mock would accept SQL that Oracle rejects, and the seat-claiming query is exactly the SQL that matters."
    },
    {
     "name": "Test queue-gate",
@@ -949,7 +954,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "builder-ec3ced38-5b27-4394-8b8a-f4ac53c3f8920: v0.32.2"
      ]
     ],
-    "explain": "Prepares Docker's builder, which builds for linux/amd64, the architecture the OpenShift nodes run."
+    "explain": "Prepares Docker's Buildx builder. Each build step below asks it for linux/amd64, the architecture the OpenShift nodes run."
    },
    {
     "name": "Build and push booking-service",
@@ -1470,6 +1475,8 @@ export const CAPTURED_RUNS: CapturedRun[] = [
   ]
  },
  {
+  "kind": "cd",
+  "note": "",
   "workflow": "CD",
   "job": "deploy",
   "runId": 36157668802,
@@ -1858,7 +1865,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "  OPENSHIFT_TOKEN: ***"
      ]
     ],
-    "explain": "Exports the cluster URL and a ServiceAccount token from the repository's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access."
+    "explain": "Exports the cluster URL and a ServiceAccount token from the sandbox environment's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access."
    },
    {
     "name": "Resolve the tag to deploy",
@@ -2047,7 +2054,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
      ],
      [
       1627,
-      "    \"msg\": \"currently deployed: {'booking-service': '06170aa2b1f83514088e58c2e0b4410da68208e7', 'queue-gate': '06170aa2b1f83514088e58c2e0b4410da68208e7', 'conso…"
+      "    \"msg\": \"currently deployed: {'booking-service': '06170aa2b1f83514088e58c2e0b4410da68208e7', 'queue-gate': '06170aa2b1f83514088e58c2e0b4410da68208e7', 'console': '06170aa2b1f83514088e58c2e0b4410da68208e7'} via queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com\""
      ],
      [
       1630,
@@ -2262,7 +2269,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "localhost                  : ok=27   changed=6    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   "
      ]
     ],
-    "explain": "The playbook, in order: read what is running now and refuse to start mid-rollout; render the overlay with every image pinned to this tag and apply only the kinds CD may write; wait for both rollouts; smoke-test the public queue path. Any failure jumps to the rollback."
+    "explain": "The playbook, in order: read what is running now and refuse to start mid-rollout; render the overlay with every image pinned to this tag and apply only the kinds CD may write; wait for all three rollouts; smoke-test the public queue path. The checks come first so a bad input stops before anything changes; any failure after the first change rolls back."
    },
    {
     "name": "Summary",
@@ -2359,6 +2366,8 @@ export const CAPTURED_RUNS: CapturedRun[] = [
   ]
  },
  {
+  "kind": "rollback",
+  "note": "CD of 95ba6af, first attempt. booking-service did not become ready inside the wait, so the playbook put every service back on the tag it had been running and failed loudly. The public site answered throughout, and a re-run of the same image passed.",
   "workflow": "CD",
   "job": "deploy",
   "runId": 36142971533,
@@ -2747,7 +2756,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
       "  OPENSHIFT_TOKEN: ***"
      ]
     ],
-    "explain": "Exports the cluster URL and a ServiceAccount token from the repository's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access."
+    "explain": "Exports the cluster URL and a ServiceAccount token from the sandbox environment's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access."
    },
    {
     "name": "Resolve the tag to deploy",
@@ -2936,7 +2945,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
      ],
      [
       1627,
-      "    \"msg\": \"currently deployed: {'booking-service': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'queue-gate': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'conso…"
+      "    \"msg\": \"currently deployed: {'booking-service': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'queue-gate': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'console': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c'} via queue-gate-marwanbukhori-dev.apps.rm3.7wse.p1.openshiftapps.com\""
      ],
      [
       1630,
@@ -3052,7 +3061,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
      ],
      [
       1688,
-      "failed: [localhost] (item=booking-service) => {\"ansible_loop_var\": \"item\", \"changed\": false, \"item\": \"booking-service\", \"msg\": \"Failed to gather information abo…"
+      "failed: [localhost] (item=booking-service) => {\"ansible_loop_var\": \"item\", \"changed\": false, \"item\": \"booking-service\", \"msg\": \"Failed to gather information about Deployment(s) even after waiting for 303 seconds\"}"
      ],
      [
       1689,
@@ -3084,7 +3093,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
      ],
      [
       1700,
-      "    \"msg\": \"DEPLOY FAILED (Wait for both rollouts to complete — One or more items failed). Rolling back to {'booking-service': '1a3e6e1108754e29d30f0eb1fb2891c7…"
+      "    \"msg\": \"DEPLOY FAILED (Wait for both rollouts to complete — One or more items failed). Rolling back to {'booking-service': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'queue-gate': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'console': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c'}.\""
      ],
      [
       1703,
@@ -3132,7 +3141,7 @@ export const CAPTURED_RUNS: CapturedRun[] = [
      ],
      [
       1725,
-      "fatal: [localhost]: FAILED! => {\"changed\": false, \"msg\": \"Deploy of 95ba6af689a50fe4d2102a53ccc43a1e8d598b90 failed: Wait for both rollouts to complete — One or…"
+      "fatal: [localhost]: FAILED! => {\"changed\": false, \"msg\": \"Deploy of 95ba6af689a50fe4d2102a53ccc43a1e8d598b90 failed: Wait for both rollouts to complete — One or more items failed. Rolled back to {'booking-service': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'queue-gate': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c', 'console': '1a3e6e1108754e29d30f0eb1fb2891c7970b6f0c'}. Rollback rollout: ok. Rollback smoke: ok.\"}"
      ],
      [
       1727,

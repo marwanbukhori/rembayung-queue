@@ -29,9 +29,9 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
       <div>
         <h1>CI/CD</h1>
         <p class="lede">
-          Every push to main runs two workflows. <b>ci</b> tests the three services against a real
-          Oracle and a real Redis, then builds and pushes one image per service, tagged with the
-          commit. <b>CD</b> starts when ci succeeds: an Ansible playbook deploys that tag to
+          Every push to main runs two workflows. <b>ci</b> tests the three services, booking-service
+          against a real Oracle and queue-gate against a real Redis, then builds and pushes one image
+          per service, tagged with the commit. <b>CD</b> starts when ci succeeds: an Ansible playbook deploys that tag to
           OpenShift, smoke-tests it, and rolls back by itself if anything fails. Below are real
           runs of each, copied from GitHub, with what every step is for.
         </p>
@@ -44,23 +44,18 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
           <button class="run-head" (click)="toggleRun(i)" [attr.aria-expanded]="runOpen(i)">
             <span class="mark" [class.bad]="run.result !== 'success'">{{ run.result === 'success' ? '✓' : '✕' }}</span>
             <span class="run-title">
-              <span class="run-name">{{ titleOf(run, i) }}</span>
+              <span class="run-name">{{ titleOf(run) }}</span>
               <span class="run-meta mono">
                 {{ run.workflow }} · {{ run.job }} · {{ verb(run) }} in {{ duration(run.seconds) }}
-                · {{ when(run.startedAt) }} {{ zone }} · commit {{ run.commit }}{{ run.attempt > 1 || i === 2 ? ' · attempt ' + run.attempt : '' }}
+                · {{ when(run.startedAt) }} {{ zone }} · commit {{ run.commit }}{{ run.attempt > 1 || run.kind === 'rollback' ? ' · attempt ' + run.attempt : '' }}
               </span>
             </span>
             <span class="chev" aria-hidden="true">{{ runOpen(i) ? '▾' : '▸' }}</span>
           </button>
 
           @if (runOpen(i)) {
-            @if (i === 2) {
-              <p class="note">
-                CD of 95ba6af, first attempt. booking-service did not become ready inside the wait, so
-                the playbook put every service back on the tag it had been running (1a3e6e1) and failed
-                loudly. The public site answered throughout. The cause was the sandbox, not the code:
-                the re-run passed with the same image.
-              </p>
+            @if (run.note) {
+              <p class="note">{{ run.note }}</p>
             }
             <ol class="steps">
               @for (step of run.steps; track step.name; let s = $index) {
@@ -98,13 +93,13 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
               the tag it was running and fails loudly. The third run above is one.
             </span>
           </button>
-          <button class="card guard" (click)="open.emit('07-continuous-delivery')">
+          <a class="card guard" [href]="driftScript" target="_blank" rel="noopener">
             <span class="guard-name">Drift check</span>
             <span class="guard-what">
               check-drift.sh renders the manifests from git and diffs them against the cluster, so a
               change that was committed but never applied is loud instead of invisible.
             </span>
-          </button>
+          </a>
           <button class="card guard" (click)="open.emit('07-continuous-delivery')">
             <span class="guard-name">What CD may not do</span>
             <span class="guard-what">
@@ -156,6 +151,7 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     .guard { display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; cursor: pointer;
              padding: 16px 18px; color: var(--ink); }
     .guard:hover { border-color: var(--ink); }
+    a.guard { text-decoration: none; }
     .guard-name { font-weight: 700; }
     .guard-what { font-size: 14px; color: var(--ink-soft); text-wrap: pretty; }
     .more { font-size: 14px; color: var(--ink-soft); }
@@ -175,10 +171,14 @@ export class CicdPage {
 
   protected readonly runs = CAPTURED_RUNS;
   protected readonly zone = TIME_ZONE_LABEL;
-  /** The two normal runs start open; the rollback starts closed. */
-  private readonly runsOpen = signal<Set<number>>(new Set([0, 1]));
+  protected readonly driftScript =
+    'https://github.com/marwanbukhori/rembayung-queue/blob/main/deploy/scripts/check-drift.sh';
+  /** The normal runs start open; the rollback starts closed, so the page reads as the normal path first. */
+  private readonly runsOpen = signal<Set<number>>(
+    new Set(CAPTURED_RUNS.flatMap((run, i) => (run.kind === 'rollback' ? [] : [i]))));
   /** Opens on the step a reader most wants: the tests for ci, the deploy for CD. */
-  private readonly stepsOpen = signal<Set<string>>(new Set(['0:Test booking-service', '1:Deploy', '2:Deploy']));
+  private readonly stepsOpen = signal<Set<string>>(new Set(CAPTURED_RUNS.map((run, i) =>
+    `${i}:${run.kind === 'ci' ? 'Test booking-service' : 'Deploy'}`)));
 
   protected runOpen(i: number): boolean {
     return this.runsOpen().has(i);
@@ -197,12 +197,16 @@ export class CicdPage {
   }
 
   protected openRollback(): void {
-    this.runsOpen.update(s => new Set(s).add(2));
-    queueMicrotask(() => document.querySelectorAll('rb-cicd-page .run')[2]?.scrollIntoView({ behavior: 'smooth' }));
+    const i = this.runs.findIndex(run => run.kind === 'rollback');
+    if (i < 0) {
+      return;
+    }
+    this.runsOpen.update(s => new Set(s).add(i));
+    queueMicrotask(() => document.querySelectorAll('rb-cicd-page .run')[i]?.scrollIntoView({ behavior: 'smooth' }));
   }
 
-  protected titleOf(run: CapturedRun, i: number): string {
-    if (i === 2) {
+  protected titleOf(run: CapturedRun): string {
+    if (run.kind === 'rollback') {
       return 'A deploy that rolled itself back';
     }
     return run.workflow === 'ci' ? 'Test, build and publish' : 'Deploy to OpenShift';

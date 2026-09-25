@@ -22,7 +22,11 @@ OUT = os.path.join(os.path.dirname(__file__), "../../console/ui/src/app/cicd-run
 HEAD, TAIL, WIDTH = 14, 8, 160
 STAMP = re.compile(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z ?")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
-SECRET = re.compile(r"sha256~|ghp_|ghs_|token=[^*\s]")
+# OpenShift user tokens (sha256~), ServiceAccount tokens (JWTs, eyJ...), GitHub
+# tokens of every prefix, and any unmasked bearer or token= value.
+SECRET = re.compile(r"sha256~|eyJ[\w-]{10,}|gh[opsur]_\w|github_pat_|Bearer\s+[^*\s]|token=[^*\s]")
+LONG = re.compile(r"^(fatal|failed): |\"msg\"")
+LONG_WIDTH = 600
 TEST_KEEP = re.compile(r"Tests run:|Container \S+ started in|BUILD SUCCESS|BUILD FAILURE|Total time|ERROR")
 TEST_HEAD = 4
 DEPLOY_KEEP = re.compile(r'^(TASK \[|PLAY |ok: |changed: |fatal: |failed: |skipping: |localhost +:|\s*"msg"|Run ansible-playbook)')
@@ -32,12 +36,12 @@ EXPLAIN = {
     "Set up job": "GitHub provisions a fresh ubuntu-latest runner for this one job. Nothing carries over from the previous run, so every build starts from a clean machine.",
     "Run actions/checkout@v4": "Checks out the exact commit that was pushed. Every image tag later in the pipeline is this commit's SHA.",
     "Set up JDK 25": "Installs Temurin 25 and restores the Maven cache keyed on the pom files, so dependencies download once rather than on every run.",
-    "Test booking-service": "The slowest step, on purpose: Testcontainers starts a real Oracle and a real Redis and the tests run against them. A mock would accept SQL that Oracle rejects, and the seat-claiming query is exactly the SQL that matters.",
+    "Test booking-service": "The slowest step, on purpose: Testcontainers starts a real Oracle Free and the tests run against it. A mock would accept SQL that Oracle rejects, and the seat-claiming query is exactly the SQL that matters.",
     "Test queue-gate": "queue-gate's tests, against a real Redis started by Testcontainers. The queue lives in Redis, so that is where it is tested.",
     "Test console": "The console's tests: the key filter, the demo-key endpoint, the Prometheus and pod readers.",
     "Package jars": "Builds the three Spring Boot jars. From here on the steps run only on main or a manual dispatch; a branch push stops after the tests and never touches the registry.",
     "Log in to ghcr.io": "Logs in to GitHub's container registry with the job's own short-lived GITHUB_TOKEN. There is no stored registry password to leak or rotate.",
-    "Set up Buildx": "Prepares Docker's builder, which builds for linux/amd64, the architecture the OpenShift nodes run.",
+    "Set up Buildx": "Prepares Docker's Buildx builder. Each build step below asks it for linux/amd64, the architecture the OpenShift nodes run.",
     "Build and push booking-service": "Builds booking-service's image and pushes it tagged with the full commit SHA, never latest. An immutable tag is what lets CD say exactly what is running, and roll back to it.",
     "Build and push queue-gate": "The same for queue-gate: one image per service, one tag per commit.",
     "Build and push console": "The same for the console, which also carries the Angular UI you are reading.",
@@ -46,10 +50,13 @@ EXPLAIN = {
     "Complete job": "The runner is discarded.",
     "Install Ansible and the Kubernetes client library": "CD is a separate workflow that starts when ci succeeds on main: CI publishes, and only CD touches the cluster. This installs Ansible and kubernetes.core, which talks to the API directly rather than shelling out to oc, so every task reports ok or changed truthfully.",
     "Install kustomize": "Installs kustomize, to render the same overlay a person would apply by hand.",
-    "Authenticate to OpenShift": "Exports the cluster URL and a ServiceAccount token from the repository's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access.",
+    "Authenticate to OpenShift": "Exports the cluster URL and a ServiceAccount token from the sandbox environment's secrets, never echoed. That ServiceAccount cannot read Secrets and cannot change RBAC, so a leaked token cannot widen its own access.",
     "Resolve the tag to deploy": "Picks the commit SHA that CI just published. A manual dispatch can name any earlier tag, which is how a rollback by hand works.",
-    "Deploy": "The playbook, in order: read what is running now and refuse to start mid-rollout; render the overlay with every image pinned to this tag and apply only the kinds CD may write; wait for both rollouts; smoke-test the public queue path. Any failure jumps to the rollback.",
+    "Deploy": "The playbook, in order: read what is running now and refuse to start mid-rollout; render the overlay with every image pinned to this tag and apply only the kinds CD may write; wait for all three rollouts; smoke-test the public queue path. The checks come first so a bad input stops before anything changes; any failure after the first change rolls back.",
 }
+ROLLBACK_NOTE = ("CD of {commit}, first attempt. booking-service did not become ready inside the wait, so the playbook "
+                 "put every service back on the tag it had been running and failed loudly. The public site answered "
+                 "throughout, and a re-run of the same image passed.")
 ROLLBACK_DEPLOY = ("This time booking-service did not become ready inside the wait. The playbook described what failed, "
                    "restored each Deployment to the tag it had been running, waited for that rollout, re-checked the "
                    "public queue path, and then failed loudly naming both tags. The site stayed up throughout; the re-run passed.")
@@ -60,7 +67,9 @@ def clean(line):
 
 
 def cut(text):
-    return text if len(text) <= WIDTH else text[:WIDTH] + "…"
+    """Long lines lose their tail, except a failure's message, which is the point of the line."""
+    width = LONG_WIDTH if LONG.search(text) else WIDTH
+    return text if len(text) <= width else text[:width] + "…"
 
 
 def trim(lines, deploy=False, test=False):
@@ -148,16 +157,21 @@ def run_from_attempt(run_id, attempt, workflow):
     for step in run["steps"]:
         if step["name"] == "Deploy":
             step["explain"] = ROLLBACK_DEPLOY
+    run["kind"] = "rollback"
+    run["note"] = ROLLBACK_NOTE.format(commit=run["commit"])
     return run
 
 
 def build(workflow, job, run_id, attempt, url, sha, started, completed, result, steps):
     out = []
     for s in steps:
+        hit = scan_for_secrets(numbered(s["raw"]), tuple(filter(None, [os.environ.get("CONSOLE_KEY")])))
+        if hit:
+            sys.exit(f"refusing to capture: {workflow} / {s['name']} line {hit[0]} looks like a credential")
         log = trim(numbered(s["raw"]), deploy=s["name"] == "Deploy", test=s["name"].startswith("Test "))
         out.append(dict(name=s["name"], result=s["result"], seconds=seconds(s["started"], s["completed"]),
                         log=log, explain=EXPLAIN.get(s["name"], EXPLAIN.get(s["name"].split(" ")[0], ""))))
-    return dict(workflow=workflow, job=job, runId=int(run_id), attempt=int(attempt), url=url, commit=sha[:7],
+    return dict(kind="ci" if workflow == "ci" else "cd", note="", workflow=workflow, job=job, runId=int(run_id), attempt=int(attempt), url=url, commit=sha[:7],
                 startedAt=started, result=result, seconds=seconds(started, completed), steps=out)
 
 
@@ -175,7 +189,7 @@ def write(runs):
                 "export interface CapturedStep {\n  name: string;\n  result: string;\n  seconds: number;\n"
                 "  /** [GitHub's line number, or null for an elision marker; the line] */\n"
                 "  log: [number | null, string][];\n  explain: string;\n}\n\n"
-                "export interface CapturedRun {\n  workflow: string;\n  job: string;\n  runId: number;\n"
+                "export interface CapturedRun {\n  kind: 'ci' | 'cd' | 'rollback';\n  /** Shown above the steps; empty for the normal runs. */\n  note: string;\n  workflow: string;\n  job: string;\n  runId: number;\n"
                 "  attempt: number;\n  url: string;\n  commit: string;\n  startedAt: string;\n  result: string;\n"
                 "  seconds: number;\n  steps: CapturedStep[];\n}\n\n"
                 f"export const CAPTURED_RUNS: CapturedRun[] = {body};\n")
@@ -208,6 +222,12 @@ def self_test():
     check("secret: sha256~ token refused", scan_for_secrets([(1, "oc login --token=sha256~abc")]) is not None)
     check("secret: raw token= refused", scan_for_secrets([(1, "token=abcdef")]) is not None)
     check("masked token allowed", scan_for_secrets([(1, "token=***"), (2, "password: ***")]) is None)
+    for leak in ["K8S_AUTH_API_KEY=eyJhbGciOiJSUzI1NiIsImtpZCI6.abc", "Authorization: Bearer abc.def",
+                 "gho_abcdefghijklmnop", "github_pat_11ABCDEF", "ghu_abcdef1234"]:
+        check("secret refused: " + leak[:24], scan_for_secrets([(1, leak)]) is not None)
+    check("Bearer *** allowed", scan_for_secrets([(1, "Authorization: Bearer ***")]) is None)
+    fatal = trim([(1, 'fatal: [localhost]: FAILED! => {"msg": "' + "y" * 300 + ' restored tags"}')])
+    check("fatal lines keep up to 600 characters", fatal[0][1].endswith('restored tags"}'))
     check("console key refused", scan_for_secrets([(1, "?key=hunter2")], extra=("hunter2",)) is not None)
     return ok
 
