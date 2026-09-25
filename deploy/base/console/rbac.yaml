@@ -44,6 +44,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  # The inspector's Logs tab (spec 2026-09-25, section 6.2). Read only, and
+  # only this namespace. Raw lines reach the page only for key holders; the
+  # public sees structured app events with phone numbers masked.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
   # The CPU budget the constraints panel is about. compute-deploy is read by
   # name; the list verb is what makes a wrong name a visible 404 rather than a
   # 403 that reads as a broken deployment.
