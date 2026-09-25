@@ -76,6 +76,7 @@ interface Outward {
           <button class="tile primary" (click)="visitor.emit()">
             <span class="tile-name">Run a simulation</span>
             <span class="tile-what">Start a rush against the live cluster and watch it land</span>
+            <span class="tile-go">Start a rush →</span>
           </button>
           <button class="tile" (click)="cluster.emit()">
             <span class="tile-name">Cluster</span>
@@ -84,6 +85,10 @@ interface Outward {
           <button class="tile" (click)="cicd.emit()">
             <span class="tile-name">CI/CD</span>
             <span class="tile-what">How a commit reaches a pod, with real runs and their logs</span>
+          </button>
+          <button class="tile" (click)="agent.emit()">
+            <span class="tile-name">AI Agent <span class="tag">In progress</span></span>
+            <span class="tile-what">A bounded agent that reads each rush and reports what it found, citing its facts</span>
           </button>
           <button class="tile" (click)="docs.emit()">
             <span class="tile-name">Build notes</span>
@@ -203,9 +208,12 @@ interface Outward {
     /* The primary action takes the left half; the four others fill a 2 by 2 beside it. */
     .tile.primary { grid-column: span 2; grid-row: span 2; background: var(--dhl-red); color: #fff; border-color: var(--dhl-red); }
     .tile.primary:hover { filter: brightness(1.08); }
-    .tile-name { font-size: 18px; font-weight: 700; }
+    .tile-name { font-size: 18px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+    .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+           background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
     .tile-what { font-size: 14px; color: var(--ink-soft); }
     .tile.primary .tile-what { color: rgba(255, 255, 255, .9); }
+    .tile-go { margin-top: auto; padding-top: 16px; font-size: 22px; font-weight: 700; }
     @media (max-width: 899px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 899px) { .tile.primary { grid-row: auto; } }
     @media (max-width: 599px) { .tiles { grid-template-columns: minmax(0, 1fr); } .tile.primary { grid-column: auto; } }
@@ -312,6 +320,7 @@ export class PublicHome {
   readonly visitor = output<void>();
   readonly cluster = output<void>();
   readonly cicd = output<void>();
+  readonly agent = output<void>();
 
 
   /** Named because a hiring manager reads the list before reading the code. */

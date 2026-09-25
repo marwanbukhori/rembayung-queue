@@ -65,7 +65,6 @@ import { PodPulse } from './pod-pulse';
     </div>
   `,
   styles: `
-    .stack-24 { display: flex; flex-direction: column; gap: 24px; }
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
   `

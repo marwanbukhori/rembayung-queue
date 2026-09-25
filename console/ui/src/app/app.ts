@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { AgentPage } from './agent-page';
 import { CicdPage } from './cicd-page';
 import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
@@ -9,7 +10,7 @@ import { Visitor } from './visitor';
 import { DemoKeyService, hasConsoleKey } from './key';
 
 /** Which surface is on screen. */
-type Surface = 'home' | 'cluster' | 'cicd' | 'docs' | 'doc' | 'visitor';
+type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'docs' | 'doc' | 'visitor';
 
 /**
  * The shell: a persistent navbar, and whichever surface is showing.
@@ -26,7 +27,7 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'docs' | 'doc' | 'visitor';
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, ClusterPage, CicdPage, DocsPage, DocPage, Visitor],
+  imports: [PublicHome, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor],
   template: `
     <header class="navbar">
       <div class="brandband">
@@ -86,13 +87,16 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'docs' | 'doc' | 'visitor';
     <main [class.wide]="surface() === 'visitor'">
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" />
+          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" (agent)="show('agent')" />
         }
         @case ('cluster') {
           <rb-cluster-page (home)="show('home')" />
         }
         @case ('cicd') {
           <rb-cicd-page (home)="show('home')" (open)="openDoc($event)" />
+        }
+        @case ('agent') {
+          <rb-agent-page (home)="show('home')" />
         }
         @case ('docs') {
           <rb-docs-page (home)="show('home')" (open)="openDoc($event)" />
@@ -226,6 +230,7 @@ export class App {
     { surface: 'visitor', label: 'Run a simulation' },
     { surface: 'cluster', label: 'Cluster' },
     { surface: 'cicd', label: 'CI/CD' },
+    { surface: 'agent', label: 'AI Agent' },
     { surface: 'docs', label: 'Build notes' }
   ];
 
