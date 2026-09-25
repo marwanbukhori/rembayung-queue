@@ -25,12 +25,12 @@ metadata:
 rules:
   # The load run. `get` reports whatever run the drop already has, `create`
   # starts one, `delete` clears a finished one so the drop's name is free for
-  # the next. No `list`: LoadOps only ever looks a Job up by the name it
-  # derives from the drop id, and a console that could enumerate every Job in
-  # the namespace would be reading things it never draws.
+  # the next. `list` arrived with the cluster inspector, which shows recent
+  # load runs and keepalive runs; before it, LoadOps only looked a Job up by
+  # the name it derives from the drop id and nothing enumerated them.
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "create", "delete"]
   # The k6 script, written out of the console's own image on every run so the
   # script and the page describing it cannot drift across a deploy.
   # `createOr(update)` issues a get first, so all three verbs are exercised on
@@ -72,12 +72,30 @@ rules:
   - apiGroups: ["route.openshift.io"]
     resources: ["routes"]
     verbs: ["get", "list"]
+  # The cluster inspector (spec 2026-09-25, section 7): every object in the
+  # graph, clickable. Read only. ReplicaSets say which revision is current,
+  # EndpointSlices say whether a Service has anything behind it (the question
+  # "Connection refused" was really asking on 2026-09-25), NetworkPolicies say
+  # who may reach it, and the CronJob is the keepalive.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list"]
 # Deliberately absent: secrets. The console holds one credential — its own
 # access key, injected as an environment variable by the kubelet — and has no
 # reason to read any other. The Oracle wallet lives in this namespace; a console
 # that could read Secrets would be a public Route one bug away from it.
 #
-# Deliberately absent: deployments, and every write verb on them. Scaling and
+# Deliberately absent: every write verb on deployments (the inspector reads
+# them, nothing here changes them). Scaling and
 # redeploying go through CD, which is triggered by the GitHub API and runs as
 # `rembayung-cd`. That keeps the account behind a public page read-mostly: the
 # only thing it can create is a Job whose image, command, deadline and budget
