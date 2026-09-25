@@ -5,8 +5,6 @@ import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
 import { RunBanner } from './run-banner';
 import { RunPanel } from './run-panel';
-import { PodPulse } from './pod-pulse';
-import { SeatMap } from './seat-map';
 import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
@@ -27,7 +25,7 @@ import { StateService } from './state.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, PodPulse, RunBanner, RunPanel, TrafficLog],
+  imports: [CanonicalDrop, ChartsStrip, Inspector, ObjectGraph, RunBanner, RunPanel, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -37,61 +35,64 @@ import { StateService } from './state.service';
       </div>
 
       <!--
-        One live page: the rush on the left, what it does to the platform on the
-        right, side by side from 1280px so cause and effect share a screen.
+        What is happening, first: a rush in flight is the news, so it sits
+        directly under the crumbs rather than halfway down a column.
       -->
-      <div class="live">
-        <div class="business">
-          <rb-run-panel />
+      @if (sandbox()) {
+        <rb-run-banner />
+      }
 
-          @if (sandbox()) {
-            <rb-run-banner />
-
-            <!--
-              The sitting: one figure and the room it fills. The seat map replaces
-              the progress bar rather than sitting under it - two drawings of one
-              number, stacked, was the page saying the same thing twice.
-            -->
-            <rb-canonical-drop heading="Your simulation, live" />
-
-            <!--
-              Live traffic before the cluster card: this is what you watch while a
-              rush is in flight, and the cluster card is what you consult afterwards
-              to explain what you saw.
-            -->
-            <rb-traffic-log />
-            <rb-pod-pulse />
-
-            <p class="reason">
-              Every counter above stays at zero until a run reaches it. A sitting with no traffic
-              against it is idle, not broken. If the namespace is out of CPU the run sits Pending and
-              the cluster card says so in the scheduler's own words. That is the demonstration, not a
-              fault.
-            </p>
-          }
-        </div>
-
-        <!--
-          The platform side, always shown: it is the namespace, not the visitor's
-          sandbox, so there is something to look at before a rush as well as
-          during one. The charts sit on top: what the rush is doing to the
-          platform, before the objects that explain it.
-        -->
-        <section class="platform card">
-          <div class="why">The platform, live</div>
-          <p class="note">Last 15 minutes from Prometheus; the bold numbers are read from the pods right now. Times GMT+8.</p>
-          <rb-charts-strip />
-          <div class="spacer"></div>
-          <p class="note">
-            Every object behind the simulation. Click one to inspect it; start a rush and watch the
-            autoscalers and pods move.
-          </p>
-          <div class="graph-and-inspector">
-            <rb-object-graph />
-            <rb-inspector />
-          </div>
-        </section>
+      <!--
+        Bands, each the full width, so nothing waits at the bottom of a tall
+        column. The rush and its effect on the business on top; what it does
+        to the platform under it; the objects that explain it last.
+      -->
+      <div class="band-top">
+        <rb-run-panel />
+        @if (sandbox()) {
+          <!--
+            The sitting: one figure and the room it fills. The seat map replaces
+            the progress bar rather than sitting under it - two drawings of one
+            number, stacked, was the page saying the same thing twice.
+          -->
+          <rb-canonical-drop heading="Seats and queue" />
+          <rb-traffic-log />
+        } @else {
+          <div class="card placeholder">Seats and the queue appear here once a rush starts.</div>
+          <div class="card placeholder">Arrivals, admissions and bookings stream here as they happen.</div>
+        }
       </div>
+
+      @if (sandbox()) {
+        <p class="reason">
+          Every counter above stays at zero until a run reaches it. A sitting with no traffic
+          against it is idle, not broken. If the namespace is out of CPU the run sits Pending and
+          the cluster page says so in the scheduler's own words. That is the demonstration, not a
+          fault.
+        </p>
+      }
+
+      <section class="card band-card">
+        <div class="why">The platform, live</div>
+        <p class="note">Last 15 minutes from Prometheus; the bold numbers are read from the pods right now. Times GMT+8.</p>
+        <rb-charts-strip />
+      </section>
+
+      <!--
+        The graph gets the whole width. The inspector opens over its right edge
+        rather than beside it, so a click shows the object and its logs next to
+        the diagram without scrolling, and closing it gives the width back.
+      -->
+      <section class="card band-card">
+        <div class="why">Every object behind it</div>
+        <p class="note">
+          Click one to inspect it; start a rush and watch the autoscalers and pods move.
+        </p>
+        <div class="graph-wrap">
+          <rb-object-graph />
+          <rb-inspector />
+        </div>
+      </section>
 
       <!--
         The way back. Starting a simulation used to be a one-way door: the page
@@ -147,35 +148,17 @@ import { StateService } from './state.service';
       vertical-align: middle;
     }
 
-    /*
-      Two columns where there is room for both, stacked where there is not. The
-      seat grid auto-fills, so it simply uses fewer seats per row in a narrower
-      column rather than overflowing.
-    */
-
-    .live { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
-    .business { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-    .platform { min-width: 0; }
-    .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
-    .spacer { height: 20px; }
-    .graph-and-inspector { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+    .band-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
     @media (min-width: 1280px) {
-      .live { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+      .band-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.1fr); }
     }
-    /*
-      Side by side only where the graph keeps its 640px: below that its labels
-      shrink past reading, so the inspector goes underneath instead.
-    */
-    @media (min-width: 1650px) {
-      .graph-and-inspector { grid-template-columns: minmax(640px, 1fr) minmax(300px, 340px); }
-      /*
-        Sticky only here, where graph and inspector sit side by side. Below
-        1650px the inspector is stacked under the graph, and a stuck card would
-        pin it below the fold for as long as the rush column is taller. 120px
-        clears the 104px sticky navbar with a little air.
-      */
-      .platform { position: sticky; top: 120px; }
-    }
+    .placeholder { padding: 24px; color: var(--muted); font-size: 14px; min-height: 120px;
+                   display: flex; align-items: center; border-style: dashed; }
+    .band-card { padding: 20px 24px; }
+    .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .graph-wrap { position: relative; }
+    /* Room for the inspector's logs when the graph itself is short. */
+    @media (min-width: 1280px) { .graph-wrap { min-height: 560px; } }
 
     .exit {
       border-top: 1px solid var(--line);

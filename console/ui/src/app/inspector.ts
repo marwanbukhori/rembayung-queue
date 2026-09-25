@@ -10,7 +10,8 @@ import { malaysiaTime } from './time';
  * label/value facts, so a Route and a CronJob render the same way and a new
  * kind needs no new component.
  *
- * Below 1280px it becomes a drawer over the page, with a close button, because
+ * From 1280px it is a panel over the graph's right edge while something is
+ * selected. Below 1280px it becomes a drawer over the page, with a close button, because
  * a third of a phone is too narrow to read an event message in.
  */
 @Component({
@@ -195,8 +196,16 @@ import { malaysiaTime } from './time';
     .dot.t-warn { background: var(--chip-warn-fg); }
     .dot.t-bad { background: var(--chip-bad-fg); }
 
-    @media (min-width: 1280px) and (max-width: 1649px) {
-      .inspector { border-left: 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
+    /*
+      Wide screens: a panel over the graph's right edge, only while something is
+      selected. Closing it gives the graph its full width back.
+    */
+    @media (min-width: 1280px) {
+      .inspector { position: absolute; top: 0; right: 0; bottom: 0; width: min(40%, 460px); overflow-y: auto;
+                   background: var(--white); padding: 16px; border-left: 1px solid var(--line);
+                   box-shadow: -8px 0 24px rgba(0, 0, 0, .12); display: none; }
+      .inspector.open { display: block; }
+      .close { display: block; }
     }
     @media (max-width: 1279px) {
       .inspector { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 20;

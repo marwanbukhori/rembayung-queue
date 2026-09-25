@@ -174,9 +174,11 @@ interface Plot {
   styles: `
     .strip {
       --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
-      display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 16px;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
     }
     @media (max-width: 599px) { .strip { grid-template-columns: minmax(0, 1fr); } }
+    /* The full page width is here now: one row of four. */
+    @media (min-width: 1280px) { .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     .chart { margin: 0; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--white); }
     figcaption { display: flex; flex-direction: column; gap: 1px; }
     .title { font-weight: 700; font-size: 14px; }
