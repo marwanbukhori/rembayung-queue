@@ -1,4 +1,5 @@
 import { HttpInterceptorFn } from '@angular/common/http';
+import { Injectable, signal } from '@angular/core';
 
 /**
  * The console key: read from the link once, remembered for the tab, and sent
@@ -52,3 +53,37 @@ export const keyInterceptor: HttpInterceptorFn = (request, next) => {
   }
   return next(request.clone({ setHeaders: { 'X-Console-Key': key } }));
 };
+
+/**
+ * The shared demo key, for visitors who arrived without one. Fetched once:
+ * shareable() is true only if the console answered /api/demo-key, which it
+ * does while CONSOLE_SHARE_KEY is on. open() reloads the page with the key in
+ * the URL, which stores it exactly as a sent link would.
+ */
+@Injectable({ providedIn: 'root' })
+export class DemoKeyService {
+  readonly shareable = signal(false);
+  private key: string | null = null;
+
+  constructor() {
+    if (hasConsoleKey()) {
+      return;
+    }
+    fetch('/api/demo-key')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        this.key = body?.key ?? null;
+        this.shareable.set(!!this.key);
+      })
+      .catch(() => this.shareable.set(false));
+  }
+
+  open(): void {
+    if (!this.key) {
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('key', this.key);
+    window.location.assign(url.toString());
+  }
+}

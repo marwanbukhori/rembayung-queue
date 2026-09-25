@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { hasConsoleKey } from './key';
+import { DemoKeyService, hasConsoleKey } from './key';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
 import { StateService } from './state.service';
@@ -92,6 +92,13 @@ const CROWDS = [
             Everything on these pages is real and updating: the sitting, the pods, the quota,
             the autoscalers and the monitoring. Starting a rush spends this namespace's CPU
             budget, so it needs the console key.
+            @if (demoKey.shareable()) {
+              <div class="get-key-row">
+                <button class="btn btn-primary" (click)="demoKey.open()">Get the demo key</button>
+              </div>
+            } @else {
+              Ask for an invite link to start one.
+            }
           </div>
         } @else {
           <div class="go">
@@ -107,6 +114,7 @@ const CROWDS = [
     </section>
   `,
   styles: `
+    .get-key-row { margin-top: 12px; }
     .body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
     .title { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
     .sub { margin: 6px 0 0; font-size: 15px; color: var(--ink-soft); max-width: 72ch; text-wrap: pretty; }
@@ -167,6 +175,7 @@ export class RunPanel {
   protected readonly readOnly = !hasConsoleKey();
 
   private readonly sandboxes = inject(SandboxService);
+  protected readonly demoKey = inject(DemoKeyService);
   private readonly loads = inject(LoadService);
   private readonly state = inject(StateService);
 

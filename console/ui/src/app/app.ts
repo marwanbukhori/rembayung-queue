@@ -5,7 +5,7 @@ import { DocsPage } from './docs-page';
 import { PublicHome } from './public-home';
 import { StateService } from './state.service';
 import { Visitor } from './visitor';
-import { hasConsoleKey } from './key';
+import { DemoKeyService, hasConsoleKey } from './key';
 
 /** Which surface is on screen. */
 type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
@@ -29,7 +29,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
   template: `
     <header class="navbar">
       <div class="brandband">
-        <div class="inner">
+        <div class="inner" [class.wide]="surface() === 'visitor'">
           <button class="brand" (click)="show('home')" title="Back to the overview">
             <img class="mark" src="dhl.png" alt="DHL" />
           </button>
@@ -40,6 +40,9 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
               <span class="pulse"></span>
               <span>{{ keyLabel() }}</span>
             </div>
+            @if (demoKey.shareable()) {
+              <button class="get-key" (click)="demoKey.open()">Get the demo key</button>
+            }
             <!--
               The repository, from every page. Someone sent this link is one
               click from the console and, until now, no clicks at all from the
@@ -67,7 +70,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
       </div>
 
       <nav class="sections" aria-label="Sections">
-        <div class="inner">
+        <div class="inner" [class.wide]="surface() === 'visitor'">
           @for (link of links; track link.surface) {
             <button
               class="nav-link"
@@ -132,6 +135,12 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
     */
     .mark { flex: none; height: 34px; width: 132px; object-fit: cover; display: block; }
     .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .inner.wide { max-width: 1680px; }
+    .get-key {
+      font: inherit; font-size: 12px; font-weight: 700; color: #fff; background: var(--dhl-red);
+      border: 0; border-radius: 2px; padding: 5px 10px; cursor: pointer;
+    }
+    .get-key:hover { filter: brightness(1.1); }
     .badge {
       display: flex;
       align-items: center;
@@ -195,6 +204,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
 })
 export class App {
   private readonly state = inject(StateService);
+  protected readonly demoKey = inject(DemoKeyService);
 
   /**
    * Hard-coded rather than served from the backend.
