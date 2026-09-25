@@ -7,6 +7,9 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -32,12 +35,24 @@ public class ObjectsProvider {
 
     static final Duration TTL = Duration.ofSeconds(2);
     static final int RECENT_JOBS = 20;
+    /**
+     * Names arrive in a public URL, so the cache is bounded: expired entries
+     * are dropped once it passes this size, and if a flood of fresh names still
+     * fills it, it is emptied rather than allowed to grow.
+     */
+    static final int MAX_ENTRIES = 256;
+
+    private static final Logger log = LoggerFactory.getLogger(ObjectsProvider.class);
 
     private final ObjectSource source;
     private final Clock clock;
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+    private volatile CachedJobs jobsCache;
 
-    private record Cached(ObjectDetail detail, Instant at) { }
+    /** @param detail null when the object was not found, so repeated 404s are cheap too */
+    private record Cached(ObjectDetail detail, String notFound, Instant at) { }
+
+    private record CachedJobs(List<ObjectSummary> jobs, Instant at) { }
 
     public ObjectsProvider(ObjectSource source, Clock clock) {
         this.source = source;
@@ -48,41 +63,79 @@ public class ObjectsProvider {
         ObjectKind kind = ObjectKind.parse(kindName)
                 .orElseThrow(() -> new ObjectNotFound("no such kind: " + kindName));
         String key = kind.path() + "/" + name;
-        Instant now = clock.instant();
         Cached held = cache.get(key);
-        if (held != null && held.at().plus(TTL).isAfter(now)) {
+        if (held != null && held.at().plus(TTL).isAfter(clock.instant())) {
+            if (held.detail() == null) {
+                throw new ObjectNotFound(held.notFound());
+            }
             return held.detail();
         }
         ObjectDetail fresh;
         try {
-            fresh = read(kind, name, now);
+            fresh = read(kind, name, clock.instant());
         } catch (ObjectNotFound e) {
-            cache.remove(key);
+            remember(key, new Cached(null, e.getMessage(), clock.instant()));
             throw e;
         } catch (Throwable e) {
-            source.reset();
+            if (resetsTheClient(e)) {
+                source.reset();
+            }
+            log.debug("could not describe {}: {}", key, e.toString());
             fresh = ObjectDetail.unavailable(kind, name, KubernetesAccess.summarise(e));
         }
-        cache.put(key, new Cached(fresh, now));
+        // Stamped when the read finished, not when it began: a read that took
+        // the Route probe's full 3s would otherwise be stored already expired.
+        remember(key, new Cached(fresh, null, clock.instant()));
         return fresh;
+    }
+
+    int cachedEntries() {
+        return cache.size();
+    }
+
+    private void remember(String key, Cached entry) {
+        if (cache.size() >= MAX_ENTRIES) {
+            Instant now = clock.instant();
+            cache.values().removeIf(c -> !c.at().plus(TTL).isAfter(now));
+            if (cache.size() >= MAX_ENTRIES) {
+                cache.clear();
+            }
+        }
+        cache.put(key, entry);
+    }
+
+    /**
+     * A 4xx is the API server answering over a working connection - most often
+     * a 403 because RBAC has not been applied yet. Dropping the shared client
+     * for it would churn the client every other panel uses, for nothing.
+     */
+    private static boolean resetsTheClient(Throwable e) {
+        return !(e instanceof KubernetesClientException k && k.getCode() >= 400 && k.getCode() < 500);
     }
 
     /** Empty, not an error, when the cluster cannot be read: the page shows "no runs" and polls again. */
     public List<ObjectSummary> recentJobs() {
-        List<Job> jobs;
-        try {
-            jobs = source.jobs();
-        } catch (Throwable e) {
-            source.reset();
-            return List.of();
+        CachedJobs held = jobsCache;
+        if (held != null && held.at().plus(TTL).isAfter(clock.instant())) {
+            return held.jobs();
         }
-        return jobs.stream()
-                .filter(Scope::ours)
-                .map(WorkloadDescriber::jobSummary)
-                .sorted(Comparator.comparing(ObjectSummary::at,
-                        Comparator.nullsLast(Comparator.<String>reverseOrder())))
-                .limit(RECENT_JOBS)
-                .toList();
+        List<ObjectSummary> fresh;
+        try {
+            fresh = source.jobs().stream()
+                    .filter(Scope::ours)
+                    .map(WorkloadDescriber::jobSummary)
+                    .sorted(Comparator.comparing(ObjectSummary::at,
+                            Comparator.nullsLast(Comparator.<String>reverseOrder())))
+                    .limit(RECENT_JOBS)
+                    .toList();
+        } catch (Throwable e) {
+            if (resetsTheClient(e)) {
+                source.reset();
+            }
+            fresh = List.of();
+        }
+        jobsCache = new CachedJobs(fresh, clock.instant());
+        return fresh;
     }
 
     private ObjectDetail read(ObjectKind kind, String name, Instant now) {

@@ -1,14 +1,16 @@
 package dev.marwan.console.objects;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * The inspector's endpoints. GET only, so public under KeyFilter: nothing an
@@ -38,9 +40,15 @@ public class ObjectsController {
         return objects.recentJobs();
     }
 
+    /**
+     * A fixed JSON body, never the message. The message echoes the requested
+     * kind and name, and a bare String here was served as text/html: a link
+     * carrying markup in the path ran script on this public origin.
+     */
     @ExceptionHandler(ObjectNotFound.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public String notFound(ObjectNotFound e) {
-        return e.getMessage();
+    public ResponseEntity<Map<String, String>> notFound(ObjectNotFound e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("error", "NOT_FOUND"));
     }
 }

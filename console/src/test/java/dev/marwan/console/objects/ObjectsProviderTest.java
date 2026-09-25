@@ -3,6 +3,7 @@ package dev.marwan.console.objects;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -94,6 +95,70 @@ class ObjectsProviderTest {
 
         assertThat(provider.recentJobs()).isEmpty();
         assertThat(source.resets).isEqualTo(1);
+    }
+
+    /**
+     * Review finding 2: a read that takes time (a Route probe waiting out its
+     * 3s timeout) must still be reused by the next poll. Stamped with the time
+     * the read began, it was already expired when stored.
+     */
+    @Test
+    void aSlowReadIsStillServedFromCacheAfterItFinishes() {
+        source.pods.add(pod("queue-gate-x"));
+        source.onRead = () -> now.set(now.get().plus(Duration.ofMillis(1500)));
+
+        provider.describe("pod", "queue-gate-x");
+        int afterFirst = source.reads;
+        provider.describe("pod", "queue-gate-x");
+
+        assertThat(source.reads).isEqualTo(afterFirst);
+    }
+
+    /** Review finding 3: a 404 is remembered for the TTL, so looping on an unknown name is not one API read per request. */
+    @Test
+    void aNotFoundIsCachedForTheTtl() {
+        assertThatThrownBy(() -> provider.describe("pod", "nope")).isInstanceOf(ObjectNotFound.class);
+        int afterFirst = source.reads;
+
+        assertThatThrownBy(() -> provider.describe("pod", "nope")).isInstanceOf(ObjectNotFound.class);
+        assertThat(source.reads).isEqualTo(afterFirst);
+    }
+
+    /** Review finding 3: names come from a public URL, so the cache must not grow with them. */
+    @Test
+    void theCacheStaysBoundedWhateverNamesAreAskedFor() {
+        source.failWith = new IllegalStateException("API server refused");
+
+        for (int i = 0; i < 5_000; i++) {
+            provider.describe("pod", "random-" + i);
+        }
+
+        assertThat(provider.cachedEntries()).isLessThanOrEqualTo(ObjectsProvider.MAX_ENTRIES);
+    }
+
+    /**
+     * Review finding 4: a 403 (RBAC not applied yet) is a permission answer
+     * from a working connection. Resetting the shared client for it churns the
+     * client every other panel uses.
+     */
+    @Test
+    void aForbiddenReadDoesNotResetTheSharedClient() {
+        source.failWith = new KubernetesClientException("forbidden", 403, null);
+
+        ObjectDetail detail = provider.describe("deployment", "queue-gate");
+
+        assertThat(detail.available()).isFalse();
+        assertThat(source.resets).isZero();
+    }
+
+    /** Review finding 5: every viewer with nothing selected polls this; ten must cost what one does. */
+    @Test
+    void recentJobsAreCachedForTheTtl() {
+        provider.recentJobs();
+        int afterFirst = source.reads;
+        provider.recentJobs();
+
+        assertThat(source.reads).isEqualTo(afterFirst);
     }
 
     private static Pod pod(String name) {

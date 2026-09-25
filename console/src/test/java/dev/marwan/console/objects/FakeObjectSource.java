@@ -22,6 +22,8 @@ class FakeObjectSource implements ObjectSource {
     final List<Pod> pods = new ArrayList<>();
     final List<Job> jobs = new ArrayList<>();
     RuntimeException failWith;
+    /** Runs on every read, so a test can make a read take time on the provider's clock. */
+    Runnable onRead = () -> { };
     int reads;
     int resets;
 
@@ -63,6 +65,7 @@ class FakeObjectSource implements ObjectSource {
 
     private void read() {
         reads++;
+        onRead.run();
         if (failWith != null) {
             throw failWith;
         }

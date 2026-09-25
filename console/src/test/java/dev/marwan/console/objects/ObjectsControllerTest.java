@@ -14,6 +14,10 @@ import java.util.List;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,6 +48,21 @@ class ObjectsControllerTest {
         given(objects.describe("pod", "gone")).willThrow(new ObjectNotFound("pod gone does not exist here"));
 
         mvc.perform(get("/api/objects/pod/gone")).andExpect(status().isNotFound());
+    }
+
+    /**
+     * Review finding 1 (critical): the 404 body echoed the requested name as
+     * text/html, so a crafted link ran script on the demo's own origin.
+     */
+    @Test
+    void aNotFoundNeverReflectsTheRequestAsHtml() throws Exception {
+        String payload = "<img src=x onerror=alert(1)>";
+        given(objects.describe(payload, "x")).willThrow(new ObjectNotFound("no such kind: " + payload));
+
+        mvc.perform(get("/api/objects/{kind}/x", payload).header("Accept", "text/html,*/*"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Content-Type", not(containsString("text/html"))))
+                .andExpect(content().string(not(containsString("<img"))));
     }
 
     @Test
