@@ -79,7 +79,7 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
       </nav>
     </header>
 
-    <main>
+    <main [class.wide]="surface() === 'visitor'">
       @switch (surface()) {
         @case ('home') {
           <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" />
@@ -181,6 +181,8 @@ type Surface = 'home' | 'cluster' | 'docs' | 'doc' | 'visitor';
     .nav-link:hover { color: var(--ink); background: var(--rule); }
     .nav-link.on { color: var(--dhl-red); border-bottom-color: var(--dhl-red); }
 
+    /* The live page uses the full desktop width; everything else keeps a reading measure. */
+    main.wide { max-width: 1680px; }
     main {
       max-width: 1120px;
       margin: 0 auto;
@@ -223,7 +225,9 @@ export class App {
     return this.state.view()?.pods?.namespace ?? '—';
   }
 
-  readonly surface = signal<Surface>('home');
+  /** A link to an object (`?inspect=kind/name`) opens where the inspector lives. */
+  readonly surface = signal<Surface>(
+    new URL(window.location.href).searchParams.has('inspect') ? 'visitor' : 'home');
   readonly selectedDocId = signal<string | null>(null);
 
   /** Reading a note is still being in Build notes, so the nav says so. */

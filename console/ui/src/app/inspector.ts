@@ -9,7 +9,7 @@ import { ObjectLink } from './state';
  * label/value facts, so a Route and a CronJob render the same way and a new
  * kind needs no new component.
  *
- * Under 900px it becomes a drawer over the page, with a close button, because
+ * Below 1280px it becomes a drawer over the page, with a close button, because
  * a third of a phone is too narrow to read an event message in.
  */
 @Component({
@@ -142,7 +142,10 @@ import { ObjectLink } from './state';
     .dot.t-warn { background: var(--chip-warn-fg); }
     .dot.t-bad { background: var(--chip-bad-fg); }
 
-    @media (max-width: 899px) {
+    @media (min-width: 1280px) and (max-width: 1649px) {
+      .inspector { border-left: 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
+    }
+    @media (max-width: 1279px) {
       .inspector { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 20;
                    background: var(--white); padding: 16px; overflow-y: auto; border-left: 1px solid var(--line);
                    box-shadow: -8px 0 24px rgba(0, 0, 0, .12); transform: translateX(100%);
