@@ -62,7 +62,7 @@ class BaselineTest {
     }
 
     Baseline baseline() {
-        return new Baseline(cluster, prometheus, drop -> new DemoState(true, null, drop, 1, 250, 196, 54, oversold, 0, 0, 0));
+        return new Baseline(cluster, prometheus, 5, drop -> new DemoState(true, null, drop, 1, 250, 196, 54, oversold, 0, 0, 0));
     }
 
     Map<String, String> byLabel(Facts facts) {
@@ -78,6 +78,7 @@ class BaselineTest {
         assertThat(facts.all().get(0).id()).isEqualTo("F1");
         assertThat(f.get("Bookings: clean, rejected, not clean")).isEqualTo("196 booked, 4 rejected, 4 not clean");
         assertThat(f.get("Seats oversold")).isEqualTo("0");
+        assertThat(f.get("DB pool size per booking-service pod")).isEqualTo("5");
         assertThat(f.get("Peak DB pool in use, booking-service-a")).isEqualTo("5");
         assertThat(f.get("Peak DB pool in use, booking-service-b")).isEqualTo("0");
         assertThat(f.get("Peak p95 latency, booking-service")).isEqualTo("2100 ms");

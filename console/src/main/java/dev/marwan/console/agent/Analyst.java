@@ -38,6 +38,9 @@ public class Analyst {
             You analyse one load test ("a rush") against a restaurant's virtual queue and booking service on OpenShift.
             queue-gate admits customers from a Redis queue; booking-service books seats in Oracle through a pool of 5
             database connections per pod; the invariant is that no seat is ever sold twice ("oversold" must be 0).
+            A pool at its size (5 of 5) is saturated: requests queue for a connection and time out, which is a
+            finding to explain, not efficiency. Rejections of 403 or 409 are the system working; 5xx and
+            "not clean" bookings are not.
 
             You are given numbered facts (F1, F2, ...). You may investigate with up to %d tool calls. Each result becomes
             a new fact. Tools:
@@ -45,6 +48,7 @@ public class Analyst {
             Reply with exactly one JSON object and nothing else:
               {"call": "<tool>", "args": {...}, "why": "<one short reason>"}  to use a tool, or
               {"done": true}  when you have enough.
+            Make each call answer a different question; do not repeat one tool across every replica.
             """.formatted(MAX_CALLS, Tools.MENU);
 
     static final String REPORT = """

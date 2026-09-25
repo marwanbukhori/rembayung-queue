@@ -52,8 +52,8 @@ public class AgentConfiguration {
 
     @Bean
     Analyst analyst(ObjectSource objects, RangeQuery prometheus, DemoStateProvider state, Model agentModel,
-                    Clock clock) {
-        Baseline baseline = new Baseline(objects, prometheus, state::currentFor);
+                    Clock clock, dev.marwan.console.ConsoleProperties console) {
+        Baseline baseline = new Baseline(objects, prometheus, console.pool().perReplica(), state::currentFor);
         return new Analyst(baseline::gather, new Tools(objects, prometheus), agentModel, clock);
     }
 

@@ -43,10 +43,12 @@ public class Baseline {
     private final ObjectSource objects;
     private final RangeQuery prometheus;
     private final Function<String, DemoState> state;
+    private final int poolSize;
 
-    public Baseline(ObjectSource objects, RangeQuery prometheus, Function<String, DemoState> state) {
+    public Baseline(ObjectSource objects, RangeQuery prometheus, int poolSize, Function<String, DemoState> state) {
         this.objects = objects;
         this.prometheus = prometheus;
+        this.poolSize = poolSize;
         this.state = state;
     }
 
@@ -54,6 +56,9 @@ public class Baseline {
         Facts facts = new Facts();
         k6(w, facts);
         oversold(w, facts);
+        // Configuration, not a measurement - but a report comparing a peak with the pool's size
+        // needs the size as a fact to cite, or the validator rightly refuses the number.
+        facts.add("config", "DB pool size per booking-service pod", String.valueOf(poolSize));
         prometheus(w, facts);
         warnings(w, facts);
         restarts(facts);
