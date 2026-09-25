@@ -379,3 +379,38 @@ Each step ships and is useful alone.
 | Log polling from many viewers loads the API server | 2s server-side cache per pod; 500-line cap |
 | RBAC drift, since CD does not apply it | `check-drift.sh` already diffs RBAC; `status.sh` gains a line checking the tenancy port answers |
 | Our ServiceMonitor turns out not to be scraped | First task of step 3 checks; if so, the console scrapes `/actuator/prometheus` on the pods directly for the four series, and the design notes the change |
+
+---
+
+## 12. Amendments, 2026-09-25 (after step 1 shipped)
+
+### 12.1 One live page (supersedes §5.1's placement)
+
+The graph and inspector move from the cluster page to the simulation page, so
+a rush and what it does to the platform are watched on one screen. On desktop
+(≥1100px) the simulation page becomes two columns, chosen as layout A in the
+companion:
+
+- **Left, the business side:** run panel, seat map and queue, live traffic.
+- **Right, the platform side:** the charts strip (step 3) on top, then the
+  object graph and the inspector side by side.
+
+Under 1100px it is one column and the inspector is a drawer, as in step 1.
+The cluster page keeps what explains rather than moves: the architecture
+diagram, the workloads table, the monitoring panel, the log scenarios and the
+CPU budget note. `?inspect=` deep links open the simulation page.
+
+### 12.2 Splunk and Dynatrace trials have ended
+
+Dynatrace's tenant stopped serving on 2026-09-24; Splunk Cloud's host
+`prd-p-2d10o.splunkcloud.com` stopped resolving by 2026-09-25. Both are shown
+by name with a "Trial ended" state and nothing else: no feeds, links, searches
+or screenshots. Splunk gains `SPLUNK_DISABLED_REASON`, mirroring
+`DYNATRACE_DISABLED_REASON`; when set, the console does not probe the
+collector. Prose that names them (home page, pipeline diagram) says their
+trials ended.
+
+### 12.3 Build order, revised
+
+Step 2 is split: **2a** is §12.1 and §12.2; **2b** is the Logs tab (§5.4,
+§6.1, §6.2) and redis's "what it holds" line.
