@@ -239,7 +239,7 @@ export class AgentPage implements OnInit {
     { name: 'Investigate', what: 'the model may call up to 5 read-only tools; each result becomes a fact', model: true },
     { name: 'Report', what: 'went well, caught, look at: every item cites fact ids', model: true },
     { name: 'Validate', what: 'ids exist and every number appears in a cited fact; one retry, then a report from the facts alone', model: false },
-    { name: 'Store', what: 'facts, trail and report in a ConfigMap per run; the newest 20 kept', model: false }
+    { name: 'Store', what: 'facts, trail and report in one ConfigMap, keyed by run; the newest 12 kept', model: false }
   ];
 
   protected readonly tools = [
