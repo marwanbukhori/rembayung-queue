@@ -47,6 +47,13 @@ management:
         # Route. Adding it to a publicly routed port would publish internal
         # timings and JVM detail to the internet.
         include: health,prometheus
+  metrics:
+    distribution:
+      # Buckets for http.server.requests, so Prometheus can compute p95 across
+      # pods with histogram_quantile. Without them the latency chart has
+      # nothing to draw: on 2026-09-25 no _bucket series existed at all.
+      percentiles-histogram:
+        "[http.server.requests]": true
   endpoint:
     health:
       probes:

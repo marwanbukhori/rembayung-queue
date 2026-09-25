@@ -29,6 +29,13 @@ management:
       exposure:
         # Management port 9090 only — it is not on the public Route.
         include: health,prometheus
+  metrics:
+    distribution:
+      # Buckets for http.server.requests, so Prometheus can compute p95 across
+      # pods with histogram_quantile. Without them the latency chart has
+      # nothing to draw: on 2026-09-25 no _bucket series existed at all.
+      percentiles-histogram:
+        "[http.server.requests]": true
   endpoint:
     health:
       probes:

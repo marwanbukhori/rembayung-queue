@@ -431,3 +431,13 @@ Step 2 is split: **2a** is §12.1 and §12.2; **2b** is the Logs tab (§5.4,
 - **Redis pods** are shown whole to everyone: redis logs only its lifecycle.
 - The log read is capped by line count (500), not bytes: the API applies
   `limitBytes` from the start of the tail, which dropped the newest lines.
+
+### 12.5 Charts read two sources (supersedes §6.3's single source)
+
+History comes from Prometheus through the tenancy port, verified working on
+2026-09-25 once the console could get `pods.metrics.k8s.io` and booking-service's
+NetworkPolicy admitted the monitoring namespace on 9090 - before that change
+booking-service had never been scraped. Each chart also shows a "now" reading
+taken straight from the pods' `/actuator/prometheus` every two seconds, fresher
+than the 15-second scrape. Either source can fail alone; the chart says which.
+Latency has no live reading: a quantile needs Prometheus's windowed histogram.
