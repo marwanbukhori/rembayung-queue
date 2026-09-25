@@ -182,7 +182,11 @@ public class Analyst {
             for (JsonNode item : list) {
                 List<String> ids = new ArrayList<>();
                 item.path("facts").forEach(id -> ids.add(text(id)));
-                out.add(new Claim(text(item.path("text")), ids));
+                String text = text(item.path("text"));
+                // An empty placeholder ({} or text "") claims nothing, so it is dropped rather than failed.
+                if (!text.isBlank() || !ids.isEmpty()) {
+                    out.add(new Claim(text, ids));
+                }
             }
         }
         return out;

@@ -203,6 +203,19 @@ class AnalystTest {
     }
 
     @Test
+    void anEmptyPlaceholderItemIsDroppedNotHeldAgainstTheReport() {
+        model.then("{\"done\":true}").then("""
+                {"went_well":[{"text":"No seat was oversold.","facts":["F6"]}],
+                 "caught":[{"text":"196 booked and 4 not clean.","facts":["F2"]}, {}],
+                 "look_at":[{"text":"","facts":[]}]}
+                """);
+        Analysis a = analyst().analyse(WINDOW);
+        assertThat(a.source()).isEqualTo("model");
+        assertThat(a.report().caught()).hasSize(1);
+        assertThat(a.report().lookAt()).isEmpty();
+    }
+
+    @Test
     void jsonInsideAFenceIsAccepted() {
         model.then("```json\n{\"done\":true}\n```").then("```json\n" + GOOD_REPORT + "\n```");
         assertThat(analyst().analyse(WINDOW).source()).isEqualTo("model");
