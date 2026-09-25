@@ -66,6 +66,34 @@ public class RunAnalyst {
         }
     }
 
+    public enum Rerun { STARTED, BUSY, UNKNOWN }
+
+    /**
+     * Run the model again on a stored run's facts, in the background. Shares the
+     * one-at-a-time guard with the reconciler, so a re-analysis never doubles
+     * the load on the shared model.
+     */
+    public Rerun rerun(String job) {
+        Optional<Analysis> stored = store.get(job);
+        if (stored.isEmpty()) {
+            return Rerun.UNKNOWN;
+        }
+        if (!busy.compareAndSet(false, true)) {
+            return Rerun.BUSY;
+        }
+        Analysis a = stored.get();
+        worker.submit(() -> {
+            try {
+                store.put(analyst.reanalyse(new RunWindow(a.job(), a.dropId(), a.start(), a.end()), a.facts()));
+            } catch (RuntimeException e) {
+                log.warn("re-analysis of {} failed: {}", job, KubernetesAccess.summarise(e));
+            } finally {
+                busy.set(false);
+            }
+        });
+        return Rerun.STARTED;
+    }
+
     void reconcileOnce() {
         try {
             Set<String> done = store.jobs();
