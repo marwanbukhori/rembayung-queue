@@ -80,7 +80,7 @@ interface Plot {
           </figcaption>
 
           <div class="now" aria-live="polite">
-            @if (p.key === 'latency' || p.key === 'pool') {
+            @if (p.key === 'latency') {
               <span class="muted">live: Prometheus only</span>
             } @else if (p.data?.live) {
               <span class="muted">{{ p.data!.live }}</span>
