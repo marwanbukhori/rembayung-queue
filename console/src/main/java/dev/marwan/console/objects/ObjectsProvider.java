@@ -67,8 +67,16 @@ public class ObjectsProvider {
         return fresh;
     }
 
+    /** Empty, not an error, when the cluster cannot be read: the page shows "no runs" and polls again. */
     public List<ObjectSummary> recentJobs() {
-        return source.jobs().stream()
+        List<Job> jobs;
+        try {
+            jobs = source.jobs();
+        } catch (Throwable e) {
+            source.reset();
+            return List.of();
+        }
+        return jobs.stream()
                 .filter(Scope::ours)
                 .map(WorkloadDescriber::jobSummary)
                 .sorted(Comparator.comparing(ObjectSummary::at,

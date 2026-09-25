@@ -83,6 +83,19 @@ class ObjectsProviderTest {
                 .containsExactly("load-d-3fa951d5", "keepalive-1");
     }
 
+    /**
+     * The inspector's empty state polls this list. An unreadable cluster must
+     * leave it empty, not fail the request: found running locally against an
+     * expired token, where it answered 500.
+     */
+    @Test
+    void recentJobsFromAnUnreadableClusterAreEmptyNotAnError() {
+        source.failWith = new IllegalStateException("Unauthorized");
+
+        assertThat(provider.recentJobs()).isEmpty();
+        assertThat(source.resets).isEqualTo(1);
+    }
+
     private static Pod pod(String name) {
         return new PodBuilder().withNewMetadata().withName(name).addToLabels("app", "queue-gate").endMetadata()
                 .withNewStatus().withPhase("Running").endStatus().build();
