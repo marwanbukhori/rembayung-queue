@@ -17,17 +17,7 @@ public class ChaosConfiguration {
     ChaosState chaosState(DataSource dataSource) {
         ChaosState.PoolSizer sizer;
         if (dataSource instanceof HikariDataSource hikari) {
-            sizer = new ChaosState.PoolSizer() {
-                @Override
-                public int size() {
-                    return hikari.getHikariConfigMXBean().getMaximumPoolSize();
-                }
-
-                @Override
-                public void resize(int n) {
-                    hikari.getHikariConfigMXBean().setMaximumPoolSize(n);
-                }
-            };
+            sizer = new HikariPoolSizer(hikari);
         } else {
             sizer = new ChaosState.PoolSizer() {
                 @Override public int size() { return 0; }

@@ -13,8 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The console's lever for a drill. Cluster-internal only, like every /internal
- * path here: booking-service has no Route, and its NetworkPolicy admits the
- * gate and the console and nothing else.
+ * path here: booking-service has no Route, and the gate forwards only /bookings
+ * paths. The NetworkPolicy does not narrow it further: allow-same-namespace
+ * admits every pod in the namespace (note 04), so any pod here could call it.
  */
 @RestController
 @RequestMapping("/internal/chaos")
