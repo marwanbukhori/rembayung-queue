@@ -106,9 +106,11 @@ it was chosen over self-hosting — not convenience.
 
 ## Why Prometheus is the backbone, not a fourth wheel
 
-Dynatrace's trial expires around **2026-09-19**. Splunk's expires around
-**2026-09-18**. Both are hard stops — after those dates, traces and log
-search on this cluster go away, whatever else is true about the code.
+When this was written, Dynatrace's trial was expected to expire around
+**2026-09-19** and Splunk's around **2026-09-18**. Both are hard stops — after
+those dates, traces and log search on this cluster go away, whatever else is
+true about the code. (They ran a little longer than that: Dynatrace ended on
+2026-09-24 and Splunk on 2026-09-25. See "Since then" below.)
 
 Prometheus does not expire. It is the in-cluster CR-based stack that ships
 with OpenShift's user-workload monitoring, and nothing about it depends on a
@@ -390,3 +392,28 @@ baseline runs themselves — indistinguishable from noise. No
 `OutOfMemoryError`, no thread exhaustion, no appender error surfaced to the
 application. The pipeline drops what it cannot ship and the request path
 never notices.
+
+---
+
+## Since then
+
+Both trials ended, and the design above is what happened next.
+
+**Dynatrace, 2026-09-24.** The tenant stopped serving the agent installer, which
+began to answer 404. Because `-agentpath` cannot be made conditional, every new
+`queue-gate` and `booking-service` pod then crash-looped in its init container.
+The OneAgent is now switched off: `deploy/base/dynatrace` is a Kustomize
+component that the sandbox overlay no longer includes, kept so it can be turned
+back on for a new tenant. The console shows Dynatrace as "trial ended", with the
+reason taken from its deployment's `DYNATRACE_DISABLED_REASON`.
+
+**Splunk, 2026-09-25.** The Splunk Cloud host stopped resolving. The services
+still carry the optional `splunk-hec` wiring. The console stopped probing the
+host and shows Splunk as "trial ended" too (`SPLUNK_DISABLED_REASON`).
+
+**Prometheus carried on**, which was the point of making it the backbone. The
+alert rules are unchanged, and it now also feeds the console's charts: the
+console runs range queries against the cluster's Thanos querier on its tenancy
+port (9092), which scopes every query to this namespace, so the console reads
+this project's series without seeing anyone else's. The run agent reads the
+same peaks for its reports.

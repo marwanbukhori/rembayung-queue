@@ -223,13 +223,19 @@ nothing queries bookings by slot; the sweeper reaches slots by primary key —
 but a "show me every booking for this slot" query would full-scan. Noted as a
 deferred item rather than added speculatively.
 
+That query now exists. `SandboxSweeper`, added with the demo console, deletes a
+lapsed sandbox's bookings with `delete from Booking b where b.slotId = :slotId`
+every five minutes, and no migration has added the index, so each of those
+deletes scans `bookings`. At demo volumes that is cheap; it is the deferred
+item coming due.
+
 ### `ix_bookings_sweep`
 
 ```sql
 CREATE INDEX ix_bookings_sweep ON bookings (status, expires_at);
 ```
 
-The one index that *is* here, because Task 7's expiry sweeper queries exactly
+The one index V1 creates, because Task 7's expiry sweeper queries exactly
 `WHERE status = ? AND expires_at < ?`. Column order matches the query:
 equality predicate first, range predicate second, which is the ordering a
 composite index wants.
@@ -325,3 +331,15 @@ at all, rather than running and being wrong.
 **Task 3** maps these tables to Java classes and introduces
 `SlotRepository.findByIdForUpdate` — the `SELECT ... FOR UPDATE` query that
 every subsequent task depends on.
+
+---
+
+## Since then
+
+There is one more migration. `V2__sandbox_slots.sql`, added for the demo
+console, gives `slots` a nullable `sandbox_expires_at` column: `NULL` for a real
+slot, a timestamp for a visitor's throwaway sandbox that `SandboxSweeper` reaps
+once it passes. Its index, `ix_slots_sandbox_expiry`, is single-column, and
+Oracle leaves `NULL`s out of a single-column B-tree, so the index holds exactly
+the sandbox rows the sweeper scans. `V1` is unchanged, and `ck_slots_seats`
+still carries the whole argument.

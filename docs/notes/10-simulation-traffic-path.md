@@ -17,15 +17,25 @@ different services:
 
 | Path | Service | Reachable from | File |
 |---|---|---|---|
-| `/api/drops/{id}/load` | console | the internet | `console/…/ops/LoadOps.java:88` |
+| `/api/drops/{id}/load` | console | the internet | `console/…/ops/LoadOps.java:91` |
 | `/api/drops` | console | the internet | `console/…/ops/DropOps.java:40` |
 | `/api/docs` | console | the internet | `console/…/web/DocsController.java:42` |
+| `/api/state` | console | the internet | `console/…/web/StateController.java:44` |
+| `/api/cluster` | console | the internet | `console/…/web/ClusterController.java:32` |
+| `/api/observability` | console | the internet | `console/…/web/ObservabilityController.java:35` |
+| `/api/metrics/{chart}` | console | the internet | `console/…/metrics/MetricsController.java:26` |
+| `/api/objects`, `/api/pods/{name}/logs` | console | the internet | `console/…/objects/ObjectsController.java:42` |
+| `/api/analyses` | console | the internet | `console/…/agent/AnalysesController.java:42` |
+| `/api/demo-key` | console | the internet | `console/…/web/DemoKeyController.java:31` |
+| `/mcp` | console | the internet | `console/…/mcp/McpConfiguration.java:31` |
 | `/queue` | queue-gate | the internet | `queue-gate/…/web/QueueController.java:12` |
 | `/bookings` | queue-gate | the internet | `queue-gate/…/web/BookingProxyController.java:16` |
 | `/internal/drops` | queue-gate | pods only | `queue-gate/…/web/InternalController.java:29` |
 
-`/api/…` is the console's own surface, spoken by a browser. `/internal/…` is
-queue-gate's, spoken by another pod. The console calls the second; it never asks
+`/api/…` is the console's own surface, spoken by a browser; `/mcp` is the same
+console spoken by an MCP client. `/internal/…` is queue-gate's, spoken by
+another pod (booking-service has an `/internal/slots` of its own, with no Route
+in front of it at all). The console calls the second; it never asks
 queue-gate for load.
 
 The console does not generate load either. It asks Kubernetes for a Job, and the
@@ -38,12 +48,12 @@ is in the next section.
 
 ```
 browser
-  │  POST /api/drops/{dropId}/load  { vus }
+  │  POST /api/drops/{dropId}/load  { vus, waves }
   ▼
-Route (edge TLS)  →  Service console:8080  →  console pod
+Route (edge TLS)  →  Service console:8082  →  console pod
   │  KeyFilter: a write, so ?key= is required
   ▼
-LoadOps.start()                                   console/…/ops/LoadOps.java:162
+LoadOps.start()                                   console/…/ops/LoadOps.java:187
   │  1. replaceFinishedRun(jobName)   clear the previous tombstone
   │  2. applyScript()                 write drop.js into ConfigMap console-k6-drop
   │  3. jobs().create(...)            ask the API server for a Job
@@ -57,6 +67,7 @@ Job controller  →  Pod  →  scheduler
 kubelet on some node  →  CRI-O  →  k6 container
   │  k6 run /scripts/drop.js
   │  env: GATE, DROP_ID, SLOT_ID, VUS
+  │       (+ WAVES=2, WAVE_GAP, DROP_ID_2, SLOT_ID_2 for a two-wave rush)
   ▼
 Service queue-gate:8080  (ClusterIP — the Route is not involved)
   │  POST /queue                      a ticket, not a seat
@@ -68,8 +79,9 @@ queue-gate
 Service booking-service:8081
   │  POST /bookings
   ▼
-BookingService.book()                 booking-service/…/service/BookingService.java:108
-  │  SELECT … FOR UPDATE on the slot row
+BookingService.book()                 booking-service/…/service/BookingService.java:80
+  │  → claimSeat()                     BookingService.java:109
+  │  SELECT … FOR UPDATE on the slot row  BookingService.java:123
   ▼
 Oracle
      ck_slots_seats CHECK (seats_taken >= 0 AND seats_taken <= capacity)
@@ -83,19 +95,25 @@ Every hop is refused by something other than application code wherever that was
 possible. This is the part worth explaining out loud: the checks are not `if`
 statements this project has to keep correct.
 
-**Browser to console.** `KeyFilter` requires `?key=` for writes. Reads are open
-so a stranger sent the link sees a working system; starting a run is gated
-because it puts real load on a real namespace.
+**Browser to console.** `KeyFilter` requires the key, as `?key=` or the
+`X-Console-Key` header, for writes. Reads are open so a stranger sent the link
+sees a working system; starting a run is gated because it puts real load on a
+real namespace. With sharing on, `GET /api/demo-key` hands the key to anyone who
+asks, so the gate is now a deliberate click rather than a secret.
 
-**Console to Kubernetes.** The console authenticates as its own ServiceAccount,
-which holds `get,create,delete` on `batch/jobs` and `get,create,update` on
-configmaps, and nothing else (`deploy/base/console/rbac.yaml`). It cannot create
-a Deployment, read a Secret, or reach any other resource. A visitor pressing the
+**Console to Kubernetes.** The console authenticates as its own ServiceAccount
+(`deploy/base/console/rbac.yaml`). Its only writes are `get,list,create,delete` on
+`batch/jobs` and `get,create,update` on configmaps (the k6 script and the run
+agent's reports). Everything else it holds is read-only: pods and their logs,
+events, the workloads, Services, Routes, HPAs and the like, for the inspector.
+It cannot create a Deployment, read a Secret, or change anything but those two
+kinds. A visitor pressing the
 button can start a Job and can do nothing further, and that is enforced by the
 API server.
 
 **A second click.** The Job is named after the drop, so a second create is
-rejected by the API server as a duplicate name. There is no counter in the
+rejected by the API server as a duplicate name. (The console now looks first:
+a finished Job of that name is deleted and replaced, a running one answers 409.) There is no counter in the
 console to keep correct, and no race between two browser tabs.
 
 **The scheduler.** The k6 pod asks for CPU like every other pod. If
@@ -108,9 +126,11 @@ termination, no router in the path.
 
 **Admission.** `X-Admission-Token` is consumed with Redis `GETDEL`, which is
 atomic, so there is no check-then-act window in which two callers redeem the same
-token. `BookingProxyController` also verifies the token was admitted *for that
-slot*: a valid token for a visitor's own sandbox, replayed against the canonical
-250 seats, passes every upstream check and must still be refused.
+token. `BookingProxyController` also takes the slot from the *token*, not the
+request body: a valid token for a visitor's own sandbox, sent with the canonical
+250-seat slot in its body, passes every upstream check, so the gate overwrites
+`slotId` with the one the token was admitted for rather than trusting the
+caller.
 
 **The seat count.** `SELECT … FOR UPDATE` serialises every mutation of
 `seats_taken` for one slot, and the CHECK constraint is the backstop underneath
@@ -153,33 +173,44 @@ The Phase 3 ladder measured that the edge would not:
 | 1000 | 662 | 75% |
 | 3000 | 818 | 92% |
 
-Which is why 200 is the default. It is the measured ceiling of usefulness rather
-than a resource compromise, and higher values are still offered because hiding
-the option would hide the finding.
+Which is why 200 is the ceiling of usefulness rather than a resource compromise,
+and higher values are still offered because hiding the option would hide the
+finding. The default is lower still, 60 VUs: at the one admission a second this
+database commits, 60 customers drain inside k6's ninety-second polling window,
+and 200 do not ([note 09](09-demo-console.md)).
 
 ---
 
 ## Where the run shows up
 
-**Splunk.** Every service ships structured JSON over HEC with
-`source="rembayung"`, so a run is searchable by service and outcome:
+**Splunk** (until its trial ended on 2026-09-25). Every service shipped
+structured JSON over HEC with `source="rembayung"`, so a run was searchable by
+service and outcome:
 
 ```spl
 source="rembayung" message.outcome=* | stats count by message.service, message.outcome
 ```
 
-The seat count can be argued from the log rather than the database, and the two
-must agree.
+The seat count could be argued from the log rather than the database, and the
+two had to agree.
 
 **Prometheus.** A `ServiceMonitor` scrapes `:9090`; a `PrometheusRule` alerts if
-`oversold` ever leaves zero. That is the metric worth alerting on, not CPU.
+`oversold` ever leaves zero. That is the metric worth alerting on, not CPU. The
+simulation page draws its charts from the same series, through the Thanos
+tenancy port.
 
-**Dynatrace.** Distributed traces and the service map, from an application-only
-OneAgent on queue-gate and booking-service. It ships no logs at all, which is why
-log views there are empty by design.
+**Dynatrace** (until its trial ended on 2026-09-24). Distributed traces and the
+service map, from an application-only OneAgent on queue-gate and
+booking-service. It shipped no logs at all, which is why log views there were
+empty by design. The agent is now switched off
+([note 08](08-observability.md)).
 
 **The cluster itself.** `oc get jobs`, then `oc logs job/<name>` for the k6
-summary. Using a Job rather than a thread pool inside the console means the run
+summary. Its last line is `K6_SUMMARY` followed by one JSON object: bookings,
+latencies, and the customer funnel's counters (joined, admitted, booked, sold
+out, gave up, overloaded, faults), per wave when there were two. The console's
+run agent reads that line from every finished run and writes its report into
+the `run-analyses` ConfigMap ([note 12](12-run-agent.md)). Using a Job rather than a thread pool inside the console means the run
 is visible to anyone with namespace access, instead of being a private detail of
 one process.
 
@@ -194,12 +225,14 @@ one process.
 | Job created, pod `Pending` | scheduler | `compute-deploy` has no headroom; `oc describe pod` names it |
 | `503` from the console | Kubernetes API unreachable | `LoadOps` catches, invalidates the client and reports |
 | k6 finishes, `bookings_created` under 50 | admission | every response well-formed, nothing admitted |
-| `http_req_failed` high | genuinely broken | 403 and 409 are excluded; only server errors count |
+| `http_req_failed` high | genuinely broken | everything below 500 is excluded, and so is 503, the deliberate shed-load answer; only other server errors count |
 
 The last two are the thresholds that took a correction. A 250-seat slot satisfies
 about 125 of 5000 contenders, so roughly 97% of responses are a 403 or a 409.
 k6's default counts those as failures and reported about 89% failure for a system
-behaving exactly as designed. Both thresholds exist because the obvious reading
+behaving exactly as designed. The same reasoning later took 503 out: a saturated
+pool answers 503 with `Retry-After` on purpose, and counting it tripped the
+threshold on the very run built to show back-pressure. Both thresholds exist because the obvious reading
 is wrong in both directions: counting rejections as failures condemns a healthy
 run, and counting nothing at all would pass a run in which admission was dead.
 
@@ -211,7 +244,8 @@ run, and counting nothing at all would pass a run in which admission was dead.
 
 - `redis-from-gate-only` — ingress to `app: redis` on 6379 from `app: queue-gate`
 - `booking-service-from-gate-only` — ingress to `app: booking-service` on 8081
-  from `app: queue-gate`
+  from `app: queue-gate` (and, since the observability work, on 9090 from the
+  console and the user-workload monitoring namespace, for metrics only)
 
 The console nevertheless reads `/internal/slots/{id}` from booking-service on
 every poll, and that call succeeds. Both cannot be true of a namespace where
@@ -234,9 +268,10 @@ oc get networkpolicy
 ```
 
 The fix, if the isolation is meant to bind, is to name the console as a permitted
-source on booking-service and stop relying on the platform's blanket rule being
-absent — or to accept that in this environment the boundary is the
-`InternalGuard` header check rather than the network layer.
+source on booking-service's 8081 as well, as it already is on 9090, and stop
+relying on the platform's blanket rule — or to accept that in this environment
+the boundary is somewhere else: `InternalGuard`'s shared-secret header on
+queue-gate's `/internal`, and on booking-service, having no Route at all.
 
 ---
 

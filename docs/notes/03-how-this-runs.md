@@ -1,7 +1,12 @@
-# 03 — How this runs: triggers, and why there is no UI
+# 03 — How this runs: triggers, and why there was no UI
 
 **Covers:** the shape of the project after Phase 1, not any single task
 **Branch state:** `d66ad38`, 25/25 tests passing
+
+A snapshot of the project after Phase 1, kept as written. Most of it is no
+longer true of the running system, which now has a web layer, a public Route
+and a UI; "Since then" at the end says what changed. Line numbers below have
+been updated to point at today's files.
 
 A reasonable question after Phase 1: *there is backend code and a test directory —
 so how is any of it actually triggered?*
@@ -43,7 +48,7 @@ The only thing that runs application code today:
 mvn test
   └─ Testcontainers starts real Oracle in Docker
      OracleTestBase.java:25   static final OracleContainer ORACLE = ...
-     OracleTestBase.java:33   static { ORACLE.start(); }
+     OracleTestBase.java:34   static { ORACLE.start(); }
       └─ @ServiceConnection hands Spring the container's random port
          OracleTestBase.java:24
           └─ Spring boots the application context (no web server — no web starter)
@@ -61,9 +66,9 @@ HTTP request. It calls a Java method, the same way any class calls another. The
 The same is true of the concurrency proof — it just does it 400 times at once:
 
 ```
-ConcurrencyInvariantTest.java:28   void neverOversellsUnderConcurrentBooking()
-ConcurrencyInvariantTest.java:43       bookingService.book(new BookingRequest(...))
-ConcurrencyInvariantTest.java:62       assertThat(succeeded).isEqualTo(capacity);
+ConcurrencyInvariantTest.java:32   void neverOversellsUnderConcurrentBooking()
+ConcurrencyInvariantTest.java:47       bookingService.book(new BookingRequest(...))
+ConcurrencyInvariantTest.java:66       assertThat(succeeded).isEqualTo(capacity);
 ```
 
 400 threads, one 250-seat slot, a plain method call from each. No network, no
@@ -77,8 +82,9 @@ There is one non-test trigger already written. It is not a request; nobody calls
 it:
 
 ```java
-// ExpirySweeper.java:30
+// ExpirySweeper.java:52
 @Scheduled(fixedDelayString = "PT30S")
+@Transactional
 public void sweep() {
     int expired = sweepExpired(Instant.now());
     ...
@@ -93,8 +99,8 @@ Note the split, which is what makes the sweeper testable:
 
 | Method | Line | Role |
 |---|---|---|
-| `sweep()` | `ExpirySweeper.java:31` | supplies the **real** clock, scheduled |
-| `sweepExpired(Instant now)` | `ExpirySweeper.java:48` | takes the clock as a **parameter** |
+| `sweep()` | `ExpirySweeper.java:54` | supplies the **real** clock, scheduled |
+| `sweepExpired(Instant now)` | `ExpirySweeper.java:78` | takes the clock as a **parameter** |
 
 Tests call the second one with a time an hour in the future, so a 10-minute hold
 has "lapsed" without waiting ten minutes. Passing the clock in rather than
@@ -145,7 +151,7 @@ at all — that is a security boundary, not an omission.
 
 ---
 
-## There is no UI, and that is the design
+## There was no UI, and that was the design
 
 The demo script in the design spec has five steps, and none of them is a
 customer-facing web app:
@@ -173,7 +179,7 @@ today.
 cd booking-service
 export JAVA_HOME=/opt/homebrew/opt/openjdk@25
 
-mvn test                                    # everything — 25 tests, ~10s
+mvn test                                    # everything — 25 tests at d66ad38, ~10s
 mvn test -Dtest=ConcurrencyInvariantTest    # just the concurrency proof
 ```
 
@@ -220,3 +226,27 @@ service, and no human at a SQL prompt can get around it.
 
 That sequence — run the test, `SELECT` the row, then fail the `UPDATE` — is the
 demo.
+
+---
+
+## Since then
+
+Everything in the phase table happened, and the first trigger type arrived.
+Phase 2 added the REST layer (`POST /queue`, `POST /bookings`), Phase 3 put
+`queue-gate` behind a public Route, and `booking-service` still has none.
+booking-service's suite has 63 `@Test` methods rather than 25.
+
+The "no UI" argument was right about what it argued against, and the project
+still has no booking form. What it has is the demo console
+([note 09](09-demo-console.md)): a page from which a visitor starts steps 3 and
+4 themselves on a sandbox drop of their own, a k6 Job in the cluster sending
+the load and the page showing the seat count, the oversold count, the pods and
+the autoscalers while it runs. It exists because the audience changed. A demo
+run from a laptop proves nothing to someone who is not at that laptop. The
+console is still not a customer interface: it shows the property under test
+rather than hiding it behind a form. Splunk and Dynatrace are no longer part of
+it; both trials ended ([note 08](08-observability.md)).
+
+The sweeper snippet above now carries `@Transactional` on `sweep()`. At
+`d66ad38` it did not, and [note 08](08-observability.md) explains why that
+meant the sweeper had never worked in production.

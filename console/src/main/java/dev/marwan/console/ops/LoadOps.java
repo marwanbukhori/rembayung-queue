@@ -66,8 +66,9 @@ import java.util.Optional;
  *     3000       818      92%
  * </pre>
  *
- * Which is why 200 is the default: it is the measured ceiling of usefulness,
- * not a resource compromise. Higher counts are offered rather than forbidden,
+ * Which is why 200 is the ceiling worth offering first: the measured limit of
+ * usefulness, not a resource compromise. The default is lower still, 60, so a
+ * run finishes while somebody is watching (see {@link #DEFAULT_VUS}). Higher counts are offered rather than forbidden,
  * because hiding the option would hide the finding.
  *
  * <h2>Bounds, and what they are for</h2>

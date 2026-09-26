@@ -4,9 +4,11 @@
 
 # This test deliberately does NOT book. A booking consumes seats from a finite
 # 250-seat slot, so a smoke test that booked would drain real inventory on every
-# deploy. It proves the Route, the gate and Redis are all working; booking-
-# service's own readiness probe already covers the datasource, which is checked
-# below.
+# deploy. It proves the Route, the gate and Redis are all working. booking-
+# service's readiness probe no longer covers the datasource (it was taken out so
+# a slow Oracle could not pull every pod from the Service at once), so a deploy
+# can pass here with booking broken; the ready-replicas check below is what is
+# left, and the gap is recorded in note 07.
 - name: Join the queue through the public Route
   ansible.builtin.uri:
     url: "https://{{ route_host }}/queue"

@@ -70,7 +70,7 @@ The dev machine is arm64 (Apple Silicon) and the cluster is x86_64. Building an 
 
 Runners are x86_64 natively. No emulation. The build works. The parent spec predicted this would be the benefit of CI; Phase 3 confirmed the problem and Phase 4 confirms the fix.
 
-**This is why the Dockerfiles are single-stage and copy `target/*.jar`** — they do not build from source. On the dev machine, building from source fails; in CI, we build the JARs natively on x86 first and copy them into amd64 layers. Same shapes work both places. The trade is that a Dockerfile alone no longer builds the app — you must run Maven first. That is fine; deployments do not rebuild from scratch anyway.
+**This is why the two service Dockerfiles are single-stage and copy `target/*.jar`** — they do not build from source. (The console's, added later, is the exception: a `node:24-alpine` stage builds the Angular bundle, then the same JRE base serves it beside the JAR Maven built.) On the dev machine, building from source fails; in CI, we build the JARs natively on x86 first and copy them into amd64 layers. Same shapes work both places. The trade is that a Dockerfile alone no longer builds the app — you must run Maven first. That is fine; deployments do not rebuild from scratch anyway.
 
 ---
 
@@ -269,3 +269,19 @@ docker stop $(docker ps --filter ancestor=gvenzl/oracle-free:23-slim-faststart -
 ```
 
 Or leave it running; it will not affect anything else.
+
+---
+
+## Since then
+
+CI now tests and publishes three services, not two. The console joined as a
+third suite (`Test console`) and a third image, and the amd64 check loops over
+all three. The captured run on the console's CI/CD page, `36157265585` on
+`7983f03`, took 221s: `booking-service` 118s, `queue-gate` 17s, `console` 12s.
+The console's tests use no containers, so they add little.
+
+"Why CI does not deploy" is still true of `ci.yml`, and Phase 5 did arrive:
+`cd.yml` starts on CI's `workflow_run` and deploys the SHA CI just published
+([note 07](07-continuous-delivery.md)). The CI/CD page shows one real CI run,
+the CD run it triggered, and a failed deploy that rolled itself back, each with
+its logs.

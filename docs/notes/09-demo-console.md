@@ -109,6 +109,22 @@ a *link*, and a header cannot be put in a link. The cost is honest and small: a
 demo key that opens a dashboard lands in browser history and in any access log
 in front of the Route, and can be rotated by editing one Secret.
 
+**This changed two days later.** Once the console's address went into the
+public README, a stranger following it landed on a page with every number
+missing: the gate was doing its job, and the link was advertising a system that
+looked broken. Since `fa7aacc`, `GET` and `HEAD` on `/api/*` are open and
+everything else still needs the key. The split is by HTTP method rather than by
+a list of paths, so a new read cannot be left shut by accident and a new write
+cannot be left open. What stays behind the key is creating a drop, starting a
+load run, and re-running a report: the calls that spend the namespace's CPU
+quota. `console.public-reads=false` puts the old rule back.
+
+Since then the key itself can be handed out. With `CONSOLE_SHARE_KEY` set, as
+it is on the deployed console, `GET /api/demo-key` returns it and the header
+shows a **Get the demo key** button, so a visitor can run a simulation without
+having been sent a keyed link. The audience stopped being two people, and the
+rule followed it. Unset, the endpoint answers 404.
+
 Two things are deliberately outside the filter. The static page — the browser
 fetches its own script and stylesheet without the query string that opened the
 page, so gating them would break the link at the moment it worked, and the
@@ -217,7 +233,7 @@ namespace carries `compute-build` (Terminating) and `compute-deploy`
 deadline. On the pod template the run would spend a separate, empty budget and
 could never be refused — quietly deleting the point of the constraints panel.
 
-### Why the default is 200 VUs
+### Why no run goes past 200 VUs by default
 
 Not resource caution. 200 is the **measured ceiling of usefulness**, from the
 Phase 3 ladder:
@@ -232,6 +248,12 @@ Past 200 the edge sheds load, so a bigger number measures the ingress path
 rather than the queue. Higher counts are still offered, and labelled as edge
 shedding rather than forbidden — hiding the control would hide the finding, and
 the finding is one of the more interesting things Phase 3 produced.
+
+The default itself is lower: **60**, since `0b9664e`. At one admission a second,
+which is what this database actually commits, 200 customers take over three
+minutes to get through, and the k6 script stops polling after ninety seconds.
+Sixty drains in about a minute, inside that window, and fills about half the
+sitting.
 
 ### The cost, stated plainly
 
@@ -253,9 +275,9 @@ From the verification run:
   the run competes for the same budget as the Deployments rather than
   occupying a scope of its own.
 
-Verified from outside the cluster, through the public Route:
+Verified from outside the cluster, through the public Route, at the time:
 
-- `/api/state` with no key → **401**
+- `/api/state` with no key → **401** (**200** since reads were opened; see above)
 - The page → **200**
 - `/actuator/health` → **404**
 
@@ -329,8 +351,10 @@ untrue on a page whose entire purpose is to be believed.
 
 ## Documentation rendering, and why traversal is impossible rather than filtered
 
-The console serves the project's notes, specs and plans — 23 markdown files
-baked into the image at the time of writing, this note making 24. They are
+The console serves the project's build notes — only the notes now; the specs
+and plans were shipped alongside them at first (23 markdown files at the time of
+writing, this note making 24) and were taken out because they described what
+was going to be built rather than what was. They are
 enumerated **once, at startup, into a fixed map**, and both endpoints read only
 from that map. The request path is never appended to a directory to build a
 file path.
@@ -347,12 +371,13 @@ request arrives.
 
 ## What is not done
 
-**The operator surface's buttons are described, not wired.** Deploy, roll back
-and scale are drawn and explained on the page; none of them is connected to
+**The operator surface's buttons were described, not wired.** Deploy, roll back
+and scale were drawn and explained on the page; none of them was connected to
 anything. The console's ServiceAccount deliberately cannot patch Deployments —
-that path belongs to CD, running as `rembayung-cd` — so wiring them means
-deciding how a public page triggers CD, which this phase did not do. The panel
-currently documents an intention.
+that path belongs to CD, running as `rembayung-cd` — so wiring them meant
+deciding how a public page triggers CD, which this phase did not do. The
+Operator tab was removed on 2026-09-06 rather than left documenting an
+intention; the CI/CD page now shows real runs of that path instead.
 
 **Two NetworkPolicies enforce nothing.** `booking-service-from-gate-only` and
 `redis-from-gate-only` read as though they restrict ingress to `queue-gate`,
@@ -362,13 +387,49 @@ selected by both is reachable by the union of what they permit. Every pod in
 the namespace can reach both services. The policies are correct in themselves
 and would enforce what they say in a namespace without that blanket allow —
 which is precisely what makes them dangerous to read at face value here. They
-are documentation of intent that currently looks like enforcement.
+are documentation of intent that currently looks like enforcement. (The
+`booking-service` policy has since gained a rule admitting the console and the
+monitoring namespace on 9090, for metrics. The console's reads on 8081 still
+ride the blanket allow.)
 
-**The sandbox overlay has no console tag pin.** `deploy/base/console/deployment.yaml`
+**The sandbox overlay had no console tag pin.** `deploy/base/console/deployment.yaml`
 leaves the image untagged on purpose — two systems own that field and a third
-would silently disagree — but the overlay pins tags only for `queue-gate` and
+would silently disagree — but the overlay pinned tags only for `queue-gate` and
 `booking-service`. A fresh `oc apply -k` bootstrap of a new namespace would
-therefore give the console `:latest`, which is the one thing this project has
+therefore have given the console `:latest`, which is the one thing this project has
 none of in the registry and has argued against everywhere else
-(`docs/notes/07`). The bootstrap path for a new sandbox is incomplete until
-that pin exists.
+(`docs/notes/07`). The pin exists now: the overlay lists all three images, and
+CD's playbook rewrites all three to the tag it deploys.
+
+---
+
+## Since then
+
+The console has grown well past the page this note describes. Everything on it
+shows time in Malaysia time (GMT+8), and the navigation has six places:
+
+- **Run a simulation**, laid out in full-width bands: the run control, the
+  seat map, the pods and their CPU, a traffic log, charts drawn from Prometheus
+  through the Thanos tenancy port, and a cluster inspector: a graph of the
+  namespace's objects with a panel beside it describing whichever one is
+  selected, pod logs included
+  ([note 11](11-cluster-inspector-and-live-page.md)). A rush can be sent as one
+  wave or two, the second three minutes after the first on a fresh sitting, so
+  it meets whatever pods the autoscaler added.
+- **Cluster**, the namespace's resources read live: the architecture, every
+  Service and whether a Route publishes it, the pods, and the monitoring status,
+  where Dynatrace and Splunk now show as "trial ended".
+- **CI/CD**, one real run each of CI, CD and an automatic rollback, captured
+  with their logs, rather than a live status page.
+- **AI Agent & MCP.** A run agent in the console analyses every finished load
+  run with the sandbox's Qwen3 8B model and stores its reports in the
+  `run-analyses` ConfigMap ([note 12](12-run-agent.md)). The console also
+  serves MCP at `/mcp`, so an MCP client can read the same state and, with the
+  key, start a rush ([note 13](13-mcp-server.md)).
+- **Build notes**, and the Overview.
+
+The Role grew with it. It now reads pods and their logs, events, Deployments,
+ReplicaSets, Routes, Services, HPAs, EndpointSlices, NetworkPolicies and
+CronJobs, all read-only, and holds `get`/`create`/`update` on ConfigMaps for
+the k6 script and the reports. It still cannot patch a Deployment or read a
+Secret.

@@ -331,3 +331,17 @@ builds the `DataSource` → Spring boots → Flyway applies
 `V1__initial_schema.sql` → Hibernate validates the mappings → the test queries
 real Oracle. If `@ServiceConnection` is wired incorrectly, that is where it
 fails loudly.
+
+---
+
+## Since then
+
+Two things in this note describe Task 1's files rather than today's.
+`OracleTestBase` no longer uses `@Testcontainers` and `@Container`: commit
+`453d6f6` replaced them with a `static { ORACLE.start(); }` block, so one
+container is shared by every test class instead of being tied to one class's
+JUnit lifecycle ([note 06](06-continuous-integration.md) shows the current
+shape). And `application.yml` has grown well past the block above: a Hikari
+pool of 5 with a two-second connection timeout, and a management port on 9090
+whose readiness group deliberately leaves the database out
+([note 04](04-openshift-deployment.md), [note 08](08-observability.md)).

@@ -48,11 +48,11 @@ kind: NetworkPolicy
 metadata:
   name: redis-from-gate-only
 spec:
-  podSelector: { matchLabels: { app.kubernetes.io/name: redis } }
+  podSelector: { matchLabels: { app: redis } }
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector: { matchLabels: { app.kubernetes.io/name: queue-gate } }
+        - podSelector: { matchLabels: { app: queue-gate } }
       ports:
         - protocol: TCP
           port: 6379
@@ -63,15 +63,29 @@ kind: NetworkPolicy
 metadata:
   name: booking-service-from-gate-only
 spec:
-  podSelector: { matchLabels: { app.kubernetes.io/name: booking-service } }
+  podSelector: { matchLabels: { app: booking-service } }
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector: { matchLabels: { app.kubernetes.io/name: queue-gate } }
+        - podSelector: { matchLabels: { app: queue-gate } }
       ports:
         - protocol: TCP
           port: 8081
+    # added later: the management port, for metrics only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-user-workload-monitoring
+        - podSelector: { matchLabels: { app: console } }
+      ports:
+        - protocol: TCP
+          port: 9090
 ```
+
+The second rule on `booking-service` came with the observability work: without
+it the user-workload Prometheus could not have scraped the pool metrics, had
+the policy been enforced. Bookings on 8081 are still admitted from `queue-gate`
+alone.
 
 ### And on this cluster they do nothing at all
 
@@ -114,7 +128,7 @@ the traffic.
 
 | Boundary | Real? | Why |
 |---|---|---|
-| From the internet, only `queue-gate` is reachable | **Yes** | `booking-service` and `redis` have no `Route`. A Service without a Route has no external address at all — verified: the Route list contains only `queue-gate`. |
+| From the internet, only `queue-gate` is reachable | **Yes** | `booking-service` and `redis` have no `Route`. A Service without a Route has no external address at all — verified: the Route list contained only `queue-gate`. It now also holds `console`, the demo page ([note 09](09-demo-console.md)); neither backing service has gained one. |
 | Inside the namespace, only `queue-gate` may reach them | **No** | The platform's allow-all defeats it, as measured above. |
 
 So the external boundary — the one that matters for "can someone on the internet
@@ -143,9 +157,10 @@ and was never once verified.
 
 ---
 
-## Why liveness excludes the database; readiness includes it
+## Why liveness excludes the database, and why readiness came to as well
 
-The probes are HTTP calls to Spring Boot's actuator endpoints:
+The probes are HTTP calls to Spring Boot's actuator endpoints, on the
+management port:
 
 ```yaml
 livenessProbe:
@@ -156,24 +171,25 @@ readinessProbe:
   periodSeconds: 5
 ```
 
-This is configured in `booking-service/src/main/resources/application.yml`:
+Both Java services also carry a `startupProbe` on the liveness endpoint, which
+holds the other two off until the JVM has started ([note 08](08-observability.md)
+explains the race that made it necessary).
+
+The groups are defined in `booking-service/src/main/resources/application.yml`:
 
 ```yaml
 management:
-  health:
-    livenessState:
-      enabled: true
-    readinessState:
-      enabled: true
-    db:
-      enabled: true  # included in readiness, not liveness
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState   # and deliberately not db
 ```
 
 **Liveness** ("is the pod alive?") does NOT check the database. If the database is
 temporarily unreachable, the pod is still alive; it just cannot answer requests.
-
-**Readiness** ("can this pod handle traffic now?") DOES check the database. If the
-database is down, the pod cannot book anything, so it should not receive traffic.
 
 **Why this split?**
 
@@ -187,13 +203,33 @@ If liveness checked the database, a database blip would trigger:
 This turns a single database outage into a cascade. The pod can do nothing useful, but
 killing it and restarting it makes things worse, not better.
 
-Readiness achieves the goal cleanly: when the database goes down, `readiness` fails,
-traffic stops being routed to the pod, and the pod sits idle waiting for the database
-to come back. When it does, readiness passes again and traffic resumes. No restarts,
-no cascade.
-
 **The principle:** liveness is about the container itself (is it hung? is it deadlocked?).
-Readiness is about the pod's external dependencies (can it do work right now?).
+
+### Readiness used to include the database. It no longer does.
+
+This note originally said readiness *did* check the database, so that a pod
+which could not book would stop receiving traffic. That was the configuration
+until `5b327ee`, and it was wrong for this system in a way only load showed.
+
+The `db` health indicator borrows a connection from the pool. Saturating the
+pool is something this system does on purpose: the console can admit faster
+than the database commits, to show `booking-service` shedding load with 503 and
+`Retry-After` while oversold stays at zero. Measured with every connection
+checked out, the readiness group answered 503 with
+`CannotGetJdbcConnectionException`. So the one run built to show back-pressure
+made every pod unready, emptied the Service, and replaced the application's
+deliberate refusal with the router's own error page.
+
+Removing it costs less than it looks. Oracle is shared by every replica, so an
+outage fails them all at once: gating readiness on it does not move traffic to
+a healthy pod, it empties the Service and turns an application 503 that
+carries `Retry-After` into a router 503 that carries nothing. The database is
+still checked and still visible, since `/actuator/health` reports `db` and
+Prometheus scrapes it, but it no longer decides whether a pod may answer.
+
+`queue-gate` is the other way round, and on purpose: its readiness group is
+`readinessState,redis`, because it cannot serve any endpoint without Redis
+([note 07](07-continuous-delivery.md) records what that costs).
 
 ---
 
@@ -245,7 +281,7 @@ Kubernetes resolves it to the port number internally.
    A human can `oc port-forward deploy/queue-gate 9090:9090` and curl actuator without
    interfering with production traffic.
 
-2. **Security boundary:** if the Service exposed 9090, every client that could reach
+2. **Security boundary:** if the Route forwarded 9090, every client that could reach
    8080 could also see `/actuator/health/readiness` and know when the pod is ready.
    This is not a threat here, but it's unnecessary exposure.
 
@@ -262,9 +298,11 @@ Kubernetes resolves it to the port number internally.
 
 ## Why images are tagged with git SHA, not `latest`
 
-Container images are tagged with the git commit short SHA: `ghcr.io/marwanbukhori/queue-gate:270288f`.
+Container images are tagged with a git commit SHA: `ghcr.io/marwanbukhori/queue-gate:270288f`
+in Phase 3, and the full 40-character SHA once CI took over publishing
+([note 06](06-continuous-integration.md)).
 
-This is set in `deploy/overlays/sandbox/kustomization.yaml`:
+In Phase 3 the tag was set in `deploy/overlays/sandbox/kustomization.yaml`:
 
 ```yaml
 images:
@@ -302,27 +340,37 @@ oc apply -k deploy/overlays/sandbox  # applies the new version
 
 If a deploy goes wrong, you edit the tag back to the previous commit's SHA and reapply.
 
+That was the Phase 3 workflow and it is no longer how anything deploys. CD's
+playbook now renders the overlay from a scratch copy with every pin rewritten
+to the tag being deployed, and the pins in git are a bootstrap default only
+([note 07](07-continuous-delivery.md)). A manual `oc apply -k` on a stale
+overlay rolled the cluster back to old tags twice before that changed.
+
 ---
 
 ## Why the gate scales to 10 and the booking service to 4
 
-The HPA configuration in each Deployment sets the scaling limits:
+Each Deployment has its own HorizontalPodAutoscaler (`deploy/base/<service>/hpa.yaml`):
 
 ```yaml
 # queue-gate
+minReplicas: 2
 maxReplicas: 10
 # booking-service
+minReplicas: 2
 maxReplicas: 4
 ```
 
-Both target 60% CPU utilization by default.
+Both target 60% CPU utilization, stated in each file rather than left to a default.
 
 **Why this asymmetry?**
 
 The database is the scarce resource. A booking service pod makes a database connection
 and holds it while executing a transaction. There are a finite number of connection slots
-in the pool (default 10 per pod, so 40 across 4 replicas). The gate has no database
-connection; it only checks rate limits and queues.
+in the pool: 5 per pod, so 20 across 4 replicas, which is where Oracle Autonomous
+Database's Always Free tier stops handing out sessions. Hikari's default of 10 would
+have asked for 40 ([note 08](08-observability.md) has the arithmetic). The gate has no
+database connection; it only checks rate limits and queues.
 
 Scaling the gate to 10 allows it to absorb a large spike without waiting for database
 capacity. The booking service itself cannot scale beyond the point where connection pooling
@@ -358,6 +406,14 @@ advance ensures replicas are ready at the start.
 In a real system with predictable traffic patterns, this becomes a CronJob: before the
 lunch rush, before Black Friday, etc., scale the replicas. This phase uses manual scaling
 for simplicity.
+
+There is a CronJob in the namespace now, `keepalive`, but it does not pre-scale. The
+sandbox kills pods by age at 12 hours and can leave a Deployment at 0 replicas, and an
+HPA does not scale up from 0, so every 8 hours the job restarts all four workloads and
+writes the HPA minimum of 2 back to either service it finds at 0. The console's
+two-wave rush is where the HPA's slowness is now shown rather than worked around: the
+second wave arrives three minutes after the first, and meets whatever pods the
+autoscaler added in between.
 
 ---
 
@@ -553,6 +609,9 @@ The OpenShift sandbox grants 3 CPUs and 30Gi RAM total. The HPA ceiling is 1900m
 - `redis`: 100m (single replica) = 100m
 - **Total: 1900m**
 
+The console, added later, requests another 100m, and each load Job it starts asks for
+200m, 400m or 800m depending on its size ([note 09](09-demo-console.md)).
+
 This is a soft constraint — the HPA will not scale beyond it. If you manually scale beyond
 quota, pods will enter `Pending` state and not schedule.
 
@@ -579,10 +638,11 @@ redis:
 Requests reserve resource on the node. Limits cap how much the pod can use. The HPA scales
 based on the request percentage, so if you change requests, scaling behavior changes too.
 
-Those are the application containers. booking-service and queue-gate also run the
-Dynatrace agent as an init container, at `requests: { cpu: 50m, memory: 64Mi }` and
-`limits: { cpu: 500m, memory: 256Mi }`, and those are stated rather than inherited
-for a reason worth knowing: a pod's effective limit is the *maximum* of its init
+Those are the application containers. While Dynatrace was on, booking-service and
+queue-gate also ran its agent as an init container, at `requests: { cpu: 50m, memory: 64Mi }`
+and `limits: { cpu: 500m, memory: 256Mi }`. The trial ended on 2026-09-24 and the
+component is now commented out of the overlay (it stays in `deploy/base/dynatrace`),
+but the reason those numbers were stated rather than inherited is still worth knowing: a pod's effective limit is the *maximum* of its init
 container and the *sum* of its app containers, so an init container left to the
 namespace LimitRange's default of 1 CPU / 1000Mi would inflate what the pod charges
 against quota for its whole lifetime — not just while the init container runs.
@@ -594,8 +654,8 @@ against quota for its whole lifetime — not just while the init container runs.
 The system combines several layers of correctness and constraint:
 
 1. **Database constraint:** `CHECK (seats_taken <= capacity)` is enforced at the database level, not in code.
-2. **Queue boundary:** only the gate can reach the booking service (NetworkPolicy + no Route).
-3. **Liveness/readiness split:** transient failures do not trigger restart cascades.
+2. **Queue boundary:** nothing outside the cluster can reach the booking service, because it has no Route. The NetworkPolicy meant to extend that inside the namespace is overridden by the sandbox's allow-all, as measured above.
+3. **Liveness/readiness split:** transient failures do not trigger restart cascades, and a saturated pool does not empty the Service.
 4. **Pre-scaling:** the HPA is not fast enough for a 30-second spike, so capacity is staged.
 5. **Version consistency:** images are tagged by commit, so exact versions are known and reproducible.
 6. **Separation of concerns:** the actuator port is separate and not exposed, keeping metrics private.

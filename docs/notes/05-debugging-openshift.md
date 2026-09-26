@@ -187,6 +187,9 @@ for V in 200 1000 3000; do
 done
 ```
 
+(The counter was one key, `queue:ticket`, at the time. Drops are per-visitor now,
+so it is `queue:{dropId}:ticket`, and `queue:default:ticket` for the real sitting.)
+
 | Offered | Arrived | Failed |
 |---|---|---|
 | 200 | 200 | 0% |
@@ -250,7 +253,7 @@ oc logs deploy/<name> --previous    # the crashed container, not the new one
 # Is it reachable, and from where?
 oc get svc,route
 oc get networkpolicy
-oc exec deploy/queue-gate -- curl -s http://booking-service:8081/actuator/health
+oc exec deploy/queue-gate -- curl -s http://booking-service:9090/actuator/health   # actuator is on the management port
 
 # What is it actually configured with?
 oc set env deploy/<name> --list
@@ -286,3 +289,25 @@ depended on it. **Prove the risky assumption first, cheaply.**
    a confident voice.
 5. **When a demo breaks, ask what accumulated.** Code does not rot between two
    runs; state does.
+
+---
+
+## Since then
+
+The method held; the list did not stop at eight. Three later failures are worth
+knowing, and each is recorded where it was fixed:
+
+- **Both services crash-looping in an init container** on 2026-09-24. The
+  Dynatrace trial ended, its agent download began to answer 404, and because the
+  agent was wired into both JVMs neither could start. Gate 4 again, with a cause
+  outside the cluster. The component is now switched off in the overlay
+  (`deploy/base/dynatrace/kustomization.yaml` says how to turn it back on).
+- **A rollout that never started**, reported as one that never finished. The
+  namespace allows 30 ReplicaSets, each Deployment kept 10 revisions, and the
+  controller stopped with `exceeded quota: count/replicasets.apps=30`.
+  `revisionHistoryLimit` is now 5, and 2 on redis.
+- **Workloads at 0 replicas with nothing wrong in them.** The sandbox kills pods
+  at 12 hours of age whatever their traffic, and can leave a Deployment scaled
+  to 0, where an HPA will not scale it back up. The `keepalive` CronJob
+  (`deploy/base/keepalive/cronjob.yaml`) restarts all four workloads every 8
+  hours and puts replicas back. This is lesson 5 again: state, not code.

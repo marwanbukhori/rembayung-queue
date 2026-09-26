@@ -54,13 +54,15 @@ data path are different paths.
   git push
      │
      ├─ CI  (.github/workflows/ci.yml, GitHub Actions)
-     │    runs 36 + 38 tests against real Oracle and real Redis
-     │    builds two images
+     │    runs the booking-service, queue-gate and console suites,
+     │      against real Oracle and real Redis
+     │    builds three images
      │    pushes them to ghcr.io tagged with the commit SHA
      │    ── produces: an immutable artifact and a NAME for it
      │
      ├─ CD  (Ansible, deploy/ansible/)
      │    reads what each Deployment is running now
+     │    applies the rendered manifests (the kinds CD may write)
      │    writes the new tag into the Deployment's image field   ← the whole job
      │    waits for Kubernetes to finish
      │    smoke-tests the public Route
@@ -208,8 +210,13 @@ it, for exactly this reason.
 discover.yml   assert image_tag was supplied          ← before anything
                read each Deployment's current tag     ← per service, they can differ
                read and assert the public Route
-apply.yml      patch both Deployments' image field
-               wait for both rollouts
+apply.yml      render base + overlay from a scratch copy, pins rewritten
+               to image_tag, and assert every service is pinned
+               apply the kinds CD may write (ConfigMap, CronJob,
+               Deployment, HPA, NetworkPolicy, PrometheusRule,
+               Route, Service, ServiceMonitor)
+               patch each Deployment's image field
+               wait for each rollout
 smoke.yml      POST /queue, GET /queue/{token}
                confirm booking-service has ready replicas
 rollback.yml   (only on failure) restore each service's own previous tag,
@@ -236,9 +243,13 @@ real inventory on every single deploy. Verified across a full run:
 `seats_taken` was 202/250 before and after.
 
 **The honest cost:** a deploy can pass its smoke test while booking is broken.
-The gap is narrower than it sounds — `booking-service`'s readiness probe already
-covers the datasource, and the playbook checks it has ready replicas — but it is
-real, and it is a deliberate trade rather than an oversight.
+The playbook checks `booking-service` has ready replicas, and this note used to
+add that its readiness probe covers the datasource. It no longer does: the `db`
+indicator was taken out of the readiness group so a deliberately saturated pool
+would not empty the Service ([note 04](04-openshift-deployment.md)). So ready
+replicas prove the JVM started, not that Oracle answers, and the gap is wider
+than it was when this was written. It is still a deliberate trade rather than an
+oversight, and the smoke test's own comment still makes the old claim.
 
 One smaller cost: each deploy leaves one unused token in Redis, advancing the
 ticket counter by one against the drop's 250-ticket cap. The documented
@@ -264,6 +275,14 @@ Checked directly against the cluster with `oc auth can-i --as=system:serviceacco
 | | `create pods` |
 | | `create pods/exec` |
 | | patch outside the namespace |
+
+That was the Role when this was measured. Since CD began applying manifests as
+well as setting tags, it also holds `get`/`create`/`patch`/`update` on exactly
+the kinds the playbook applies: routes, configmaps, services, cronjobs, HPAs,
+NetworkPolicies, ServiceMonitors and PrometheusRules. It still has no
+`delete` on anything, no Secrets, no pods, and no RBAC kinds, so it cannot widen
+its own access. The `keepalive` CronJob reuses this account, since patching
+replicas and restarting a rollout need nothing more.
 
 No `create pods` and no `create pods/exec` matter as much as no `get secrets`
 does: even a compromised token cannot open a shell in a running container or
@@ -448,20 +467,28 @@ booking step rather than the queue step, for a service that cannot actually
 complete either without Redis. The gate's behavior was correct here. The
 missing alerting is the actual gap, not the readiness check.
 
+That gap has since been closed in Prometheus: the `RedisDown` and
+`ServiceHasNoEndpoints` rules fire after two minutes of it
+([note 08](08-observability.md)). The cause of the drift was found later too.
+The sandbox kills pods at 12 hours of age, and redis was the only workload no
+deploy ever restarted, so it was the one that reached 12 hours. The `keepalive`
+CronJob now restarts it, and the other three, every 8 hours.
+
 ---
 
-## What is not finished
+## What was not finished, and now is
 
-Automatic deploys **have not fired yet.** CD is dispatch-only right now. Two
-things are required before `workflow_run` can trigger it on its own:
+When this was written, automatic deploys **had not fired yet.** CD was
+dispatch-only, waiting on two things: the repository owner storing a token for
+the `rembayung-cd` ServiceAccount as the `OPENSHIFT_TOKEN` secret, and the
+branch merging to `main`, because `workflow_run` only fires for workflows
+defined on the default branch.
 
-1. The repository owner creates a token for the `rembayung-cd` ServiceAccount
-   and stores it as the `OPENSHIFT_TOKEN` repository secret — a credential,
-   so it is not something an implementer generates and commits on someone
-   else's behalf.
-2. This branch merges to `main`, because `workflow_run` only fires for
-   workflows defined on the repository's default branch.
-
-Until both are true, every deploy documented above was run by hand — either
-via `workflow_dispatch` or by invoking the playbook directly — and that is the
-only way CD has been exercised. This is a known gap, not a finished pipeline.
+Both happened, and CD now runs on its own after every green CI run on `main`.
+The console's CI/CD page carries a captured pair: CI run `36157265585` on
+`7983f03`, and CD run `36157668802`, started by it six seconds after CI
+finished, which deployed that SHA in 201s. It also carries CD run
+`36142971533` on `95ba6af`, where `booking-service` did not become ready inside
+the wait and the playbook put every service back on its previous tag and
+failed loudly: the rollback path above, run by the pipeline rather than by
+hand.
