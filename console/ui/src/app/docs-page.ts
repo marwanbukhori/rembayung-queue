@@ -1,6 +1,5 @@
 import { Component, OnInit, computed, effect, inject, output } from '@angular/core';
 import { DocsService } from './docs.service';
-import { EvidenceStrip } from './evidence-strip';
 import { ToolsList } from './tools-list';
 
 /**
@@ -20,7 +19,7 @@ import { ToolsList } from './tools-list';
  */
 @Component({
   selector: 'rb-docs-page',
-  imports: [EvidenceStrip, ToolsList],
+  imports: [ToolsList],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -45,7 +44,6 @@ import { ToolsList } from './tools-list';
       -->
       <rb-tools-list />
 
-      <rb-evidence-strip />
 
       @if (docs.listError(); as problem) {
         <p class="reason">{{ problem }}</p>

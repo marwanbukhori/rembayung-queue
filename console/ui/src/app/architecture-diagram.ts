@@ -20,7 +20,7 @@ import { StateService } from './state.service';
   selector: 'rb-architecture-diagram',
   template: `
     <div class="frame">
-      <svg viewBox="0 0 1000 340" role="img" [attr.aria-label]="summary()">
+      <svg viewBox="0 0 1000 372" role="img" [attr.aria-label]="summary()">
         <defs>
           <marker id="rb-arch-arrow" viewBox="0 0 10 10" refX="9" refY="5"
                   markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -35,8 +35,8 @@ import { StateService } from './state.service';
           side and Oracle on the other.
         -->
         <g>
-          <rect class="zone" x="186" y="10" width="592" height="310" rx="8" />
-          <text class="zone-label" x="202" y="34">OPENSHIFT NAMESPACE · 3000m CPU QUOTA</text>
+          <rect class="zone" x="186" y="10" width="592" height="322" rx="8" />
+          <text class="zone-label" x="202" y="28">OPENSHIFT NAMESPACE · 3000m CPU QUOTA</text>
         </g>
 
         <!--
@@ -73,13 +73,13 @@ import { StateService } from './state.service';
           <g [class]="'box ' + box.tone">
             <rect [attr.x]="box.x" [attr.y]="box.y"
                   [attr.width]="box.w" [attr.height]="box.h" rx="6" />
-            <text class="label" [attr.x]="box.x + 14" [attr.y]="box.y + 26">{{ box.label }}</text>
+            <text class="label" [attr.x]="box.x + 18" [attr.y]="box.y + 30">{{ box.label }}</text>
             @if (box.value) {
-              <text class="value" [attr.x]="box.x + 14" [attr.y]="box.y + 52">{{ box.value }}</text>
+              <text class="value" [attr.x]="box.x + 18" [attr.y]="box.y + 58">{{ box.value }}</text>
             }
             @if (box.sub) {
-              <text class="sub" [attr.x]="box.x + 14"
-                    [attr.y]="box.y + (box.value ? 72 : 46)">{{ box.sub }}</text>
+              <text class="sub" [attr.x]="box.x + 18"
+                    [attr.y]="box.y + (box.value ? 80 : 54)">{{ box.sub }}</text>
             }
           </g>
         }
@@ -155,54 +155,54 @@ export class ArchitectureDiagram {
     // Nine dots crossing the first hop for every one crossing the rest. That
     // ratio is the whole reason a queue exists, and it was the one thing the
     // separate flow diagram said that this one did not.
-    { id: 'a-in', d: 'M158 155 H206', dur: '0.9s',
+    { id: 'a-in', d: 'M158 176 H206', dur: '0.9s',
       dots: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] },
-    { id: 'a-console', d: 'M356 155 H371 V73 H386', dur: '2.4s', dots: [0.3, 1.5] },
-    { id: 'a-queue', d: 'M356 155 H371 V233 H386', dur: '2.4s', dots: [0, 0.8, 1.6] },
+    { id: 'a-console', d: 'M356 176 H371 V86 H386', dur: '2.4s', dots: [0.3, 1.5] },
+    { id: 'a-queue', d: 'M356 176 H371 V266 H386', dur: '2.4s', dots: [0, 0.8, 1.6] },
     // Redis is the top-right box and booking-service the bottom-right one, so
     // the gate reaches Redis by going up and booking-service by going across.
-    { id: 'a-redis', d: 'M566 233 H581 V73 H596', dur: '1.6s', dots: [0, 0.8] },
-    { id: 'a-booking', d: 'M566 233 H596', dur: '3s', dots: [0.4] },
+    { id: 'a-redis', d: 'M566 266 H581 V86 H596', dur: '1.6s', dots: [0, 0.8] },
+    { id: 'a-booking', d: 'M566 266 H596', dur: '3s', dots: [0.4] },
     // From booking-service, not Redis. Rewriting these into an array put this
     // edge on the wrong box and drew redis -> Oracle, which is the opposite of
     // the claim the whole diagram exists to make: booking-service is the only
     // thing that reaches the database.
-    { id: 'a-oracle', d: 'M766 233 H792 V155 H818', dur: '3.6s', dots: [0] },
-    { id: 'a-out', d: 'M905 192 V246', dur: '3.6s', dots: [1.2] }
+    { id: 'a-oracle', d: 'M766 266 H792 V176 H818', dur: '3.6s', dots: [0] },
+    { id: 'a-out', d: 'M905 222 V262', dur: '3.6s', dots: [1.2] }
   ];
 
   protected readonly boxes = computed(() => [
     {
-      id: 'internet', x: 8, y: 118, w: 150, h: 74, tone: 'outside',
+      id: 'internet', x: 8, y: 130, w: 150, h: 92, tone: 'outside',
       label: 'Anyone', value: '', sub: 'the public internet'
     },
     {
-      id: 'route', x: 206, y: 118, w: 150, h: 74, tone: 'plain',
+      id: 'route', x: 206, y: 130, w: 150, h: 92, tone: 'plain',
       label: 'Route', value: '', sub: '8080 only'
     },
     {
-      id: 'console', x: 386, y: 36, w: 180, h: 74, tone: 'plain',
+      id: 'console', x: 386, y: 40, w: 180, h: 92, tone: 'plain',
       label: 'console', value: this.count('console'), sub: 'this page'
     },
     {
-      id: 'gate', x: 386, y: 196, w: 180, h: 74, tone: 'plain',
+      id: 'gate', x: 386, y: 220, w: 180, h: 92, tone: 'plain',
       label: 'queue-gate', value: this.count('queue-gate'), sub: 'scales to 10'
     },
     {
-      id: 'redis', x: 596, y: 36, w: 170, h: 74, tone: 'store',
+      id: 'redis', x: 596, y: 40, w: 170, h: 92, tone: 'store',
       label: 'redis', value: this.count('redis'), sub: 'the queue'
     },
     {
-      id: 'booking', x: 596, y: 196, w: 170, h: 74, tone: 'plain',
+      id: 'booking', x: 596, y: 220, w: 170, h: 92, tone: 'plain',
       label: 'booking-service', value: this.count('booking-service'), sub: 'scales to 4'
     },
     {
-      id: 'oracle', x: 818, y: 118, w: 174, h: 74, tone: 'outside',
+      id: 'oracle', x: 818, y: 130, w: 174, h: 92, tone: 'outside',
       label: 'Oracle', value: '', sub: 'one row, one lock'
     },
     {
       // The outcome, on the diagram rather than in a sentence beneath it.
-      id: 'oversold', x: 818, y: 246, w: 174, h: 74, tone: 'claim',
+      id: 'oversold', x: 818, y: 262, w: 174, h: 92, tone: 'claim',
       label: 'Oversold', value: this.oversold(), sub: 'never above zero'
     }
   ]);

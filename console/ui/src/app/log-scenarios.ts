@@ -42,7 +42,7 @@ const SPLUNK = 'https://prd-p-2d10o.splunkcloud.com';
  * <h2>A shot whose file is missing removes itself</h2>
  * These captures are taken by hand against a live tenant, so they can go stale
  * or be replaced. Rather than a broken frame, an image that fails to load drops
- * its whole card — the same rule {@link EvidenceStrip} follows, and it means
+ * its whole card — the same rule the build notes' screenshots followed, and it means
  * recapturing is only ever dropping a PNG in.
  */
 @Component({
