@@ -5,12 +5,13 @@ import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
 import { DocsPage } from './docs-page';
 import { PublicHome } from './public-home';
+import { SecurityPage } from './security-page';
 import { StateService } from './state.service';
 import { Visitor } from './visitor';
 import { DemoKeyService, hasConsoleKey } from './key';
 
 /** Which surface is on screen. */
-type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'docs' | 'doc' | 'visitor';
+type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'doc' | 'visitor';
 
 /**
  * The shell: a persistent navbar, and whichever surface is showing.
@@ -27,7 +28,7 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'docs' | 'doc' | 'visitor
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor],
+  imports: [PublicHome, SecurityPage, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor],
   template: `
     <header class="navbar">
       <div class="brandband">
@@ -97,6 +98,9 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'docs' | 'doc' | 'visitor
         }
         @case ('agent') {
           <rb-agent-page (home)="show('home')" />
+        }
+        @case ('security') {
+          <rb-security-page (home)="show('home')" />
         }
         @case ('docs') {
           <rb-docs-page (home)="show('home')" (open)="openDoc($event)" />
@@ -231,6 +235,7 @@ export class App {
     { surface: 'cluster', label: 'Cluster' },
     { surface: 'cicd', label: 'CI/CD' },
     { surface: 'agent', label: 'AI Agent & MCP' },
+    { surface: 'security', label: 'Security' },
     { surface: 'docs', label: 'Build notes' }
   ];
 
