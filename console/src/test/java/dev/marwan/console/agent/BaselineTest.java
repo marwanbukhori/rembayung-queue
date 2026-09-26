@@ -242,6 +242,31 @@ class BaselineTest {
     }
 
     @Test
+    void theDatabaseLimitIsTurnedIntoATimeToSeatEveryone() {
+        RangeQuery base = prometheus;
+        prometheus = (promql, label, s, e, step) -> promql.contains("uri=\"/bookings\"")
+                ? List.of(new Series("booking-service", List.of(new double[] {1, 0.8}, new double[] {2, 2.5})))
+                : base.range(promql, label, s, e, step);
+
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+
+        // Pool of 5 per pod, booking-service peaked at 3 replicas in the fixture: 15 connections.
+        assertThat(f.get("Booking connections available")).isEqualTo("15");
+        assertThat(f.get("Bookings committed per second (peak)")).isEqualTo("2.5");
+        // 200 customers at 2.5 a second.
+        assertThat(f.get("Time to seat every customer at that rate")).isEqualTo("80 s");
+        // 200 customers through 15 connections, rounded up.
+        assertThat(f.get("Rounds of the connection pool to serve every customer")).isEqualTo("14");
+    }
+
+    @Test
+    void withNoBookingRateThereIsNoTimeToSeatFact() {
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f).doesNotContainKey("Time to seat every customer at that rate");
+        assertThat(f.get("Booking connections available")).isEqualTo("15");
+    }
+
+    @Test
     void countsPoolTimeoutsOnlyInsideTheWindow() {
         Map<String, String> f = byLabel(baseline().gather(WINDOW));
         assertThat(f.get("Pool timeouts in the window, booking-service-a")).isEqualTo("2");

@@ -37,6 +37,9 @@ public class Baseline {
     static final String POOL_TIMEOUT = "Connection is not available";
     static final Duration STEP = Duration.ofSeconds(15);
     static final List<String> WATCHED = List.of("booking-service", "queue-gate");
+    /** Bookings committed per second: booking-service's successful POST /bookings. */
+    static final String BOOKINGS_PER_SECOND = "sum by (job) (rate(http_server_requests_seconds_count"
+            + "{job=\"booking-service\",uri=\"/bookings\",status=\"201\"}[1m]))";
     static final String FIVE_XX = "max by (job) (increase(http_server_requests_seconds_count"
             + "{job=~\"queue-gate|booking-service\",status=~\"5..\",uri!~\"/actuator.*\"}[1m]))";
 
@@ -210,7 +213,11 @@ public class Baseline {
             for (Series s : range(FIVE_XX, "job", w)) {
                 facts.add("Prometheus", "Most 5xx responses in one minute, " + s.label(), num(max(s)));
             }
+            double bookingPods = 0;
             for (Series s : range(ChartName.REPLICAS.promql(), ChartName.REPLICAS.labelKey(), w)) {
+                if (s.label() != null && s.label().equals("booking-service")) {
+                    bookingPods = max(s);
+                }
                 facts.add("Prometheus", "Peak replicas, " + s.label(), num(max(s)) + " (from " + num(first(s)) + ")");
                 timeline(s, w).ifPresent(t -> facts.add("Prometheus", "Scaling, " + s.label(), t));
                 if (w.waves() == 2 && waveTwoRan) {
@@ -220,9 +227,39 @@ public class Baseline {
                     }
                 }
             }
+            seatTime(w, facts, bookingPods);
         } catch (Exception e) {
             facts.add("Prometheus", "Prometheus", "unavailable: " + e.getMessage());
         }
+    }
+
+    /**
+     * What the database dependency means for the queue as a whole: every booking holds one of a
+     * fixed number of connections for a round trip to Oracle, so customers are served in rounds of
+     * that size, at the rate bookings actually committed. Computed here, as facts, so the report
+     * can cite the time rather than work it out.
+     */
+    private void seatTime(RunWindow w, Facts facts, double bookingPods) throws Exception {
+        if (bookingPods <= 0) {
+            return;
+        }
+        long connections = Math.round(bookingPods) * poolSize;
+        facts.add("derived", "Booking connections available", String.valueOf(connections));
+        Optional<Long> customers = facts.all().stream()
+                .filter(f -> f.label().equals("Arrived") || f.label().equals("Customers arriving at once"))
+                .map(f -> f.value()).filter(v -> v.matches("\\d+")).map(Long::valueOf).findFirst();
+        if (customers.isEmpty()) {
+            return;
+        }
+        double rate = range(BOOKINGS_PER_SECOND, "job", w).stream().mapToDouble(Baseline::max).max().orElse(0);
+        if (rate > 0) {
+            double rounded = Math.round(rate * 10) / 10.0;
+            facts.add("Prometheus", "Bookings committed per second (peak)", num(rounded));
+            facts.add("derived", "Time to seat every customer at that rate",
+                    Math.round(customers.get() / rounded) + " s");
+        }
+        facts.add("derived", "Rounds of the connection pool to serve every customer",
+                String.valueOf((customers.get() + connections - 1) / connections));
     }
 
     private List<Series> range(String promql, String label, RunWindow w) throws Exception {

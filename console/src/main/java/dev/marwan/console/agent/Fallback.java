@@ -83,6 +83,12 @@ public final class Fallback {
                     pool.stream().map(Fact::id).toList()));
         }
 
+        Optional<Fact> seatTime = find(facts, "Time to seat every customer at that rate");
+        Optional<Fact> rate = find(facts, "Bookings committed per second (peak)");
+        if (seatTime.isPresent() && rate.isPresent()) {
+            capacity.add(new Claim("At " + rate.get().value() + " bookings committed per second, seating every customer"
+                    + " would take " + seatTime.get().value() + ".", List.of(rate.get().id(), seatTime.get().id())));
+        }
         Optional<Fact> gaveUp = find(facts, "Gave up waiting (403)");
         Optional<Fact> joined = find(facts, "Joined the queue");
         if (gaveUp.isPresent() && joined.isPresent()
