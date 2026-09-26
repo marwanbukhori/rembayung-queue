@@ -75,6 +75,10 @@ console:
   static-path: ${CONSOLE_STATIC_PATH:./ui/dist/ui/browser/}
   # The run agent (dev.marwan.console.agent). Off by default: only the deployed
   # console, which can see the namespace and reach the model, switches it on.
+  # Incidents (dev.marwan.console.incident): the SLO watcher and the incident
+  # commander. Off by default for the same reason as the agent.
+  incidents:
+    enabled: ${CONSOLE_INCIDENTS_ENABLED:false}
   agent:
     enabled: ${CONSOLE_AGENT_ENABLED:false}
     base-url: ${CONSOLE_AGENT_BASE_URL:https://isvc-qwen3-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1}

@@ -31,7 +31,7 @@ import org.springframework.web.client.RestClient;
 
 import dev.marwan.console.agent.AnalysisStore;
 
-class ChaosServiceTest {
+public class ChaosServiceTest {
 
     static class MovingClock extends Clock {
         Instant now = Instant.parse("2026-09-26T12:00:00Z");
@@ -41,7 +41,7 @@ class ChaosServiceTest {
     }
 
     /** ConfigMaps in memory, with resourceVersions and an optional forced conflict. */
-    static class Maps implements AnalysisStore.ConfigMapPort {
+    public static class Maps implements AnalysisStore.ConfigMapPort {
         final Map<String, ConfigMap> stored = new java.util.HashMap<>();
         int version;
         boolean conflictNext;

@@ -89,6 +89,9 @@ spec:
             # shared Qwen3 model and stores the report in ConfigMap run-analyses.
             - name: CONSOLE_AGENT_ENABLED
               value: "true"
+            # Chaos drills and incidents: the SLO watcher and the incident commander.
+            - name: CONSOLE_INCIDENTS_ENABLED
+              value: "true"
             - name: SPLUNK_DISABLED_REASON
               value: "Trial ended 2026-09-25. The Splunk Cloud host no longer resolves, so the console stopped probing it."
             # Stated, never inferred. The console introspects this namespace
