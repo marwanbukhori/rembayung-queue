@@ -45,6 +45,10 @@ public class ChaosController {
         } catch (ChaosService.Busy e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.active() == null
                     ? Map.of("error", "BUSY") : Map.of("error", "BUSY", "active", e.active()));
+        } catch (ChaosService.Refused e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "REFUSED", "detail", e.getMessage()));
+        } catch (ChaosService.ApplyFailed e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", "NOT_APPLIED", "detail", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "UNKNOWN_FAULT", "detail", e.getMessage()));
         }

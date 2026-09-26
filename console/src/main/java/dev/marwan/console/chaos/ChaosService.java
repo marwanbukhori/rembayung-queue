@@ -17,7 +17,6 @@ import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.client.RestClient;
 
 import dev.marwan.console.agent.AnalysisStore;
 
@@ -32,6 +31,11 @@ import dev.marwan.console.agent.AnalysisStore;
  * Every fault ends without the console: a deleted pod is replaced by its
  * ReplicaSet, and booking-service reverts its own in-app faults at their time.
  * The lock's expiry only mirrors that.
+ *
+ * The key that starts a drill is public, so the lock also holds a cooldown
+ * measured from when a fault started: ending a fault early does not let the
+ * next one begin sooner. Without it, kill-end-kill would take down each
+ * booking pod in turn, faster than the ReplicaSet can replace them.
  */
 public class ChaosService {
 
@@ -41,6 +45,9 @@ public class ChaosService {
     public static final Set<String> FAULTS = Set.of("kill-booking-pod", "slow-database", "squeeze-pool");
     static final int POD_SECONDS = 90;
     static final int APP_SECONDS = 120;
+    /** No new fault of any kind until this long after the last one started. */
+    static final int COOLDOWN_SECONDS = 120;
+    static final int MIN_READY_TO_KILL = 2;
 
     public record ActiveFault(String fault, Instant startedAt, Instant until) { }
 
@@ -58,15 +65,29 @@ public class ChaosService {
         }
     }
 
+    /** The fault cannot be started safely right now; the message says why. */
+    public static class Refused extends RuntimeException {
+        public Refused(String message) {
+            super(message);
+        }
+    }
+
+    /** The lock was taken but the fault could not be applied; the lock has been released. */
+    public static class ApplyFailed extends RuntimeException {
+        public ApplyFailed(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
     private final AnalysisStore.ConfigMapPort maps;
     private final Supplier<List<Pod>> bookingPods;
     private final ClusterWrites writes;
-    private final RestClient booking;
+    private final BookingChaos booking;
     private final Consumer<ActiveFault> onDrill;
     private final Clock clock;
 
     public ChaosService(AnalysisStore.ConfigMapPort maps, Supplier<List<Pod>> bookingPods, ClusterWrites writes,
-                        RestClient booking, Consumer<ActiveFault> onDrill, Clock clock) {
+                        BookingChaos booking, Consumer<ActiveFault> onDrill, Clock clock) {
         this.maps = maps;
         this.bookingPods = bookingPods;
         this.writes = writes;
@@ -81,9 +102,14 @@ public class ChaosService {
         }
         Instant now = clock.instant();
         Optional<ConfigMap> existing = maps.get(NAME);
-        Optional<ActiveFault> active = existing.flatMap(this::read).filter(a -> a.until().isAfter(now));
-        if (active.isPresent()) {
-            throw new Busy(active.get());
+        Optional<ActiveFault> last = existing.flatMap(this::read);
+        if (last.isPresent() && (last.get().until().isAfter(now)
+                || last.get().startedAt().plusSeconds(COOLDOWN_SECONDS).isAfter(now))) {
+            throw new Busy(last.get());
+        }
+        if (fault.equals("kill-booking-pod") && bookingPods.get().stream().filter(ChaosService::ready).count() < MIN_READY_TO_KILL) {
+            throw new Refused("a pod is only killed while at least " + MIN_READY_TO_KILL
+                    + " ready booking-service pods are serving");
         }
         ActiveFault next = new ActiveFault(fault, now,
                 now.plusSeconds(fault.equals("kill-booking-pod") ? POD_SECONDS : APP_SECONDS));
@@ -92,7 +118,13 @@ public class ChaosService {
         } catch (AnalysisStore.Conflict e) {
             throw new Busy(current().orElse(null));
         }
-        apply(fault);
+        try {
+            apply(fault);
+        } catch (RuntimeException e) {
+            // Nothing was broken, so nothing is held: release the lock and its cooldown.
+            release(next);
+            throw new ApplyFailed("could not start " + fault + ": " + e.getMessage(), e);
+        }
         log.warn("chaos: injected {} until {}", fault, next.until());
         onDrill.accept(next);
         return next;
@@ -103,17 +135,41 @@ public class ChaosService {
         return maps.get(NAME).flatMap(this::read).filter(a -> a.until().isAfter(now));
     }
 
-    /** Ends the active fault early. The lock is released by moving its expiry to now. */
+    /**
+     * Ends an in-app fault early, on every booking pod. The fault stops now; the
+     * cooldown still runs from its start. A killed pod cannot be un-killed, so
+     * for that fault this does nothing and the lock stands.
+     */
     public void end() {
         Optional<ConfigMap> existing = maps.get(NAME);
         Optional<ActiveFault> active = existing.flatMap(this::read).filter(a -> a.until().isAfter(clock.instant()));
-        if (active.isEmpty()) {
+        if (active.isEmpty() || active.get().fault().equals("kill-booking-pod")) {
             return;
         }
-        if (!active.get().fault().equals("kill-booking-pod")) {
-            booking.delete().uri("/internal/chaos").retrieve().toBodilessEntity();
+        for (String ip : podIps()) {
+            try {
+                booking.stop(ip);
+            } catch (RuntimeException e) {
+                log.warn("chaos: could not end {} on {}: {}", active.get().fault(), ip, e.getMessage());
+            }
         }
         write(existing, new ActiveFault(active.get().fault(), active.get().startedAt(), clock.instant()));
+    }
+
+    private void release(ActiveFault taken) {
+        try {
+            Optional<ConfigMap> existing = maps.get(NAME);
+            Instant now = clock.instant();
+            write(existing, new ActiveFault(taken.fault(), now.minusSeconds(COOLDOWN_SECONDS), now));
+        } catch (RuntimeException e) {
+            log.warn("chaos: could not release the lock after a failed start: {}", e.getMessage());
+        }
+    }
+
+    private List<String> podIps() {
+        return bookingPods.get().stream()
+                .map(p -> p.getStatus() == null ? null : p.getStatus().getPodIP())
+                .filter(ip -> ip != null && !ip.isBlank()).toList();
     }
 
     private void apply(String fault) {
@@ -124,8 +180,13 @@ public class ChaosService {
                     .orElseThrow(() -> new IllegalStateException("no ready booking-service pod to kill"));
             writes.deletePod(victim.getMetadata().getName());
         } else {
-            booking.post().uri("/internal/chaos").body(Map.of("fault", fault, "seconds", APP_SECONDS))
-                    .retrieve().toBodilessEntity();
+            List<String> ips = podIps();
+            if (ips.isEmpty()) {
+                throw new IllegalStateException("no booking-service pod to reach");
+            }
+            for (String ip : ips) {
+                booking.start(ip, fault, APP_SECONDS);
+            }
         }
     }
 

@@ -152,7 +152,7 @@ public class McpTools {
                 merge(Map.of("pod", str("The pod's name"), "level", str("Optional: WARN, ERROR or INFO"),
                         "contains", str("Optional text the line must contain")), window), List.of("pod"),
                 (ex, args) -> {
-                    if (keyed(ex)) {
+                    if (keyed(ex) || agent(ex)) {
                         return clusterCall("pod_logs", args);
                     }
                     LogPage page = podLogs.read(text(args, "pod", ""), null, "events", false);
@@ -243,7 +243,9 @@ public class McpTools {
                         return json(Map.of("fault", started.fault(), "until", started.until(),
                                 "then", "list_incidents shows the drill incident; get_slo shows its effect"));
                     } catch (ChaosService.Busy e) {
-                        throw new ToolError(e.getMessage() + "; one fault at a time");
+                        throw new ToolError(e.getMessage() + "; one fault at a time, and none within 120 s of the last");
+                    } catch (ChaosService.Refused | ChaosService.ApplyFailed e) {
+                        throw new ToolError(e.getMessage());
                     } catch (IllegalArgumentException e) {
                         throw new ToolError("unknown fault; the faults are " + String.join(", ", ChaosService.FAULTS));
                     }
@@ -384,6 +386,11 @@ public class McpTools {
     static String text(Map<String, Object> args, String name, String otherwise) {
         Object v = args.get(name);
         return v == null || v.toString().isBlank() ? otherwise : v.toString();
+    }
+
+    /** The console's own agents: raw logs, and nothing that needs the key. */
+    static boolean agent(McpSyncServerExchange exchange) {
+        return Boolean.TRUE.equals(exchange.transportContext().get(McpConfiguration.AGENT));
     }
 
     boolean keyed(McpSyncServerExchange exchange) {

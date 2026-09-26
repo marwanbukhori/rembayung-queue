@@ -77,17 +77,30 @@ public class ChaosServiceTest {
         @Override public int hpaMin(String h) { return 2; }
     }
 
-    static Pod pod(String name, String created, boolean ready) {
+    /** booking-service's /internal/chaos, per pod IP, recorded. */
+    public static class Booking implements BookingChaos {
+        public final List<String> calls = new ArrayList<>();
+        public boolean failStart;
+        @Override public void start(String podIp, String fault, int seconds) {
+            if (failStart) {
+                throw new IllegalStateException("booking-service unreachable");
+            }
+            calls.add("start " + podIp + " " + fault + " " + seconds);
+        }
+        @Override public void stop(String podIp) { calls.add("stop " + podIp); }
+    }
+
+    static Pod pod(String name, String created, boolean ready, String ip) {
         return new PodBuilder().withNewMetadata().withName(name).withCreationTimestamp(created)
                 .addToLabels("app", "booking-service").endMetadata()
-                .withNewStatus().withPhase("Running").addNewContainerStatus().withReady(ready).withName("c")
+                .withNewStatus().withPhase("Running").withPodIP(ip).addNewContainerStatus().withReady(ready).withName("c")
                 .withRestartCount(0).endContainerStatus().endStatus().build();
     }
 
     MovingClock clock;
     Maps maps;
     Writes writes;
-    MockRestServiceServer booking;
+    Booking booking;
     List<ChaosService.ActiveFault> drills;
     List<Pod> pods;
     ChaosService chaos;
@@ -97,13 +110,12 @@ public class ChaosServiceTest {
         clock = new MovingClock();
         maps = new Maps();
         writes = new Writes();
+        booking = new Booking();
         drills = new ArrayList<>();
-        pods = new ArrayList<>(List.of(pod("booking-service-old", "2026-09-26T10:00:00Z", true),
-                pod("booking-service-new", "2026-09-26T11:00:00Z", true),
-                pod("booking-service-newest-unready", "2026-09-26T11:30:00Z", false)));
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://booking-service:8081");
-        booking = MockRestServiceServer.bindTo(builder).build();
-        chaos = new ChaosService(maps, () -> pods, writes, builder.build(), drills::add, clock);
+        pods = new ArrayList<>(List.of(pod("booking-service-old", "2026-09-26T10:00:00Z", true, "10.0.0.1"),
+                pod("booking-service-new", "2026-09-26T11:00:00Z", true, "10.0.0.2"),
+                pod("booking-service-newest-unready", "2026-09-26T11:30:00Z", false, "10.0.0.3")));
+        chaos = new ChaosService(maps, () -> pods, writes, booking, drills::add, clock);
     }
 
     @Test
@@ -116,11 +128,10 @@ public class ChaosServiceTest {
     }
 
     @Test
-    void anInAppFaultIsSentToBookingService() {
-        booking.expect(requestTo("http://booking-service:8081/internal/chaos")).andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("{\"fault\":\"squeeze-pool\"}", MediaType.APPLICATION_JSON));
+    void anInAppFaultReachesEveryBookingPodNotJustOne() {
         ChaosService.ActiveFault f = chaos.inject("squeeze-pool");
-        booking.verify();
+        assertThat(booking.calls).containsExactlyInAnyOrder("start 10.0.0.1 squeeze-pool 120",
+                "start 10.0.0.2 squeeze-pool 120", "start 10.0.0.3 squeeze-pool 120");
         assertThat(f.until()).isEqualTo(clock.now.plusSeconds(120));
     }
 
@@ -133,9 +144,46 @@ public class ChaosServiceTest {
     }
 
     @Test
+    void theCooldownRunsFromTheStartSoKillEndKillCannotLoop() {
+        chaos.inject("kill-booking-pod");
+        chaos.end();
+        clock.now = clock.now.plusSeconds(30);
+        assertThatThrownBy(() -> chaos.inject("kill-booking-pod")).isInstanceOf(ChaosService.Busy.class);
+        assertThatThrownBy(() -> chaos.inject("squeeze-pool")).isInstanceOf(ChaosService.Busy.class);
+        assertThat(writes.calls).hasSize(1);
+    }
+
+    @Test
+    void endingAnInAppFaultEarlyStillHoldsTheCooldown() {
+        chaos.inject("slow-database");
+        chaos.end();
+        assertThat(chaos.current()).isEmpty();
+        clock.now = clock.now.plusSeconds(60);
+        assertThatThrownBy(() -> chaos.inject("squeeze-pool")).isInstanceOf(ChaosService.Busy.class);
+        clock.now = clock.now.plusSeconds(61);
+        chaos.inject("squeeze-pool");
+    }
+
+    @Test
+    void endingAPodKillLeavesTheLockAlone() {
+        ChaosService.ActiveFault f = chaos.inject("kill-booking-pod");
+        chaos.end();
+        assertThat(chaos.current()).contains(f);
+    }
+
+    @Test
+    void aKillIsRefusedWhenFewerThanTwoBookingPodsAreReady() {
+        pods.removeIf(p -> p.getMetadata().getName().equals("booking-service-old"));
+        assertThatThrownBy(() -> chaos.inject("kill-booking-pod")).isInstanceOf(ChaosService.Refused.class)
+                .hasMessageContaining("2 ready");
+        assertThat(writes.calls).isEmpty();
+        assertThat(chaos.current()).isEmpty();
+    }
+
+    @Test
     void anExpiredLockIsReplaced() {
         chaos.inject("kill-booking-pod");
-        clock.now = clock.now.plus(Duration.ofSeconds(91));
+        clock.now = clock.now.plus(Duration.ofSeconds(121));
         assertThat(chaos.current()).isEmpty();
         chaos.inject("kill-booking-pod");
         assertThat(writes.calls).hasSize(2);
@@ -154,14 +202,20 @@ public class ChaosServiceTest {
     }
 
     @Test
-    void endingAFaultEarlyClearsItInBookingServiceAndReleasesTheLock() {
-        booking.expect(requestTo("http://booking-service:8081/internal/chaos")).andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
-        booking.expect(requestTo("http://booking-service:8081/internal/chaos")).andExpect(method(HttpMethod.DELETE))
-                .andRespond(withNoContent());
+    void endingAFaultEarlyClearsItOnEveryBookingPod() {
         chaos.inject("slow-database");
         chaos.end();
-        booking.verify();
+        assertThat(booking.calls).contains("stop 10.0.0.1", "stop 10.0.0.2", "stop 10.0.0.3");
         assertThat(chaos.current()).isEmpty();
+    }
+
+    @Test
+    void aFaultThatCannotBeAppliedReleasesTheLock() {
+        booking.failStart = true;
+        assertThatThrownBy(() -> chaos.inject("slow-database")).isInstanceOf(ChaosService.ApplyFailed.class);
+        assertThat(chaos.current()).isEmpty();
+        assertThat(drills).isEmpty();
+        booking.failStart = false;
+        chaos.inject("slow-database");
     }
 }

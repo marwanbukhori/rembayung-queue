@@ -16,8 +16,8 @@ public class ChaosConfiguration {
 
     @Bean
     ChaosService chaosService(KubernetesConfigMaps maps, ObjectSource objects, ClusterWrites writes,
-                              RestClient bookingClient, ApplicationEventPublisher events, Clock clock) {
-        return new ChaosService(maps, () -> objects.pods("booking-service"), writes, bookingClient,
-                events::publishEvent, clock);
+                              ApplicationEventPublisher events, Clock clock) {
+        return new ChaosService(maps, () -> objects.pods("booking-service"), writes,
+                new RestBookingChaos(RestClient.builder()), events::publishEvent, clock);
     }
 }
