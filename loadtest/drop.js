@@ -2,22 +2,28 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 
-const bookingsCreated = new Counter('bookings_created');
-const bookingsRejected = new Counter('bookings_rejected');
-
 // The customer's path, for the run agent's funnel: two steps everyone may
 // pass, then exactly one outcome each, so the outcomes add up to the VUs.
-const joined = new Counter('joined');
-const admitted = new Counter('admitted');
-const outcome = {
-  soldOutAtJoin: new Counter('outcome_sold_out_at_join'),
-  gaveUp: new Counter('outcome_gave_up'),
-  refusedAfterAdmission: new Counter('outcome_refused_after_admission'),
-  soldOut: new Counter('outcome_sold_out'),
-  overloaded: new Counter('outcome_overloaded'),
-  faultsAtJoin: new Counter('outcome_faults_at_join'),
-  faultsAtBooking: new Counter('outcome_faults_at_booking'),
-};
+// One set per wave: wave 1 keeps the original names, so a one-wave run reports
+// exactly what it always did; wave 2's carry a _w2 suffix.
+function waveCounters(suffix) {
+  return {
+    bookingsCreated: new Counter('bookings_created' + suffix),
+    bookingsRejected: new Counter('bookings_rejected' + suffix),
+    joined: new Counter('joined' + suffix),
+    admitted: new Counter('admitted' + suffix),
+    outcome: {
+      soldOutAtJoin: new Counter('outcome_sold_out_at_join' + suffix),
+      gaveUp: new Counter('outcome_gave_up' + suffix),
+      refusedAfterAdmission: new Counter('outcome_refused_after_admission' + suffix),
+      soldOut: new Counter('outcome_sold_out' + suffix),
+      overloaded: new Counter('outcome_overloaded' + suffix),
+      faultsAtJoin: new Counter('outcome_faults_at_join' + suffix),
+      faultsAtBooking: new Counter('outcome_faults_at_booking' + suffix),
+    },
+  };
+}
+const byWave = { '1': waveCounters(''), '2': waveCounters('_w2') };
 const queueWait = new Trend('queue_wait');   // seconds from joining to admission
 const PARTY_SIZE = 2;
 const PATIENCE_SECONDS = Number(__ENV.POLL_SECONDS || 90);
@@ -40,15 +46,28 @@ const PATIENCE_SECONDS = Number(__ENV.POLL_SECONDS || 90);
 // Treat the SQL reconciliation as authoritative:
 //   SELECT capacity, seats_taken FROM booking.slots;
 //   SELECT COUNT(*) FROM booking.slots WHERE seats_taken > capacity;  -- must be 0
+const WAVES = __ENV.WAVES === '2' ? 2 : 1;
+
+function waveScenario(wave, startTime) {
+  return {
+    executor: 'per-vu-iterations',
+    exec: 'wave',
+    startTime,
+    vus: Number(__ENV.VUS || 5000),
+    iterations: 1,
+    maxDuration: __ENV.MAX_DURATION || (WAVES === 2 ? '8m' : '5m'),
+    env: wave === '1'
+      ? { WAVE: '1', DROP: __ENV.DROP_ID || '', SLOT: String(__ENV.SLOT_ID || 1) }
+      : { WAVE: '2', DROP: __ENV.DROP_ID_2 || '', SLOT: String(__ENV.SLOT_ID_2 || 1) },
+  };
+}
+
 export const options = {
-  scenarios: {
-    drop: {
-      executor: 'per-vu-iterations',
-      vus: Number(__ENV.VUS || 5000),
-      iterations: 1,
-      maxDuration: __ENV.MAX_DURATION || '5m',
-    },
-  },
+  // A wave is every virtual user arriving in the same instant, as they do at
+  // 21:00. A two-wave run sends the same wave again after WAVE_GAP, at a fresh
+  // sitting, so the second meets whatever pods the autoscaler added.
+  scenarios: WAVES === 2 ? { wave1: waveScenario('1', '0s'), wave2: waveScenario('2', __ENV.WAVE_GAP || '3m') }
+    : { wave1: waveScenario('1', '0s') },
   thresholds: {
     // A run in which nothing was ever booked means admission is broken,
     // even if every response was a well-formed rejection.
@@ -58,6 +77,9 @@ export const options = {
     // 409 (sold out) — those are the system working, not failing. Counting
     // them would make a healthy run report ~89% failure.
     http_req_failed: ['rate<0.01'],
+    // Declared so each wave's latency appears in the summary on its own.
+    'http_req_duration{scenario:wave1}': [],
+    'http_req_duration{scenario:wave2}': [],
   },
 };
 
@@ -74,20 +96,28 @@ export const options = {
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }, 503));
 
 const GATE = __ENV.GATE || 'http://localhost:8080';
+const DROP_ID = __ENV.DROP_ID || '';
 const SLOT_ID = __ENV.SLOT_ID || 1;
 
 export default function () {
-  const join = http.post(`${GATE}/queue`);
+  wave();
+}
+
+export function wave() {
+  const c = byWave[__ENV.WAVE || '1'];
+  const DROP = __ENV.DROP === undefined ? DROP_ID : __ENV.DROP;
+  const SLOT = __ENV.SLOT || SLOT_ID;
+  const join = http.post(DROP ? `${GATE}/queue?drop=${DROP}` : `${GATE}/queue`);
   check(join, { 'join answered': (r) => r.status === 200 || r.status === 409 });
   if (join.status === 409) {                     // SOLD_OUT is a valid outcome
-    outcome.soldOutAtJoin.add(1);
+    c.outcome.soldOutAtJoin.add(1);
     return;
   }
   if (join.status !== 200) {
-    outcome.faultsAtJoin.add(1);
+    c.outcome.faultsAtJoin.add(1);
     return;
   }
-  joined.add(1);
+  c.joined.add(1);
   const joinedAt = Date.now();
   let isAdmitted = false;
 
@@ -101,7 +131,7 @@ export default function () {
     const poll = http.get(`${GATE}/queue/${token}`);
     if (poll.status === 200 && poll.json('admitted') === true) {
       isAdmitted = true;
-      admitted.add(1);
+      c.admitted.add(1);
       queueWait.add((Date.now() - joinedAt) / 1000);
       break;
     }
@@ -112,10 +142,10 @@ export default function () {
   const booking = http.post(
     `${GATE}/bookings`,
     JSON.stringify({
-      slotId: Number(SLOT_ID),
+      slotId: Number(SLOT),
       phone: `+6012${__VU}`,
       partySize: PARTY_SIZE,
-      idempotencyKey: `k6-${__VU}`,
+      idempotencyKey: `k6-${DROP || 'default'}-${__VU}`,
     }),
     { headers: { 'Content-Type': 'application/json', 'X-Admission-Token': token } },
   );
@@ -131,25 +161,25 @@ export default function () {
   });
 
   if (booking.status === 201) {
-    bookingsCreated.add(1);
+    c.bookingsCreated.add(1);
   } else {
-    bookingsRejected.add(1);
+    c.bookingsRejected.add(1);
   }
   // Admission is by time, not by the last poll: a customer whose turn came in
   // the second after that poll books successfully. The gate admitted them.
   if (!isAdmitted && [201, 409, 503].includes(booking.status)) {
-    admitted.add(1);
+    c.admitted.add(1);
     isAdmitted = true;
   }
   if (booking.status !== 201) {
     if (booking.status === 403) {
-      (isAdmitted ? outcome.refusedAfterAdmission : outcome.gaveUp).add(1);
+      (isAdmitted ? c.outcome.refusedAfterAdmission : c.outcome.gaveUp).add(1);
     } else if (booking.status === 409) {
-      outcome.soldOut.add(1);
+      c.outcome.soldOut.add(1);
     } else if (booking.status === 503) {
-      outcome.overloaded.add(1);
+      c.outcome.overloaded.add(1);
     } else {
-      outcome.faultsAtBooking.add(1);
+      c.outcome.faultsAtBooking.add(1);
     }
   }
 }
@@ -164,31 +194,59 @@ export function handleSummary(data) {
   const trend = (key) => (m.http_req_duration ? Number(m.http_req_duration.values[key] || 0) : 0);
   const wait = (key) => (m.queue_wait ? Number(m.queue_wait.values[key] || 0) : 0);
   const clean = (data.root_group.checks || []).find((c) => c.name === 'booking resolved cleanly');
+  const sub = (wave, key) => {
+    const s = m[`http_req_duration{scenario:wave${wave}}`];
+    return s ? Math.round(Number(s.values[key] || 0)) : 0;
+  };
+  const vusPerWave = Number(__ENV.VUS || 0);
+  const waveOf = (wave, suffix) => ({
+    wave,
+    vus: vusPerWave,
+    joined: count('joined' + suffix),
+    admitted: count('admitted' + suffix),
+    booked: count('bookings_created' + suffix),
+    soldOutAtJoin: count('outcome_sold_out_at_join' + suffix),
+    gaveUp: count('outcome_gave_up' + suffix),
+    refusedAfterAdmission: count('outcome_refused_after_admission' + suffix),
+    soldOut: count('outcome_sold_out' + suffix),
+    overloaded: count('outcome_overloaded' + suffix),
+    faultsAtJoin: count('outcome_faults_at_join' + suffix),
+    faultsAtBooking: count('outcome_faults_at_booking' + suffix),
+    p95: sub(wave, 'p(95)'),
+    max: sub(wave, 'max'),
+  });
+  // Wave 2 is in the list only if it ran: a run cut off between the waves
+  // reports the one wave it had, and says it was asked for two.
+  const secondRan = Object.keys(m).some((k) => k.endsWith('_w2') && m[k].values.count > 0);
+  const perWave = [waveOf(1, '')].concat(secondRan ? [waveOf(2, '_w2')] : []);
+  const total = (key) => perWave.reduce((n, w) => n + w[key], 0);
   const summary = {
-    vus: Number(__ENV.VUS || 0),
+    vus: vusPerWave * perWave.length,
     iterations: count('iterations'),
-    booked: count('bookings_created'),
-    rejected: count('bookings_rejected'),
+    booked: total('booked'),
+    rejected: count('bookings_rejected') + count('bookings_rejected_w2'),
     notClean: clean ? clean.fails : 0,
     p50: Math.round(trend('med')),
     p95: Math.round(trend('p(95)')),
     max: Math.round(trend('max')),
     durationMs: Math.round(data.state.testRunDurationMs),
-    joined: count('joined'),
-    admitted: count('admitted'),
-    soldOutAtJoin: count('outcome_sold_out_at_join'),
-    gaveUp: count('outcome_gave_up'),
-    refusedAfterAdmission: count('outcome_refused_after_admission'),
-    soldOut: count('outcome_sold_out'),
-    overloaded: count('outcome_overloaded'),
-    faults: count('outcome_faults_at_join') + count('outcome_faults_at_booking'),
-    faultsAtJoin: count('outcome_faults_at_join'),
-    faultsAtBooking: count('outcome_faults_at_booking'),
+    joined: total('joined'),
+    admitted: total('admitted'),
+    soldOutAtJoin: total('soldOutAtJoin'),
+    gaveUp: total('gaveUp'),
+    refusedAfterAdmission: total('refusedAfterAdmission'),
+    soldOut: total('soldOut'),
+    overloaded: total('overloaded'),
+    faults: total('faultsAtJoin') + total('faultsAtBooking'),
+    faultsAtJoin: total('faultsAtJoin'),
+    faultsAtBooking: total('faultsAtBooking'),
     queueWaitP50: Math.round(wait('med')),
     queueWaitP95: Math.round(wait('p(95)')),
     queueWaitMax: Math.round(wait('max')),
     partySize: PARTY_SIZE,
     patienceSeconds: PATIENCE_SECONDS,
+    waves: __ENV.WAVES === '2' ? 2 : 1,
+    perWave,
   };
   return {
     stdout: `booked ${summary.booked}, rejected ${summary.rejected}, not clean ${summary.notClean}, `
