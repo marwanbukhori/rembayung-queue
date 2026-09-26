@@ -60,9 +60,11 @@ interface Loss { count: string; text: string }
 })
 export class Funnel {
   readonly facts = input.required<AgentFact[]>();
+  /** "" for the run's own funnel, or "Wave 1 · " / "Wave 2 · " for one wave of a two-wave run. */
+  readonly prefix = input('');
 
   private value(label: string): string | null {
-    return this.facts().find(f => f.label === label)?.value ?? null;
+    return this.facts().find(f => f.label === this.prefix() + label)?.value ?? null;
   }
 
   protected readonly steps = computed<Step[] | null>(() => {

@@ -11,6 +11,8 @@ export interface AgentReport {
   capacity?: AgentClaim[];
   errors?: AgentClaim[];
   lookAt?: AgentClaim[];
+  /** Wave 1 beside wave 2, for a two-wave run. */
+  beforeAfter?: AgentClaim[];
   /** Reports stored before the five sections. */
   wentWell?: AgentClaim[];
   caught?: AgentClaim[];
@@ -46,6 +48,8 @@ export interface AnalysisSummary {
   booked: number | null;
   seats: number | null;
   oversold: number | null;
+  /** 1, or 2 for a two-wave rush. */
+  waves?: number;
 }
 
 @Injectable({ providedIn: 'root' })

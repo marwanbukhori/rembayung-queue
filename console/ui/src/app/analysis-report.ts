@@ -25,7 +25,14 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
       <p class="why">The model's report was not used: {{ a.note }}.</p>
     }
 
-    <rb-funnel [facts]="a.facts" />
+    @if (twoWaves()) {
+      <div class="waves">
+        <div><h4>Wave 1</h4><rb-funnel [facts]="a.facts" prefix="Wave 1 · " /></div>
+        <div><h4>Wave 2</h4><rb-funnel [facts]="a.facts" prefix="Wave 2 · " /></div>
+      </div>
+    } @else {
+      <rb-funnel [facts]="a.facts" />
+    }
 
     @for (group of groups(); track group.title) {
       @if (group.claims.length) {
@@ -77,6 +84,9 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
   `,
   styles: `
     :host { display: block; font-size: 14px; }
+    .waves { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+    .waves h4 { margin: 4px 0 6px; }
+    @media (max-width: 699px) { .waves { grid-template-columns: minmax(0, 1fr); } }
     .meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 6px; }
     .who { font-weight: 700; }
     .who.fallback { color: var(--chip-warn-fg); }
@@ -106,9 +116,13 @@ export class AnalysisReport {
 
   protected readonly zone = TIME_ZONE_LABEL;
   protected readonly open = signal<string | null>(null);
+  /** A two-wave run draws each wave's funnel, side by side. */
+  protected readonly twoWaves = computed(() => this.analysis().facts.some(f => f.label === 'Wave 2 · Arrived'));
+
   protected readonly groups = computed(() => {
     const r = this.analysis().report;
     const all: { title: string; claims: AgentClaim[] | undefined }[] = [
+      { title: 'Before and after', claims: r.beforeAfter },
       { title: 'Summary', claims: r.summary },
       { title: 'Where the customers went', claims: r.customers },
       { title: 'Capacity and scaling', claims: r.capacity },

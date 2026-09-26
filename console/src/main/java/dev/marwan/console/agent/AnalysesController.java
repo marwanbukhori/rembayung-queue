@@ -27,7 +27,7 @@ public class AnalysesController {
     /** One line per run for lists: enough to choose one without loading them all. */
     public record Summary(String key, String job, String dropId, Instant start, Instant end, Instant analysedAt,
                           String source, String model, String note, int claims,
-                          Integer customers, Integer booked, Integer seats, Integer oversold) { }
+                          Integer customers, Integer booked, Integer seats, Integer oversold, int waves) { }
 
     private final AnalysisStore store;
     private final RunAnalyst runAnalyst;
@@ -44,7 +44,8 @@ public class AnalysesController {
         return store.list().stream().map(a -> new Summary(a.key(), a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
                 a.source(), a.model(), a.note(), a.report().all().size(),
                 number(a.facts(), "Arrived"), number(a.facts(), "Booked"),
-                number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"))).toList();
+                number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"),
+                a.facts().stream().anyMatch(f -> f.label().startsWith("Wave 2 · ")) ? 2 : 1)).toList();
     }
 
     /**

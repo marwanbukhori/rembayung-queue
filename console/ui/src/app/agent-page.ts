@@ -59,13 +59,14 @@ interface Step { tool: string; why: string; found: string }
           <p class="note">Every analysed rush, newest first; the last {{ runs().length }} are kept. Choose one to read its report.</p>
           <div class="runs" role="list">
             <div class="run head" aria-hidden="true">
-              <span>When ({{ zone }})</span><span>Customers</span><span>Booked</span><span>Seats</span>
+              <span>When ({{ zone }})</span><span>Shape</span><span>Customers</span><span>Booked</span><span>Seats</span>
               <span>Oversold</span><span>Report</span>
             </div>
             @for (r of runs(); track r.key) {
               <button class="run" role="listitem" [class.on]="r.key === selected()" (click)="select(r.key)"
                       [attr.aria-current]="r.key === selected() ? 'true' : null">
                 <span class="mono">{{ when(r.end) }}</span>
+                <span><span class="k">Shape </span>{{ r.waves === 2 ? '2 waves' : '1 wave' }}</span>
                 <span><span class="k">Customers </span>{{ r.customers ?? '—' }}</span>
                 <span><span class="k">Booked </span>{{ r.booked ?? '—' }}</span>
                 <span><span class="k">Seats </span>{{ r.seats ?? '—' }}</span>
@@ -194,7 +195,7 @@ interface Step { tool: string; why: string; found: string }
     .badge { font-size: 13px; font-weight: 700; letter-spacing: .02em; padding: 4px 10px; border-radius: 999px;
              background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
     .runs { display: grid; gap: 2px; }
-    .run { display: grid; grid-template-columns: 1.4fr repeat(4, 0.8fr) 1fr; gap: 8px; align-items: center;
+    .run { display: grid; grid-template-columns: 1.4fr repeat(5, 0.8fr) 1fr; gap: 8px; align-items: center;
            text-align: left; font: inherit; font-size: 14px; background: none; border: 0; border-radius: 4px;
            padding: 8px 10px; color: var(--ink); cursor: pointer; }
     .run.head { cursor: default; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
