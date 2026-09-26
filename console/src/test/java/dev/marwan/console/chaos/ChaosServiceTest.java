@@ -68,8 +68,8 @@ public class ChaosServiceTest {
         }
     }
 
-    static class Writes implements ClusterWrites {
-        final List<String> calls = new ArrayList<>();
+    public static class Writes implements ClusterWrites {
+        public final List<String> calls = new ArrayList<>();
         @Override public void deletePod(String name) { calls.add("delete " + name); }
         @Override public void scale(String d, int n) { calls.add("scale " + d + " " + n); }
         @Override public void restart(String d) { calls.add("restart " + d); }

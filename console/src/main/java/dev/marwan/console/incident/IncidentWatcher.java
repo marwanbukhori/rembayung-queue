@@ -32,6 +32,7 @@ public class IncidentWatcher {
     private static final Logger log = LoggerFactory.getLogger(IncidentWatcher.class);
     static final Duration SUSTAINED = Duration.ofSeconds(30);
     static final Duration HOLD = Duration.ofSeconds(60);
+    static final Duration VERIFY = Duration.ofMinutes(3);
 
     private final Supplier<SloReading> slo;
     private final IncidentStore store;
@@ -137,6 +138,7 @@ public class IncidentWatcher {
                 incident.add(now, "kubernetes", warning);
             }
         }
+        verify(incident, now);
         boolean faultActive = fault.get().isPresent();
         boolean healthy = reading.available() && !reading.breached() && (reading.hasTraffic() || !faultActive);
         if (!healthy) {
@@ -153,6 +155,25 @@ public class IncidentWatcher {
                     : "resolved: the fault has ended and there is no traffic to breach them");
             log.info("incident {} resolved", incident.id);
         }
+    }
+
+    /**
+     * A fix that has not brought the SLOs back within three minutes is recorded
+     * once, and the incident goes back to open so the commander keeps going.
+     */
+    private static void verify(Incident incident, Instant now) {
+        if (!"mitigating".equals(incident.status)) {
+            return;
+        }
+        incident.proposals.stream()
+                .filter(p -> "approved".equals(p.status()) && p.decidedAt() != null)
+                .reduce((a, b) -> b)
+                .filter(p -> !now.isBefore(p.decidedAt().plus(VERIFY)))
+                .ifPresent(p -> {
+                    incident.add(now, "slo", "not recovered " + VERIFY.toMinutes() + " minutes after "
+                            + IncidentCommander.describe(p) + " - the agent will look again");
+                    incident.status = "open";
+                });
     }
 
     private Incident open(Instant now, String kind) {

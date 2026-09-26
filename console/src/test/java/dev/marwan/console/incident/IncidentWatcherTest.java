@@ -101,6 +101,30 @@ class IncidentWatcherTest {
     }
 
     @Test
+    void aFixThatHasNotWorkedAfterThreeMinutesIsRecordedOnce() {
+        IncidentWatcher w = watcher();
+        w.drillStarted(drill(120));
+        reading = breach();
+        String id = store.open().orElseThrow().id;
+        w.update(id, i -> {
+            i.proposals.add(new Incident.Proposal(1, clock.now, "restart-booking", "booking-service", null, "r",
+                    List.of(), "approved", clock.now));
+            i.status = "mitigating";
+        });
+        clock.advance(179);
+        w.tick();
+        assertThat(store.get(id).orElseThrow().timeline).noneMatch(e -> e.text().contains("not recovered"));
+        clock.advance(15);
+        w.tick();
+        clock.advance(15);
+        w.tick();
+        Incident i = store.get(id).orElseThrow();
+        assertThat(i.timeline).filteredOn(e -> e.text().contains("not recovered")).hasSize(1)
+                .allMatch(e -> e.source().equals("slo"));
+        assertThat(i.status).isEqualTo("open");
+    }
+
+    @Test
     void anIdleDrillResolvesOnceItsFaultHasEnded() {
         IncidentWatcher w = watcher();
         fault = Optional.of(drill(30));

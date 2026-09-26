@@ -49,9 +49,15 @@ public class IncidentConfiguration {
     }
 
     @Bean
-    IncidentTicker incidentTicker(IncidentWatcher watcher,
+    Remediation remediation(dev.marwan.console.chaos.ClusterWrites writes, ChaosService chaos, IncidentWatcher watcher,
+                            IncidentStore store, Clock clock) {
+        return new Remediation(writes, chaos, watcher, store, clock);
+    }
+
+    @Bean
+    IncidentTicker incidentTicker(IncidentWatcher watcher, Remediation remediation,
                                   @Value("${console.incidents.enabled:false}") boolean enabled) {
-        return new IncidentTicker(watcher, enabled);
+        return new IncidentTicker(watcher, remediation, enabled);
     }
 
     /** The commander asks through the console's own MCP endpoint, like the run agent. */
@@ -147,10 +153,12 @@ public class IncidentConfiguration {
     /** The schedule and the drill listener, both inert unless incidents are enabled. */
     public static class IncidentTicker {
         private final IncidentWatcher watcher;
+        private final Remediation remediation;
         private final boolean enabled;
 
-        IncidentTicker(IncidentWatcher watcher, boolean enabled) {
+        IncidentTicker(IncidentWatcher watcher, Remediation remediation, boolean enabled) {
             this.watcher = watcher;
+            this.remediation = remediation;
             this.enabled = enabled;
         }
 
@@ -159,6 +167,7 @@ public class IncidentConfiguration {
             if (enabled) {
                 try {
                     watcher.tick();
+                    remediation.revertDue();
                 } catch (RuntimeException e) {
                     org.slf4j.LoggerFactory.getLogger(IncidentTicker.class).warn("incident tick skipped: {}", e.toString());
                 }
