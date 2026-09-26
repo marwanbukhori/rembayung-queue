@@ -2,6 +2,7 @@ package dev.marwan.console.ops;
 
 import dev.marwan.console.ConsoleProperties;
 import dev.marwan.console.cluster.KubernetesAccess;
+import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Event;
@@ -13,6 +14,7 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobCondition;
 import io.fabric8.kubernetes.client.dsl.NonDeletingOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -107,6 +110,18 @@ public class LoadOps {
     /** Nothing runs forever. Set on the Job, deliberately: see the class comment. */
     private static final int DEADLINE_SECONDS = 300;
 
+    /** A two-wave run: 90 s of wave, a gap, then 90 s more, with room for both to finish. */
+    private static final int TWO_WAVE_DEADLINE_SECONDS = 600;
+
+    /** Wave 2 starts this long after wave 1: time enough for the autoscaler to add pods and for them to start. */
+    static final int WAVE_GAP_SECONDS = 180;
+
+    /** Wave 1 takes about this long: 90 s of patience, then the bookings. */
+    static final int WAVE_SECONDS = 120;
+
+    /** Wave 2 of a two-wave rush: its own sitting, so wave 1 cannot have sold it out. */
+    record Wave2(String dropId, long slotId) { }
+
     /** Long enough to read the outcome on the page, short enough not to hold the budget. */
     private static final int TTL_AFTER_FINISHED_SECONDS = 900;
 
@@ -121,13 +136,22 @@ public class LoadOps {
     private final KubernetesAccess kubernetes;
     private final RestClient gate;
     private final Clock clock;
+    /** Creates a fresh sitting at an admit rate; wave 2 of a two-wave rush needs one. */
+    private final Function<Integer, DropOps.Sandbox> sittings;
 
+    @Autowired
     public LoadOps(ConsoleProperties properties, KubernetesAccess kubernetes,
-                   RestClient gateClient, Clock clock) {
+                   RestClient gateClient, Clock clock, DropOps dropOps) {
+        this(properties, kubernetes, gateClient, clock, dropOps::createAt);
+    }
+
+    LoadOps(ConsoleProperties properties, KubernetesAccess kubernetes,
+            RestClient gateClient, Clock clock, Function<Integer, DropOps.Sandbox> sittings) {
         this.properties = properties;
         this.kubernetes = kubernetes;
         this.gate = gateClient;
         this.clock = clock;
+        this.sittings = sittings;
     }
 
     /**
@@ -162,14 +186,17 @@ public class LoadOps {
     @PostMapping
     public LoadRun start(@PathVariable String dropId, @RequestBody(required = false) SendLoad request) {
         int vus = vusOf(request);
-        long slotId = slotOf(dropId);
+        int waves = wavesOf(request);
+        DropState state = stateOf(dropId);
+        long slotId = state.slotId() == null ? properties.canonicalSlot() : state.slotId();
         String jobName = jobName(dropId);
         try {
             replaceFinishedRun(jobName);
+            Wave2 wave2 = waves == 2 ? secondSitting(state) : null;
             applyScript();
             Job created = kubernetes.client().batch().v1().jobs()
                     .inNamespace(properties.namespace())
-                    .resource(job(jobName, dropId, slotId, vus))
+                    .resource(job(jobName, dropId, slotId, vus, wave2))
                     .create();
             log.info("Started load job {} for drop {} on slot {} with {} VUs asking {}m",
                     jobName, dropId, slotId, vus, cpuMillis(vus));
@@ -203,7 +230,7 @@ public class LoadOps {
      * users at a drop that expired half an hour ago would produce a wall of
      * 404s and no explanation.
      */
-    private long slotOf(String dropId) {
+    private DropState stateOf(String dropId) {
         DropState state;
         try {
             state = gate.get()
@@ -218,7 +245,7 @@ public class LoadOps {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "no drop " + dropId + ": it may have expired");
         }
-        return state.slotId() == null ? properties.canonicalSlot() : state.slotId();
+        return state;
     }
 
     /**
@@ -286,20 +313,66 @@ public class LoadOps {
                 .createOr(NonDeletingOperation::update);
     }
 
-    private Job job(String jobName, String dropId, long slotId, int vus) {
-        return new JobBuilder()
+    /**
+     * Wave 2's sitting, at the rate wave 1's drop admits at, so the two waves
+     * differ only in the pods they meet. A sitting that cannot be made refuses
+     * the whole run before any Job exists: half a two-wave rush compares nothing.
+     */
+    private Wave2 secondSitting(DropState first) {
+        int rate = first.admitRate() == null ? 1 : first.admitRate();
+        try {
+            DropOps.Sandbox second = sittings.apply(rate);
+            return new Wave2(second.dropId(), second.slotId());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "could not create wave 2's sitting: " + e.getMessage());
+        }
+    }
+
+    static int wavesOf(SendLoad request) {
+        if (request == null || request.waves() == null) {
+            return 1;
+        }
+        if (request.waves() != 1 && request.waves() != 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "waves must be 1 or 2 but was " + request.waves());
+        }
+        return request.waves();
+    }
+
+    /** Which wave is running, from the time since the run started: 1, 2, or 0 between them and when stopped. */
+    static int currentWave(int waves, long elapsedSeconds, LoadRun.Phase phase) {
+        if (phase != LoadRun.Phase.RUNNING) {
+            return 0;
+        }
+        if (waves < 2 || elapsedSeconds < WAVE_SECONDS) {
+            return 1;
+        }
+        return elapsedSeconds < WAVE_GAP_SECONDS ? 0 : 2;
+    }
+
+    Job job(String jobName, String dropId, long slotId, int vus, Wave2 wave2) {
+        JobBuilder builder = new JobBuilder()
                 .withNewMetadata()
                 .withName(jobName)
                 .withNamespace(properties.namespace())
                 .addToLabels("app", "rembayung-load")
                 .addToLabels("rembayung.dev/drop", label(dropId))
                 .addToAnnotations("rembayung.dev/vus", String.valueOf(vus))
-                .endMetadata()
+                .endMetadata();
+        if (wave2 != null) {
+            builder.editMetadata()
+                    .addToAnnotations("rembayung.dev/waves", "2")
+                    .addToAnnotations("rembayung.dev/wave2-drop", wave2.dropId())
+                    .addToAnnotations("rembayung.dev/wave-gap-seconds", String.valueOf(WAVE_GAP_SECONDS))
+                    .endMetadata();
+        }
+        Job job = builder
                 .withNewSpec()
                 // On the Job, not the pod template. See the class comment: this
                 // placement is what keeps the run inside the same CPU budget as
                 // the Deployments, which is what lets it be refused.
-                .withActiveDeadlineSeconds((long) DEADLINE_SECONDS)
+                .withActiveDeadlineSeconds((long) (wave2 == null ? DEADLINE_SECONDS : TWO_WAVE_DEADLINE_SECONDS))
                 // One attempt. A load run that failed because the cluster
                 // refused it should say so, not silently try again while the
                 // person watching wonders why the numbers have not moved.
@@ -340,6 +413,14 @@ public class LoadOps {
                 .endTemplate()
                 .endSpec()
                 .build();
+        if (wave2 != null) {
+            job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv().addAll(List.of(
+                    new EnvVar("WAVES", "2", null),
+                    new EnvVar("WAVE_GAP", (WAVE_GAP_SECONDS / 60) + "m", null),
+                    new EnvVar("DROP_ID_2", wave2.dropId(), null),
+                    new EnvVar("SLOT_ID_2", String.valueOf(wave2.slotId()), null)));
+        }
+        return job;
     }
 
     /**
@@ -429,6 +510,8 @@ public class LoadOps {
     private LoadRun describe(String dropId, Job job) {
         String jobName = job.getMetadata().getName();
         int vus = annotatedVus(job);
+        int waves = "2".equals(annotation(job, "rembayung.dev/waves")) ? 2 : 1;
+        String wave2 = annotation(job, "rembayung.dev/wave2-drop");
         long elapsed = elapsedSeconds(job);
         List<Pod> pods = kubernetes.client().pods()
                 .inNamespace(properties.namespace())
@@ -439,12 +522,12 @@ public class LoadOps {
                 .filter(p -> p.getStatus() != null && "Running".equals(p.getStatus().getPhase()))
                 .findFirst();
         if (running.isPresent()) {
-            return run(dropId, jobName, LoadRun.Phase.RUNNING, vus, null, null, elapsed);
+            return run(dropId, jobName, LoadRun.Phase.RUNNING, vus, null, null, elapsed, waves, wave2);
         }
 
         Integer succeeded = job.getStatus() == null ? null : job.getStatus().getSucceeded();
         if (succeeded != null && succeeded > 0) {
-            return run(dropId, jobName, LoadRun.Phase.SUCCEEDED, vus, null, null, elapsed);
+            return run(dropId, jobName, LoadRun.Phase.SUCCEEDED, vus, null, null, elapsed, waves, wave2);
         }
 
         Optional<JobCondition> failure = conditions(job).stream()
@@ -452,12 +535,12 @@ public class LoadOps {
                 .findFirst();
         if (failure.isPresent()) {
             return run(dropId, jobName, LoadRun.Phase.FAILED, vus,
-                    failure.get().getReason(), failure.get().getMessage(), elapsed);
+                    failure.get().getReason(), failure.get().getMessage(), elapsed, waves, wave2);
         }
         Integer failed = job.getStatus() == null ? null : job.getStatus().getFailed();
         if (failed != null && failed > 0) {
             return run(dropId, jobName, LoadRun.Phase.FAILED, vus,
-                    "PodFailed", latestWarning(jobName, pods), elapsed);
+                    "PodFailed", latestWarning(jobName, pods), elapsed, waves, wave2);
         }
 
         // Pending: the interesting case. The reason lives on the pod when one
@@ -471,14 +554,19 @@ public class LoadOps {
                     return event == null ? null : new String[] { "FailedCreate", event };
                 });
         return why == null
-                ? run(dropId, jobName, LoadRun.Phase.PENDING, vus, null, null, elapsed)
-                : run(dropId, jobName, LoadRun.Phase.PENDING, vus, why[0], why[1], elapsed);
+                ? run(dropId, jobName, LoadRun.Phase.PENDING, vus, null, null, elapsed, waves, wave2)
+                : run(dropId, jobName, LoadRun.Phase.PENDING, vus, why[0], why[1], elapsed, waves, wave2);
     }
 
     private LoadRun run(String dropId, String jobName, LoadRun.Phase phase, int vus,
-                        String reason, String message, long elapsed) {
+                        String reason, String message, long elapsed, int waves, String wave2) {
         return new LoadRun(true, null, dropId, jobName, phase, vus, cpuMillis(vus),
-                reason, message, elapsed);
+                reason, message, elapsed, waves, wave2, currentWave(waves, elapsed, phase));
+    }
+
+    private static String annotation(Job job, String key) {
+        return job.getMetadata() == null || job.getMetadata().getAnnotations() == null
+                ? null : job.getMetadata().getAnnotations().get(key);
     }
 
     /** {@code PodScheduled=False} is where "Insufficient cpu" is written down. */
@@ -557,9 +645,9 @@ public class LoadOps {
         }
     }
 
-    /** {@code {"vus": 200}}, or an empty body for the measured default. */
-    public record SendLoad(Integer vus) { }
+    /** {@code {"vus": 200, "waves": 2}}; either may be left out, for the measured default and one wave. */
+    public record SendLoad(Integer vus, Integer waves) { }
 
-    /** The part of the gate's drop state this needs: which slot to book into. */
-    record DropState(String dropId, Long slotId) { }
+    /** The part of the gate's drop state this needs: which slot to book into, and how fast it admits. */
+    record DropState(String dropId, Long slotId, Integer admitRate) { }
 }

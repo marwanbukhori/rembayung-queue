@@ -111,6 +111,11 @@ public class DropOps {
         return new Sandbox(dropId, slotId, admitRate);
     }
 
+    /** A sitting at a given rate, for the console's own use: wave 2 of a two-wave rush. */
+    public Sandbox createAt(int admitRate) {
+        return create(new StartDrop(admitRate));
+    }
+
     /**
      * Change a drop's admission rate while it is open.
      *

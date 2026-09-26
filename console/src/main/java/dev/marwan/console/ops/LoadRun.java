@@ -35,7 +35,19 @@ public record LoadRun(
         int cpuMillis,
         String reason,
         String message,
-        long secondsElapsed) {
+        long secondsElapsed,
+        /** 1, or 2 for a two-wave rush. */
+        int waves,
+        /** Wave 2's sitting, for a two-wave rush; null otherwise. */
+        String wave2DropId,
+        /** 1 or 2 while that wave is running, 0 between the waves or when nothing runs. */
+        int currentWave) {
+
+    /** The shape before waves, for callers that describe a one-wave run. */
+    public LoadRun(boolean available, String detail, String dropId, String jobName, Phase phase, int vus,
+                   int cpuMillis, String reason, String message, long secondsElapsed) {
+        this(available, detail, dropId, jobName, phase, vus, cpuMillis, reason, message, secondsElapsed, 1, null, 0);
+    }
 
     public enum Phase {
         /** No Job by this name: nothing has been run for this drop, or it has been reaped. */
