@@ -54,6 +54,52 @@ public class IncidentConfiguration {
         return new IncidentTicker(watcher, enabled);
     }
 
+    /** The commander asks through the console's own MCP endpoint, like the run agent. */
+    @Bean
+    IncidentCommander incidentCommander(dev.marwan.console.agent.Tools agentTools,
+                                        dev.marwan.console.agent.Model agentModel, SloService slo, ChaosService chaos,
+                                        IncidentStore store, IncidentWatcher watcher, Clock clock,
+                                        dev.marwan.console.auth.AccessKey key,
+                                        @Value("${server.port:8082}") int port) {
+        return new IncidentCommander(new dev.marwan.console.agent.McpToolCaller("http://localhost:" + port + "/mcp",
+                key.value(), agentTools), agentModel, slo::now, chaos::current, store, watcher, clock);
+    }
+
+    @Bean
+    CommanderTicker commanderTicker(IncidentCommander commander, IncidentWatcher watcher, IncidentHooks hooks,
+                                    dev.marwan.console.agent.Model agentModel,
+                                    @Value("${console.incidents.enabled:false}") boolean enabled) {
+        PostmortemWriter writer = new PostmortemWriter(agentModel);
+        // Written off the watcher's lock: a model call can take a minute.
+        hooks.onClosed(closed -> Thread.ofVirtual().start(() -> {
+            Incident.Postmortem pm = writer.write(closed);
+            watcher.update(closed.id, i -> i.postmortem = pm);
+        }));
+        return new CommanderTicker(commander, enabled);
+    }
+
+    /** One commander cycle every 30 s while an incident is open. */
+    public static class CommanderTicker {
+        private final IncidentCommander commander;
+        private final boolean enabled;
+
+        CommanderTicker(IncidentCommander commander, boolean enabled) {
+            this.commander = commander;
+            this.enabled = enabled;
+        }
+
+        @Scheduled(fixedDelayString = "30s", initialDelayString = "30s")
+        void cycle() {
+            if (enabled) {
+                try {
+                    commander.cycle();
+                } catch (RuntimeException e) {
+                    org.slf4j.LoggerFactory.getLogger(CommanderTicker.class).warn("commander cycle skipped: {}", e.toString());
+                }
+            }
+        }
+    }
+
     static List<String> podNames(ObjectSource objects) {
         List<String> out = new ArrayList<>();
         for (String app : WATCHED) {

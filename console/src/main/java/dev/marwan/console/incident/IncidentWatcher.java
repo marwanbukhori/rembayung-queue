@@ -66,6 +66,24 @@ public class IncidentWatcher {
         store.put(incident);
     }
 
+    /**
+     * Apply a change to the stored incident under this watcher's lock, re-reading
+     * it first so a slow caller (the commander, an approval) never overwrites the
+     * timeline the watcher added meanwhile.
+     */
+    public synchronized Optional<Incident> update(String id, Consumer<Incident> change) {
+        Optional<Incident> latest = store.get(id);
+        latest.ifPresent(incident -> {
+            boolean wasOpen = incident.isOpen();
+            change.accept(incident);
+            store.put(incident);
+            if (wasOpen && !incident.isOpen()) {
+                onClosed.accept(incident);
+            }
+        });
+        return latest;
+    }
+
     public synchronized void tick() {
         Instant now = clock.instant();
         SloReading reading = slo.get();

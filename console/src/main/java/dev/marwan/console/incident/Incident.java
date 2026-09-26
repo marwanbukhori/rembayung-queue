@@ -17,7 +17,7 @@ import dev.marwan.console.agent.Fact;
 public class Incident {
 
     /** A diagnosis: the cause the agent names, how sure it is, and the claims it rests on. */
-    public record Diagnosis(Instant at, String cause, String confidence, List<Claim> claims) { }
+    public record Diagnosis(Instant at, String cause, String confidence, List<Claim> claims, List<Fact> facts) { }
 
     /** A proposed fix from the fixed menu; only a person can move it past pending. */
     public record Proposal(int n, Instant at, String action, String target, Integer replicas, String reason,

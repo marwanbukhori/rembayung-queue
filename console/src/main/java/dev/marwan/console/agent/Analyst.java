@@ -171,7 +171,7 @@ public class Analyst {
     }
 
     /** The first JSON object in the reply, tolerating a markdown fence or a sentence around it. */
-    static JsonNode parse(String reply) {
+    public static JsonNode parse(String reply) {
         if (reply == null) {
             return null;
         }
@@ -189,7 +189,7 @@ public class Analyst {
     }
 
     /** A node's text, or its JSON when the model put an object where a string belongs. */
-    static String text(JsonNode node) {
+    public static String text(JsonNode node) {
         return node == null || node.isMissingNode() || node.isNull() ? "" : node.isString() ? node.asString() : node.toString();
     }
 

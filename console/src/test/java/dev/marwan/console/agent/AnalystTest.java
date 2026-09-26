@@ -14,16 +14,16 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class AnalystTest {
+public class AnalystTest {
 
     static final RunWindow WINDOW = BaselineTest.WINDOW;
 
     /** Answers in order; an exception in the queue is thrown instead. */
-    static class Scripted implements Model {
+    public static class Scripted implements Model {
         final Deque<Object> answers = new ArrayDeque<>();
         final List<List<Message>> seen = new ArrayList<>();
 
-        Scripted then(Object answer) {
+        public Scripted then(Object answer) {
             answers.add(answer);
             return this;
         }
