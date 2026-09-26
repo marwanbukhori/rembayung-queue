@@ -1,5 +1,6 @@
 import { Component, computed, input, signal } from '@angular/core';
-import { AgentFact, Analysis } from './analysis';
+import { AgentClaim, AgentFact, Analysis } from './analysis';
+import { Funnel } from './funnel';
 import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 
 /**
@@ -13,6 +14,7 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
  */
 @Component({
   selector: 'rb-analysis-report',
+  imports: [Funnel],
   template: `
     @let a = analysis();
     <div class="meta">
@@ -22,6 +24,8 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     @if (a.source === 'fallback' && a.note) {
       <p class="why">The model's report was not used: {{ a.note }}.</p>
     }
+
+    <rb-funnel [facts]="a.facts" />
 
     @for (group of groups(); track group.title) {
       @if (group.claims.length) {
@@ -104,11 +108,16 @@ export class AnalysisReport {
   protected readonly open = signal<string | null>(null);
   protected readonly groups = computed(() => {
     const r = this.analysis().report;
-    return [
+    const all: { title: string; claims: AgentClaim[] | undefined }[] = [
+      { title: 'Summary', claims: r.summary },
+      { title: 'Where the customers went', claims: r.customers },
+      { title: 'Capacity and scaling', claims: r.capacity },
+      { title: 'Errors', claims: r.errors },
       { title: 'Went well', claims: r.wentWell },
       { title: 'Caught', claims: r.caught },
       { title: 'Look at', claims: r.lookAt }
     ];
+    return all.map(g => ({ title: g.title, claims: g.claims ?? [] })).filter(g => g.claims.length);
   });
 
   protected fact(id: string): AgentFact | undefined {

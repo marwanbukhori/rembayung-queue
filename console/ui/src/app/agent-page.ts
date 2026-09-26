@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { Analysis, AnalysisService, AnalysisSummary } from './analysis';
 import { AnalysisReport } from './analysis-report';
+import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 
 interface Fact { id: string; source: string; label: string; value: string }
 interface Claim { text: string; facts: string[] }
@@ -40,8 +41,8 @@ interface Step { tool: string; why: string; found: string }
         </h1>
         <p class="lede">
           After every rush, an agent inside the console gathers the facts, investigates with up to
-          five read-only tool calls, and writes a short report on what went well, what it caught, and what
-          to look at. Every number in the report must come from a fact it cites; when the model cannot
+          five read-only tool calls, and writes a report in five parts: the headline, where the customers
+          went, capacity and scaling, errors, and what to look at next. Every number in the report must come from a fact it cites; when the model cannot
           manage that, the run still gets a plain report built from the facts alone.
           @if (latest()) {
             It is running: below is the report on the latest rush, then how it works.
@@ -52,20 +53,39 @@ interface Step { tool: string; why: string; found: string }
         </p>
       </div>
 
+      @if (runs().length) {
+        <section class="card pad">
+          <h2>Runs</h2>
+          <p class="note">Every analysed rush, newest first; the last {{ runs().length }} are kept. Choose one to read its report.</p>
+          <div class="runs" role="list">
+            <div class="run head" aria-hidden="true">
+              <span>When ({{ zone }})</span><span>Customers</span><span>Booked</span><span>Seats</span>
+              <span>Oversold</span><span>Report</span>
+            </div>
+            @for (r of runs(); track r.key) {
+              <button class="run" role="listitem" [class.on]="r.key === selected()" (click)="select(r.key)"
+                      [attr.aria-current]="r.key === selected() ? 'true' : null">
+                <span class="mono">{{ when(r.end) }}</span>
+                <span><span class="k">Customers </span>{{ r.customers ?? '—' }}</span>
+                <span><span class="k">Booked </span>{{ r.booked ?? '—' }}</span>
+                <span><span class="k">Seats </span>{{ r.seats ?? '—' }}</span>
+                <span [class.bad]="(r.oversold ?? 0) > 0"><span class="k">Oversold </span>{{ r.oversold ?? '—' }}</span>
+                <span><span [class]="'pill ' + r.source">{{ r.source === 'model' ? 'model' : 'from the facts' }}</span></span>
+              </button>
+            }
+          </div>
+        </section>
+      }
+
       @if (latest(); as a) {
         <section class="card pad">
           <div class="report-head">
-            <h2>Latest real report</h2>
+            <h2>Run report</h2>
             <span class="badge soft mono">{{ a.job }}</span>
           </div>
           <rb-analysis-report [analysis]="a" />
-          @if (runs().length > 1) {
-            <p class="note older">
-              {{ runs().length - 1 }} earlier {{ runs().length === 2 ? 'run is' : 'runs are' }} kept; open any
-              load run in the simulation page's inspector to read its report.
-            </p>
-          }
         </section>
+        <h2 class="how">How it works</h2>
       }
 
       <section class="card pad">
@@ -173,6 +193,23 @@ interface Step { tool: string; why: string; found: string }
     .pad { padding: 20px 24px; }
     .badge { font-size: 13px; font-weight: 700; letter-spacing: .02em; padding: 4px 10px; border-radius: 999px;
              background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
+    .runs { display: grid; gap: 2px; }
+    .run { display: grid; grid-template-columns: 1.4fr repeat(4, 0.8fr) 1fr; gap: 8px; align-items: center;
+           text-align: left; font: inherit; font-size: 14px; background: none; border: 0; border-radius: 4px;
+           padding: 8px 10px; color: var(--ink); cursor: pointer; }
+    .run.head { cursor: default; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    button.run:hover { background: var(--canvas); }
+    .run.on { background: var(--canvas); box-shadow: inset 3px 0 0 var(--dhl-red); }
+    .run .k { display: none; color: var(--muted); }
+    .run .bad { color: var(--chip-bad-fg); font-weight: 700; }
+    .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); }
+    .pill.model { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+    .how { font-size: 22px; margin: 16px 0 0; }
+    @media (max-width: 699px) {
+      .run { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .run.head { display: none; }
+      .run .k { display: inline; }
+    }
     .badge.live { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
     .older { margin-top: 12px; }
     .badge.soft { background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); font-weight: 600; }
@@ -219,16 +256,47 @@ export class AgentPage implements OnInit {
   /** Live once the model itself has written a report that passed validation. */
   protected readonly live = computed(() => this.runs().some(r => r.source === 'model'));
 
+  protected readonly selected = signal<string | null>(null);
+  protected readonly zone = TIME_ZONE_LABEL;
+
   ngOnInit(): void {
     this.analyses.list().subscribe({
       next: runs => {
         this.runs.set(runs);
-        if (runs.length) {
-          this.analyses.get(runs[0].key).subscribe({ next: a => this.latest.set(a), error: () => {} });
+        const asked = new URL(window.location.href).searchParams.get('run');
+        const first = runs.find(r => r.key === asked) ?? runs[0];
+        if (first) {
+          this.load(first.key);
         }
       },
       error: () => {}
     });
+  }
+
+  /** Open one run's report, and put it in the address so the report can be linked. */
+  protected select(key: string): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set('run', key);
+    history.replaceState(history.state, '', url);
+    this.load(key);
+  }
+
+  private load(key: string): void {
+    this.selected.set(key);
+    this.analyses.get(key).subscribe({
+      next: a => {
+        if (this.selected() === key) {
+          this.latest.set(a);
+        }
+      },
+      error: () => {}
+    });
+  }
+
+  protected when(at: string): string {
+    return malaysiaTime(at, false) + ', ' + new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short'
+    }).format(new Date(at));
   }
 
   /** Which chip is open, keyed by claim and fact, so one click opens one place. */
@@ -237,7 +305,7 @@ export class AgentPage implements OnInit {
   protected readonly loop = [
     { name: 'Facts', what: 'k6 results, Prometheus peaks, warning events, pool timeouts, the oversold invariant', model: false },
     { name: 'Investigate', what: 'the model may call up to 5 read-only tools; each result becomes a fact', model: true },
-    { name: 'Report', what: 'went well, caught, look at: every item cites fact ids', model: true },
+    { name: 'Report', what: 'summary, customers, capacity, errors, look at: every item cites fact ids', model: true },
     { name: 'Validate', what: 'ids exist and every number appears in a cited fact; one retry, then a report from the facts alone', model: false },
     { name: 'Store', what: 'facts, trail and report in one ConfigMap, keyed by run; the newest 12 kept', model: false }
   ];

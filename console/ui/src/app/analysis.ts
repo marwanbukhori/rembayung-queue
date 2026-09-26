@@ -5,7 +5,16 @@ import { Observable } from 'rxjs';
 /** The run agent's output, as GET /api/analyses/{job} serves it. */
 export interface AgentFact { id: string; source: string; label: string; value: string }
 export interface AgentClaim { text: string; facts: string[] }
-export interface AgentReport { wentWell: AgentClaim[]; caught: AgentClaim[]; lookAt: AgentClaim[] }
+export interface AgentReport {
+  summary?: AgentClaim[];
+  customers?: AgentClaim[];
+  capacity?: AgentClaim[];
+  errors?: AgentClaim[];
+  lookAt?: AgentClaim[];
+  /** Reports stored before the five sections. */
+  wentWell?: AgentClaim[];
+  caught?: AgentClaim[];
+}
 export interface AgentStep { tool: string; args: string; why: string; factId: string }
 export interface Analysis {
   job: string;
@@ -33,6 +42,10 @@ export interface AnalysisSummary {
   model: string;
   note: string | null;
   claims: number;
+  customers: number | null;
+  booked: number | null;
+  seats: number | null;
+  oversold: number | null;
 }
 
 @Injectable({ providedIn: 'root' })
