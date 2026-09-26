@@ -6,6 +6,7 @@ import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import dev.marwan.console.agent.AgentLoopback;
 import dev.marwan.console.auth.KeyFilter;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -30,6 +31,8 @@ public class McpConfiguration {
 
     static final String ENDPOINT = "/mcp";
     static final String KEY = "consoleKey";
+    /** Set for the console's own agents; unlocks raw logs only (see AgentLoopback). */
+    static final String AGENT = "agentLoopback";
 
     @Bean
     McpJsonMapper mcpJsonMapper() {
@@ -37,13 +40,20 @@ public class McpConfiguration {
     }
 
     @Bean
-    HttpServletStreamableServerTransportProvider mcpTransport(McpJsonMapper json) {
+    HttpServletStreamableServerTransportProvider mcpTransport(McpJsonMapper json, AgentLoopback loopback) {
         return HttpServletStreamableServerTransportProvider.builder()
                 .jsonMapper(json)
                 .mcpEndpoint(ENDPOINT)
                 .contextExtractor(request -> {
+                    Map<String, Object> context = new java.util.HashMap<>();
                     String key = request.getHeader(KeyFilter.HEADER);
-                    return McpTransportContext.create(key == null ? Map.of() : Map.of(KEY, key));
+                    if (key != null) {
+                        context.put(KEY, key);
+                    }
+                    if (loopback.matches(request.getHeader(AgentLoopback.HEADER))) {
+                        context.put(AGENT, Boolean.TRUE);
+                    }
+                    return McpTransportContext.create(context);
                 })
                 .build();
     }

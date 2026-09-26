@@ -65,10 +65,10 @@ public class IncidentConfiguration {
     IncidentCommander incidentCommander(dev.marwan.console.agent.Tools agentTools,
                                         dev.marwan.console.agent.Model agentModel, SloService slo, ChaosService chaos,
                                         IncidentStore store, IncidentWatcher watcher, Clock clock,
-                                        dev.marwan.console.auth.AccessKey key,
+                                        dev.marwan.console.agent.AgentLoopback loopback,
                                         @Value("${server.port:8082}") int port) {
         return new IncidentCommander(new dev.marwan.console.agent.McpToolCaller("http://localhost:" + port + "/mcp",
-                key.value(), agentTools), agentModel, slo::now, chaos::current, store, watcher, clock);
+                loopback.token(), agentTools), agentModel, slo::now, chaos::current, store, watcher, clock);
     }
 
     @Bean

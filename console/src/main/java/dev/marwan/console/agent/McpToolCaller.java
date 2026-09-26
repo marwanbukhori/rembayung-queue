@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dev.marwan.console.auth.KeyFilter;
 import dev.marwan.console.objects.LogLines;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -35,18 +34,22 @@ public class McpToolCaller implements ToolCaller {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final String endpoint;
-    private final String key;
+    /** The agents' loopback token (see {@link AgentLoopback}); never the console key. */
+    private final String loopbackToken;
     private final Tools fallback;
     private McpSyncClient client;
 
-    public McpToolCaller(String endpoint, String key, Tools fallback) {
+    public McpToolCaller(String endpoint, String loopbackToken, Tools fallback) {
         this.endpoint = endpoint;
-        this.key = key;
+        this.loopbackToken = loopbackToken;
         this.fallback = fallback;
     }
 
     @Override
     public synchronized Call call(String tool, JsonNode args, RunWindow w, Facts facts) {
+        if (!READ_ONLY.contains(tool)) {
+            return ToolCaller.refuse(tool, facts);
+        }
         try {
             Map<String, Object> arguments = new LinkedHashMap<>();
             if (args != null && args.isObject()) {
@@ -74,8 +77,8 @@ public class McpToolCaller implements ToolCaller {
         if (client == null) {
             int slash = endpoint.indexOf('/', endpoint.indexOf("//") + 2);
             HttpRequest.Builder request = HttpRequest.newBuilder();
-            if (key != null) {
-                request.header(KeyFilter.HEADER, key);
+            if (loopbackToken != null) {
+                request.header(AgentLoopback.HEADER, loopbackToken);
             }
             McpSyncClient c = McpClient.sync(HttpClientStreamableHttpTransport
                             .builder(endpoint.substring(0, slash))
