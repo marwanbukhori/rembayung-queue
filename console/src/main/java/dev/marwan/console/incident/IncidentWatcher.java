@@ -140,6 +140,22 @@ public class IncidentWatcher {
         }
         verify(incident, now);
         boolean faultActive = fault.get().isPresent();
+        // Prometheus unreadable after the fault has ended: nothing will ever say "healthy", so rather
+        // than keep the agent working for ever, hand the incident to a person as unresolved.
+        if (!reading.available() && !faultActive) {
+            if (incident.unreadableSince == null) {
+                incident.unreadableSince = now;
+            }
+            if (!now.isBefore(incident.unreadableSince.plus(HOLD))) {
+                incident.status = "unresolved";
+                incident.resolvedAt = now;
+                incident.add(now, "slo", "closed unresolved: the SLOs could not be read for 60 s after the fault"
+                        + " ended" + (reading.detail() == null ? "" : " (" + reading.detail() + ")"));
+                log.info("incident {} closed unresolved: SLOs unreadable", incident.id);
+            }
+            return;
+        }
+        incident.unreadableSince = null;
         boolean healthy = reading.available() && !reading.breached() && (reading.hasTraffic() || !faultActive);
         if (!healthy) {
             incident.healthySince = null;

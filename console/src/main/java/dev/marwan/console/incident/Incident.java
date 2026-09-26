@@ -55,6 +55,8 @@ public class Incident {
     // The watcher's own bookkeeping, kept here so a restart carries on where it stopped.
     public Boolean lastBreached;
     public Instant healthySince;
+    /** When the SLOs became unreadable with no fault running; cleared when they can be read again. */
+    public Instant unreadableSince;
     public List<String> knownPods = new ArrayList<>();
     public List<String> seenWarnings = new ArrayList<>();
 

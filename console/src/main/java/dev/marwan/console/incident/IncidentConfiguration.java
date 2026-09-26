@@ -165,11 +165,17 @@ public class IncidentConfiguration {
         @Scheduled(fixedDelayString = "15s", initialDelayString = "20s")
         void tick() {
             if (enabled) {
+                // Separately: a watcher that fails (events, the store) must not stop a raised
+                // autoscaler minimum from being put back on time.
                 try {
                     watcher.tick();
-                    remediation.revertDue();
                 } catch (RuntimeException e) {
                     org.slf4j.LoggerFactory.getLogger(IncidentTicker.class).warn("incident tick skipped: {}", e.toString());
+                }
+                try {
+                    remediation.revertDue();
+                } catch (RuntimeException e) {
+                    org.slf4j.LoggerFactory.getLogger(IncidentTicker.class).warn("reverts skipped this tick: {}", e.toString());
                 }
             }
         }

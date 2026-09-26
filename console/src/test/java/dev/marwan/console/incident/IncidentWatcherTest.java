@@ -140,6 +140,36 @@ class IncidentWatcherTest {
         assertThat(store.open()).isEmpty();
     }
 
+    /** Review I7: with Prometheus unreadable, a drill whose fault has ended must not stay open for ever. */
+    @Test
+    void aDrillWhoseSlosCannotBeReadClosesAsUnresolvedAfterTheFaultEnds() {
+        IncidentWatcher w = watcher();
+        fault = Optional.of(drill(30));
+        w.drillStarted(fault.get());
+        reading = new SloReading(clock.now, false, "Prometheus answered HTTP 503", false, null, null);
+        w.tick();
+        clock.advance(30);
+        fault = Optional.empty();
+        for (int s = 0; s <= 60; s += 15) {
+            clock.advance(15);
+            w.tick();
+        }
+        assertThat(store.open()).isEmpty();
+        Incident closed = store.list().get(0);
+        assertThat(closed.status).isEqualTo("unresolved");
+        assertThat(closed.timeline).anyMatch(e -> e.text().contains("could not be read"));
+    }
+
+    /** Review I6: a watcher that fails must not stop temporary raises from being put back. */
+    @Test
+    void aFailingWatcherDoesNotBlockTheReverts() {
+        IncidentWatcher failing = org.mockito.Mockito.mock(IncidentWatcher.class);
+        org.mockito.Mockito.doThrow(new IllegalStateException("events unreadable")).when(failing).tick();
+        Remediation remediation = org.mockito.Mockito.mock(Remediation.class);
+        new IncidentConfiguration.IncidentTicker(failing, remediation, true).tick();
+        org.mockito.Mockito.verify(remediation).revertDue();
+    }
+
     @Test
     void podChangesAndWarningsJoinTheTimelineOnce() {
         IncidentWatcher w = watcher();
