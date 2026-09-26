@@ -45,7 +45,7 @@ public class AnalysesController {
                 a.source(), a.model(), a.note(), a.report().all().size(),
                 number(a.facts(), "Arrived"), number(a.facts(), "Booked"),
                 number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"),
-                a.facts().stream().anyMatch(f -> f.label().startsWith("Wave 2 · ")) ? 2 : 1)).toList();
+                a.facts().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived")) ? 2 : 1)).toList();
     }
 
     /**

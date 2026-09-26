@@ -165,7 +165,8 @@ public class RunAnalyst {
         int waves = "2".equals(notes.get("rembayung.dev/waves")) ? 2 : 1;
         int gap = waves == 2 ? parse(notes.get("rembayung.dev/wave-gap-seconds"), 180) : 0;
         return new RunWindow(job.getMetadata().getName(), dropId(job),
-                Instant.parse(job.getStatus().getStartTime()), end.plus(TAIL), waves, gap);
+                Instant.parse(job.getStatus().getStartTime()), end.plus(TAIL), waves, gap,
+                waves == 2 ? notes.get("rembayung.dev/wave2-drop") : null);
     }
 
     private static int parse(String value, int otherwise) {

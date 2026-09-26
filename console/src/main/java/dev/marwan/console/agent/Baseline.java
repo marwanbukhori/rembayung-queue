@@ -55,11 +55,13 @@ public class Baseline {
     public Facts gather(RunWindow w) {
         Facts facts = new Facts();
         Optional<K6Summary> k6 = k6(w, facts);
-        oversold(w, facts, k6.map(K6Summary::patienceSeconds).orElse(null));
+        // Only a wave that actually ran is compared: a run cut off after wave 1 has no wave 2 to stand beside it.
+        boolean waveTwoRan = k6.map(s -> s.perWave().size() == 2).orElse(false);
+        oversold(w, facts, k6.map(K6Summary::patienceSeconds).orElse(null), waveTwoRan);
         // Configuration, not a measurement - but a report comparing a peak with the pool's size
         // needs the size as a fact to cite, or the validator rightly refuses the number.
         facts.add("config", "DB pool size per booking-service pod", String.valueOf(poolSize));
-        prometheus(w, facts);
+        prometheus(w, facts, waveTwoRan);
         warnings(w, facts);
         restarts(facts);
         poolTimeouts(w, facts);
@@ -160,11 +162,25 @@ public class Baseline {
         }
     }
 
-    private void oversold(RunWindow w, Facts facts, Integer patienceSeconds) {
+    private void oversold(RunWindow w, Facts facts, Integer patienceSeconds, boolean waveTwoRan) {
         try {
             DemoState s = state.apply(w.dropId());
-            facts.add("invariant", "Seats oversold", s.available() ? String.valueOf(s.oversold())
-                    : "unavailable: " + s.detail());
+            DemoState second = waveTwoRan && w.wave2DropId() != null ? state.apply(w.wave2DropId()) : null;
+            if (second != null) {
+                // Each wave sold its own sitting; the invariant has to hold in both.
+                facts.add("invariant", "Wave 1 · Seats oversold", s.available() ? String.valueOf(s.oversold())
+                        : "unavailable: " + s.detail());
+                facts.add("invariant", "Wave 2 · Seats oversold", second.available() ? String.valueOf(second.oversold())
+                        : "unavailable: " + second.detail());
+                if (second.available()) {
+                    facts.add("booking-service", "Wave 2 · Seats taken / capacity",
+                            second.seatsTaken() + " / " + second.capacity());
+                }
+            }
+            boolean bothReadable = s.available() && (second == null || second.available());
+            facts.add("invariant", "Seats oversold", bothReadable
+                    ? String.valueOf(s.oversold() + (second == null ? 0 : second.oversold()))
+                    : "unavailable: " + (s.available() ? second.detail() : s.detail()));
             if (s.available()) {
                 facts.add("queue-gate", "Admit rate", s.admitRate() == null
                         ? "unavailable: the gate did not report it" : s.admitRate() + " per second");
@@ -183,7 +199,7 @@ public class Baseline {
         }
     }
 
-    private void prometheus(RunWindow w, Facts facts) {
+    private void prometheus(RunWindow w, Facts facts, boolean waveTwoRan) {
         try {
             for (Series s : range(ChartName.POOL.promql(), ChartName.POOL.labelKey(), w)) {
                 facts.add("Prometheus", "Peak DB pool in use, " + s.label(), num(max(s)));
@@ -197,7 +213,7 @@ public class Baseline {
             for (Series s : range(ChartName.REPLICAS.promql(), ChartName.REPLICAS.labelKey(), w)) {
                 facts.add("Prometheus", "Peak replicas, " + s.label(), num(max(s)) + " (from " + num(first(s)) + ")");
                 timeline(s, w).ifPresent(t -> facts.add("Prometheus", "Scaling, " + s.label(), t));
-                if (w.waves() == 2) {
+                if (w.waves() == 2 && waveTwoRan) {
                     for (int n = 1; n <= 2; n++) {
                         facts.add("Prometheus", "Wave " + n + " · Ready pods at start, " + s.label(),
                                 num(valueAt(s, w.waveStart(n))));

@@ -100,7 +100,9 @@ export class LoadService {
   }
 
   setRate(admitRate: number): void {
-    const dropId = this.dropId;
+    // During wave 2 the running sitting is wave 2's own, so that is the one to change.
+    const run = this.run();
+    const dropId = run?.waves === 2 && run.currentWave === 2 && run.wave2DropId ? run.wave2DropId : this.dropId;
     if (!dropId) {
       return;
     }

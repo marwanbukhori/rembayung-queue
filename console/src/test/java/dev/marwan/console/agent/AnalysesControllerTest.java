@@ -71,10 +71,15 @@ class AnalysesControllerTest {
         Analysis two = new Analysis(a.job(), a.dropId(), a.start(), a.end(), List.of(
                 new Fact("F1", "k6", "Wave 1 · Arrived", "100"), new Fact("F2", "k6", "Wave 2 · Arrived", "100")),
                 a.trail(), a.report(), a.model(), a.source(), a.note(), a.problems(), a.analysedAt(), a.millis());
-        when(store.list()).thenReturn(List.of(two, one()));
+        Analysis cutOff = new Analysis(a.job(), a.dropId(), a.start(), a.end(), List.of(
+                new Fact("F1", "k6", "Wave 1 · Arrived", "100"),
+                new Fact("F2", "Prometheus", "Wave 2 · Ready pods at start, queue-gate", "6")),
+                a.trail(), a.report(), a.model(), a.source(), a.note(), a.problems(), a.analysedAt(), a.millis());
+        when(store.list()).thenReturn(List.of(two, one(), cutOff));
         mvc.perform(get("/api/analyses"))
                 .andExpect(jsonPath("$[0].waves").value(2))
-                .andExpect(jsonPath("$[1].waves").value(1));
+                .andExpect(jsonPath("$[1].waves").value(1))
+                .andExpect(jsonPath("$[2].waves").value(1));
     }
 
     @Test

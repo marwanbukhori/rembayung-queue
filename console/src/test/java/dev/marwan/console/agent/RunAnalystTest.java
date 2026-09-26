@@ -125,7 +125,8 @@ class RunAnalystTest {
     void aTwoWaveJobGivesATwoWaveWindow() {
         Job job = withDropEnv(FakeCluster.loadJob("load-two", "t", NOW.minusSeconds(900), NOW.minusSeconds(500), false), "t");
         job.getMetadata().setAnnotations(new java.util.HashMap<>(java.util.Map.of(
-                "rembayung.dev/waves", "2", "rembayung.dev/wave-gap-seconds", "180")));
+                "rembayung.dev/waves", "2", "rembayung.dev/wave-gap-seconds", "180",
+                "rembayung.dev/wave2-drop", "d-wave2")));
         cluster.jobs.add(job);
 
         reconciler().reconcileOnce();
@@ -133,6 +134,7 @@ class RunAnalystTest {
         assertThat(analysed).singleElement().satisfies(w -> {
             assertThat(w.waves()).isEqualTo(2);
             assertThat(w.waveGapSeconds()).isEqualTo(180);
+            assertThat(w.wave2DropId()).isEqualTo("d-wave2");
         });
     }
 

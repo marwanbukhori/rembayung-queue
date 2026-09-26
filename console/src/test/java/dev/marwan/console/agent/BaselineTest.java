@@ -183,6 +183,29 @@ class BaselineTest {
     }
 
     @Test
+    void aCutOffRunHasNoWaveTwoPodsFactToCompareAgainst() {
+        twoWaveCluster();
+        cluster.logs.put("load-rush-1-abc", "running\n" + TWO_WAVES.replaceAll(",\\{\"wave\":2.*\\]", "]") + "\n");
+        Map<String, String> f = byLabel(baseline().gather(TWO_WAVE_WINDOW));
+        assertThat(f).doesNotContainKey("Wave 2 · Ready pods at start, queue-gate");
+    }
+
+    @Test
+    void aTwoWaveRunChecksBothSittingsForOversold() {
+        twoWaveCluster();
+        RunWindow w = new RunWindow("load-rush-1", "rush-1", START, START.plusSeconds(330), 2, 180, "rush-2");
+        Baseline both = new Baseline(cluster, prometheus, 5, drop -> new DemoState(true, null, drop, 1, 250, 196, 54,
+                drop.equals("rush-2") ? 1 : 0, 200, 90, 0, admitRate));
+
+        Map<String, String> f = byLabel(both.gather(w));
+
+        assertThat(f.get("Wave 1 · Seats oversold")).isEqualTo("0");
+        assertThat(f.get("Wave 2 · Seats oversold")).isEqualTo("1");
+        assertThat(f.get("Seats oversold")).isEqualTo("1");
+        assertThat(f.get("Wave 2 · Seats taken / capacity")).isEqualTo("196 / 250");
+    }
+
+    @Test
     void podsHeldBackByTheCpuBudgetAreAFact() {
         cluster.events.put("Deployment/queue-gate", List.of(new EventBuilder().withType("Warning")
                 .withReason("FailedCreate").withMessage("pods \"queue-gate-x\" is forbidden: exceeded quota: compute-deploy")

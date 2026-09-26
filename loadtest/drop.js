@@ -55,7 +55,11 @@ function waveScenario(wave, startTime) {
     startTime,
     vus: Number(__ENV.VUS || 5000),
     iterations: 1,
-    maxDuration: __ENV.MAX_DURATION || (WAVES === 2 ? '8m' : '5m'),
+    // Two waves: each must finish inside the gap before the next, or k6 holds
+    // both waves' customers at once, and wave 2 must end well inside the console
+    // Job's 600 s deadline so the summary prints.
+    maxDuration: __ENV.MAX_DURATION || (WAVES === 2 ? (wave === '1' ? '2m20s' : '3m') : '5m'),
+    gracefulStop: WAVES === 2 ? '10s' : '30s',
     env: wave === '1'
       ? { WAVE: '1', DROP: __ENV.DROP_ID || '', SLOT: String(__ENV.SLOT_ID || 1) }
       : { WAVE: '2', DROP: __ENV.DROP_ID_2 || '', SLOT: String(__ENV.SLOT_ID_2 || 1) },
