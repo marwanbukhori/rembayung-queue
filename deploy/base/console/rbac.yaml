@@ -116,7 +116,7 @@ rules:
   # change sent as a patch.
   - apiGroups: ["apps"]
     resources: ["deployments/scale"]
-    resourceNames: ["booking-service", "queue-gate"]
+    resourceNames: ["booking-service"]
     verbs: ["get", "update", "patch"]
   # An approved "restart booking-service": a patch of the restartedAt
   # annotation on its pod template, exactly what `oc rollout restart` sends.

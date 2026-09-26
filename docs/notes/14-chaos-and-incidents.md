@@ -45,6 +45,8 @@ A visitor with the key starts a rush, then presses a fault on the simulation pag
 
 **No traffic is "no data", not a breach.** An idle system never opens an incident.
 
+**Shed load counts.** A 503 that booking-service sends to shed load is a 5xx like any other, so it counts against the success SLO. A heavy rush can therefore open an incident on its own, with no fault injected. That is deliberate: a visitor turned away is a visitor who did not book.
+
 **Opening.** A drill opens an incident at once. An unplanned breach opens one after 30 s.
 
 **Resolving.** An incident resolves when both SLOs hold for 60 s.
@@ -105,7 +107,7 @@ oc apply -f deploy/base/console/rbac.yaml
 
 What it adds to the console Role:
 - `pods`: `delete`. RBAC cannot restrict by label, so the code only deletes a pod it selected by `app=booking-service`.
-- `deployments/scale`: `get`, `update`, `patch`, on booking-service and queue-gate. fabric8's `scale(n)` reads the subresource and PUTs it back, hence `update`.
+- `deployments/scale`: `get`, `update`, `patch`, on booking-service only (nothing scales queue-gate). fabric8's `scale(n)` reads the subresource and PUTs it back, hence `update`.
 - `deployments`: `patch`, on booking-service only (the restart annotation).
 - `horizontalpodautoscalers`: `patch`, on booking-service and queue-gate.
 

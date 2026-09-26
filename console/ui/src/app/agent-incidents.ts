@@ -33,6 +33,7 @@ import { malaysiaTime } from './time';
             </div>
           }
         </div>
+        <p class="c-note">A 503 sent to shed load counts against the success SLO, so a heavy rush can open an incident on its own.</p>
       </section>
 
       @if (selected(); as i) {
