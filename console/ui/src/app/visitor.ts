@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, output } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, output, signal, untracked } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
 import { ChartsStrip } from './charts-strip';
 import { ClusterResources } from './cluster-resources';
@@ -13,6 +13,7 @@ import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
 import { StateService } from './state.service';
+import { TrafficService } from './traffic.service';
 
 /**
  * Your own simulation: a session of your own, on a slot of your own.
@@ -60,7 +61,7 @@ import { StateService } from './state.service';
             the progress bar rather than sitting under it - two drawings of one
             number, stacked, was the page saying the same thing twice.
           -->
-          <rb-canonical-drop heading="Seats and queue" />
+          <rb-canonical-drop [heading]="seatsHeading()" />
           <rb-traffic-log />
         } @else {
           <div class="card placeholder">Seats and the queue appear here once a rush starts.</div>
@@ -200,6 +201,34 @@ export class Visitor implements OnInit, OnDestroy {
   private readonly sandboxes = inject(SandboxService);
   private readonly state = inject(StateService);
   private readonly loads = inject(LoadService);
+  private readonly traffic = inject(TrafficService);
+  /** Wave 2's sitting once this page has switched to it, so a new run switches afresh. */
+  private readonly watchingWave2 = signal<string | null>(null);
+
+  /** "Wave n of 2" on a two-wave run, so the seats on screen say whose they are. */
+  protected readonly seatsHeading = computed(() => {
+    const run = this.loads.run();
+    if (run?.waves !== 2 || run.phase === 'NONE') {
+      return 'Seats and queue';
+    }
+    return `Seats and queue · Wave ${this.watchingWave2() === run.wave2DropId ? 2 : 1} of 2`;
+  });
+
+  constructor() {
+    // A two-wave run: tag the traffic with its wave, and when wave 2 starts, follow
+    // its sitting - wave 1's seats are finished, and wave 2's are the ones filling.
+    effect(() => {
+      const run = this.loads.run();
+      const two = run?.waves === 2 && run.phase !== 'NONE';
+      untracked(() => {
+        this.traffic.tag.set(two ? (run!.currentWave === 2 || this.watchingWave2() === run!.wave2DropId ? 'W2' : 'W1') : '');
+        if (two && run!.currentWave === 2 && run!.wave2DropId && this.watchingWave2() !== run!.wave2DropId) {
+          this.watchingWave2.set(run!.wave2DropId);
+          this.state.watch(run!.wave2DropId);
+        }
+      });
+    });
+  }
 
   protected readonly inspector = inject(InspectorService);
   readonly sandbox = this.sandboxes.sandbox;

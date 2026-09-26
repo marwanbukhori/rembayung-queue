@@ -71,6 +71,24 @@ const CROWDS = [
           </div>
 
           <div class="setting">
+            <div class="label">Rush shape</div>
+            <div class="tabs">
+              <button class="tab" [class.on]="waves() === 1" [disabled]="busy() || readOnly"
+                      (click)="waves.set(1)">One wave</button>
+              <button class="tab" [class.on]="waves() === 2" [disabled]="busy() || readOnly"
+                      (click)="waves.set(2)">Two waves, 3 min apart</button>
+            </div>
+            <p class="note">
+              @if (waves() === 2) {
+                About 5 minutes. Wave 2 arrives after the autoscaler has had time to add pods, at a sitting
+                of its own, so the report can set the two waves side by side.
+              } @else {
+                Everyone arrives in the same second, once. About 2 minutes.
+              }
+            </p>
+          </div>
+
+          <div class="setting">
             <div class="label">
               Admitted per second
               @if (busy()) { <span class="live mono">live, change it now</span> }
@@ -181,6 +199,7 @@ export class RunPanel {
 
   protected readonly crowds = CROWDS;
   protected readonly vus = this.loads.chosenVus;
+  protected readonly waves = this.loads.chosenWaves;
 
   protected readonly rates = [
     {
@@ -265,10 +284,11 @@ export class RunPanel {
    */
   protected run(): void {
     const vus = this.vus();
+    const waves = this.waves();
     this.sandboxes.start(this.picked(), (sandbox) => {
       this.state.watch(sandbox.dropId);
       this.loads.watch(sandbox.dropId, sandbox.admitRate);
-      this.loads.send(vus);
+      this.loads.send(vus, waves);
     });
   }
 }

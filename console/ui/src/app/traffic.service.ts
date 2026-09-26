@@ -45,6 +45,8 @@ export class TrafficService {
 
   /** Newest first, because a log you watch is read from the top. */
   readonly feed = this.events.asReadonly();
+  /** Which wave of a two-wave rush new lines belong to: "W1", "W2", or "" for a one-wave run. */
+  readonly tag = signal('');
 
   /** True while anything is actually moving, which drives the animation. */
   readonly flowing = signal(false);
@@ -143,7 +145,8 @@ export class TrafficService {
   }
 
   private push(kind: EventKind, text: string, count: number): void {
-    const event: TrafficEvent = { seq: ++this.seq, at: new Date(), kind, text, count };
+    const tag = this.tag();
+    const event: TrafficEvent = { seq: ++this.seq, at: new Date(), kind, text: tag ? `${tag} ${text}` : text, count };
     this.events.update((list) => [event, ...list].slice(0, TrafficService.KEEP));
   }
 

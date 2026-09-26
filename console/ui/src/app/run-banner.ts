@@ -93,6 +93,15 @@ export class RunBanner {
 
     switch (run?.phase) {
       case 'RUNNING':
+        if (run.waves === 2) {
+          return run.currentWave === 0
+            ? { tone: 'waiting', live: true, counts, title: 'Waiting for wave 2 — pods scaling',
+                detail: 'Wave 1 is over. Watch the replicas chart: wave 2 meets whatever pods the autoscaler adds now.' }
+            : { tone: 'running', live: true, counts, title: `Wave ${run.currentWave === 2 ? 2 : 1} of 2`,
+                detail: run.currentWave === 2
+                  ? 'The same crowd again, at a fresh sitting, against the pods the autoscaler added.'
+                  : 'Customers are arriving and the queue is draining. Wave 2 follows three minutes after this one began.' };
+        }
         return {
           tone: 'running', live: true, counts,
           title: 'A rush is in flight',

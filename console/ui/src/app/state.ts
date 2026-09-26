@@ -140,6 +140,11 @@ export interface LoadRun {
   reason: string | null;
   message: string | null;
   secondsElapsed: number;
+  /** 1, or 2 for a two-wave rush; absent from a console that predates waves. */
+  waves?: number;
+  wave2DropId?: string | null;
+  /** 1 or 2 while that wave runs, 0 between the waves and when nothing runs. */
+  currentWave?: number;
 }
 
 /**

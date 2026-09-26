@@ -1,9 +1,14 @@
 import { HttpClient } from '@angular/common/http';
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { LoadRun } from './state';
 
 /** Fast enough to catch a Job going Pending while the visitor is still looking at the button. */
 const POLL_MILLIS = 2000;
+
+/** Wave 2 of a two-wave rush starts this long after wave 1 (LoadOps.WAVE_GAP_SECONDS). */
+export const WAVE_GAP_S = 180;
+/** A wave runs about this long: 90 s of patience, then the bookings (LoadOps.WAVE_SECONDS). */
+export const WAVE_S = 120;
 
 /**
  * Sending load at a drop, and watching what the cluster does about it.
@@ -33,6 +38,28 @@ export class LoadService {
   /** Matches LoadOps.DEFAULT_VUS. A run that outlasts the script's poll window
    *  reports customers giving up, which says nothing about the system. */
   readonly chosenVus = signal(60);
+  /** One wave, or the same wave twice three minutes apart. */
+  readonly chosenWaves = signal(1);
+  /** When the current run began, in epoch seconds, worked out from its elapsed time when last read. */
+  private readonly startedAt = signal<number | null>(null);
+
+  /**
+   * Where the two waves of a two-wave run began, for the charts to mark. Shown
+   * while the run is live and for fifteen minutes after, from the run itself -
+   * so a reload mid-run draws them again.
+   */
+  readonly waveMarks = computed<{ label: string; t: number }[]>(() => {
+    const run = this.run();
+    const start = this.startedAt();
+    if (!run || run.waves !== 2 || run.phase === 'NONE' || start === null) {
+      return [];
+    }
+    const ended = start + WAVE_GAP_S + WAVE_S;
+    if (Date.now() / 1000 - ended > 15 * 60) {
+      return [];
+    }
+    return [{ label: 'W1', t: start }, { label: 'W2', t: start + WAVE_GAP_S }];
+  });
 
   private dropId: string | null = null;
 
@@ -53,16 +80,16 @@ export class LoadService {
     this.poll();
   }
 
-  send(vus: number): void {
+  send(vus: number, waves = 1): void {
     const dropId = this.dropId;
     if (!dropId) {
       return;
     }
     this.starting.set(true);
     this.failure.set(null);
-    this.http.post<LoadRun>(`/api/drops/${dropId}/load`, { vus }).subscribe({
+    this.http.post<LoadRun>(`/api/drops/${dropId}/load`, { vus, waves }).subscribe({
       next: (run) => {
-        this.run.set(run);
+        this.took(run);
         this.starting.set(false);
       },
       error: (err) => {
@@ -89,9 +116,14 @@ export class LoadService {
       return;
     }
     this.http.get<LoadRun>(`/api/drops/${this.dropId}/load`).subscribe({
-      next: (run) => this.run.set(run),
+      next: (run) => this.took(run),
       error: () => {}
     });
+  }
+
+  private took(run: LoadRun): void {
+    this.run.set(run);
+    this.startedAt.set(run.phase === 'NONE' ? null : Date.now() / 1000 - run.secondsElapsed);
   }
 }
 
