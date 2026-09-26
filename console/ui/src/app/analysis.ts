@@ -17,7 +17,7 @@ export interface AgentReport {
   wentWell?: AgentClaim[];
   caught?: AgentClaim[];
 }
-export interface AgentStep { tool: string; args: string; why: string; factId: string }
+export interface AgentStep { tool: string; args: string; why: string; factId: string; via?: string | null }
 export interface Analysis {
   job: string;
   dropId: string;

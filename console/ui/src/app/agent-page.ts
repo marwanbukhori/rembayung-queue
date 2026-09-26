@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { Analysis, AnalysisService, AnalysisSummary } from './analysis';
 import { AnalysisReport } from './analysis-report';
+import { UseFromClaude } from './use-from-claude';
 import { TIME_ZONE_LABEL, malaysiaTime } from './time';
 
 interface Fact { id: string; source: string; label: string; value: string }
@@ -23,7 +24,7 @@ interface Step { tool: string; why: string; found: string }
  */
 @Component({
   selector: 'rb-agent-page',
-  imports: [AnalysisReport],
+  imports: [AnalysisReport, UseFromClaude],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -88,6 +89,8 @@ interface Step { tool: string; why: string; found: string }
         </section>
         <h2 class="how">How it works</h2>
       }
+
+      <rb-use-from-claude />
 
       <section class="card pad">
         <h2>The loop</h2>

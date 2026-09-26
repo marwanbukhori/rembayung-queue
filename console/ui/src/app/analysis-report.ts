@@ -66,7 +66,8 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
       <h4>What it looked at</h4>
       <ol class="trail">
         @for (s of a.trail; track $index) {
-          <li><span class="mono">{{ s.tool }}</span>{{ s.why ? ' because ' + s.why : '' }} → {{ s.factId }}</li>
+          <li><span class="mono">{{ s.tool }}</span>{{ s.why ? ' because ' + s.why : '' }} → {{ s.factId }}
+            @if (s.via) {<span class="via">{{ s.via === 'mcp' ? 'via MCP' : 'in-process' }}</span>}</li>
         }
       </ol>
     } @else {
@@ -103,6 +104,7 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     .src { font-size: 11px; color: var(--muted); }
     .trail { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-soft); overflow-wrap: anywhere; }
     .trail .mono { color: var(--ink); font-size: 12px; }
+    .via { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--chip-info-bg); color: var(--chip-info-fg); }
     .quiet { color: var(--muted); font-size: 13px; }
     .mono { font-family: var(--mono); }
     .all { margin-top: 12px; }
