@@ -19,7 +19,8 @@ public record K6Summary(int vus, int iterations, int booked, int rejected, int n
                         Integer joined, Integer admitted, Integer soldOutAtJoin, Integer gaveUp,
                         Integer refusedAfterAdmission, Integer soldOut, Integer overloaded, Integer faults,
                         Integer queueWaitP50, Integer queueWaitP95, Integer queueWaitMax,
-                        Integer partySize, Integer patienceSeconds) {
+                        Integer partySize, Integer patienceSeconds,
+                        Integer faultsAtJoin, Integer faultsAtBooking) {
 
     /** True when the run's script counted each customer's path; older scripts did not. */
     public boolean hasOutcomes() {
@@ -48,7 +49,8 @@ public record K6Summary(int vus, int iterations, int booked, int rejected, int n
                     opt(n, "joined"), opt(n, "admitted"), opt(n, "soldOutAtJoin"), opt(n, "gaveUp"),
                     opt(n, "refusedAfterAdmission"), opt(n, "soldOut"), opt(n, "overloaded"), opt(n, "faults"),
                     opt(n, "queueWaitP50"), opt(n, "queueWaitP95"), opt(n, "queueWaitMax"),
-                    opt(n, "partySize"), opt(n, "patienceSeconds")));
+                    opt(n, "partySize"), opt(n, "patienceSeconds"),
+                    opt(n, "faultsAtJoin"), opt(n, "faultsAtBooking")));
         } catch (JacksonException e) {
             return Optional.empty();
         }

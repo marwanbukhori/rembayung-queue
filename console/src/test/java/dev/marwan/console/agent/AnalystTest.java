@@ -218,6 +218,12 @@ class AnalystTest {
     }
 
     @Test
+    void thePromptForbidsComputedNumbersAndDoesNotAskForThem() {
+        assertThat(Analyst.SYSTEM).doesNotContain("N x patience");
+        assertThat(Analyst.REPORT).contains("do not compute new numbers");
+    }
+
+    @Test
     void jsonInsideAFenceIsAccepted() {
         model.then("```json\n{\"done\":true}\n```").then("```json\n" + GOOD_REPORT + "\n```");
         assertThat(analyst().analyse(WINDOW).source()).isEqualTo("model");

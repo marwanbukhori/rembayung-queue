@@ -23,7 +23,10 @@ public final class Fallback {
             Map.entry("Sold out at booking (409)", "were admitted but the seats had sold out (409)"),
             Map.entry("Admitted but refused (403)", "were admitted but refused at booking (403)"),
             Map.entry("Overloaded (503)", "were turned away by an overloaded service (503)"),
-            Map.entry("Other faults", "hit another fault"));
+            Map.entry("Faults at the queue", "hit a fault joining the queue"),
+            Map.entry("Faults at booking", "hit a fault while booking"),
+            Map.entry("Other faults", "hit another fault"),
+            Map.entry("Did not finish", "did not finish (cut off by the run's time limit or an unreadable reply)"));
 
     private Fallback() { }
 

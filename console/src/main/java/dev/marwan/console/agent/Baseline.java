@@ -54,8 +54,8 @@ public class Baseline {
 
     public Facts gather(RunWindow w) {
         Facts facts = new Facts();
-        k6(w, facts);
-        oversold(w, facts);
+        Optional<K6Summary> k6 = k6(w, facts);
+        oversold(w, facts, k6.map(K6Summary::patienceSeconds).orElse(null));
         // Configuration, not a measurement - but a report comparing a peak with the pool's size
         // needs the size as a fact to cite, or the validator rightly refuses the number.
         facts.add("config", "DB pool size per booking-service pod", String.valueOf(poolSize));
@@ -66,7 +66,7 @@ public class Baseline {
         return facts;
     }
 
-    private void k6(RunWindow w, Facts facts) {
+    private Optional<K6Summary> k6(RunWindow w, Facts facts) {
         Optional<K6Summary> summary;
         String why = "no K6_SUMMARY line in the load pod's log";
         try {
@@ -84,7 +84,7 @@ public class Baseline {
         }
         if (summary.isEmpty()) {
             facts.add("k6", "k6 summary", "unavailable: " + why);
-            return;
+            return summary;
         }
         K6Summary s = summary.get();
         facts.add("k6", "Customers arriving at once", String.valueOf(s.vus()));
@@ -95,7 +95,7 @@ public class Baseline {
         facts.add("k6", "Run duration", Math.round(s.durationMs() / 1000.0) + " s");
         if (!s.hasOutcomes()) {
             facts.add("k6", "Customer outcomes", "unavailable: this run's k6 script predates outcome counting");
-            return;
+            return summary;
         }
         // The funnel, one fact a step, then one per way out of it - so each drop-off can be cited.
         facts.add("k6", "Party size", String.valueOf(s.partySize()));
@@ -110,9 +110,23 @@ public class Baseline {
         outcome(facts, "Sold out at booking (409)", s.soldOut());
         outcome(facts, "Admitted but refused (403)", s.refusedAfterAdmission());
         outcome(facts, "Overloaded (503)", s.overloaded());
-        outcome(facts, "Other faults", s.faults());
+        if (s.faultsAtJoin() != null && s.faultsAtBooking() != null) {
+            outcome(facts, "Faults at the queue", s.faultsAtJoin());
+            outcome(facts, "Faults at booking", s.faultsAtBooking());
+        } else {
+            outcome(facts, "Other faults", s.faults());
+        }
+        // A customer cut off by the run's time limit, or given a reply it could not read, reached no outcome.
+        int finished = s.booked() + nz(s.soldOutAtJoin()) + nz(s.gaveUp()) + nz(s.refusedAfterAdmission())
+                + nz(s.soldOut()) + nz(s.overloaded()) + nz(s.faults());
+        outcome(facts, "Did not finish", s.vus() - finished);
         facts.add("k6", "Queue wait p50 / p95 / max",
                 s.queueWaitP50() + " / " + s.queueWaitP95() + " / " + s.queueWaitMax() + " s");
+        return summary;
+    }
+
+    private static int nz(Integer n) {
+        return n == null ? 0 : n;
     }
 
     private static void outcome(Facts facts, String label, Integer n) {
@@ -121,7 +135,7 @@ public class Baseline {
         }
     }
 
-    private void oversold(RunWindow w, Facts facts) {
+    private void oversold(RunWindow w, Facts facts, Integer patienceSeconds) {
         try {
             DemoState s = state.apply(w.dropId());
             facts.add("invariant", "Seats oversold", s.available() ? String.valueOf(s.oversold())
@@ -129,6 +143,11 @@ public class Baseline {
             if (s.available()) {
                 facts.add("queue-gate", "Admit rate", s.admitRate() == null
                         ? "unavailable: the gate did not report it" : s.admitRate() + " per second");
+                if (s.admitRate() != null && patienceSeconds != null) {
+                    // Computed here, as a fact, so a report can cite it rather than do the sum itself.
+                    facts.add("queue-gate", "Admissions possible within patience",
+                            String.valueOf((long) s.admitRate() * patienceSeconds));
+                }
                 facts.add("queue-gate", "Tickets issued", String.valueOf(s.ticketsIssued()));
                 facts.add("queue-gate", "Admitted by the gate", String.valueOf(s.admitted()));
                 facts.add("queue-gate", "Still waiting", String.valueOf(s.waiting()));

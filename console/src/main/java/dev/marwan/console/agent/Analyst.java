@@ -39,8 +39,9 @@ public class Analyst {
             You analyse one load test ("a rush") against a restaurant's virtual queue and booking service on OpenShift.
             queue-gate admits customers from a Redis queue; booking-service books seats in Oracle through a pool of 5
             database connections per pod; the invariant is that no seat is ever sold twice ("oversold" must be 0).
-            Each customer books a party (see the "Party size" fact). A queue drained at N per second admits about
-            N x patience customers; customers not admitted in time book anyway and are refused with 403.
+            Each customer books a party (see the "Party size" fact). The "Admissions possible within patience"
+            fact is how many the queue could admit before customers gave up; customers not admitted in time book
+            anyway and are refused with 403.
             A pool at its size (5 of 5) is saturated: requests queue for a connection and time out, which is a
             finding to explain, not efficiency. Rejections of 403 or 409 are the system working; 5xx and
             "not clean" bookings are not.
@@ -62,7 +63,8 @@ public class Analyst {
             with its reason. capacity: pool use and replicas. errors: 503s, faults, timeouts, warnings, or say none.
             look_at: what to try next.
             Rules: every item cites the fact ids it rests on; every number you write must appear in a cited fact;
-            do not write clock times or dates;
+            do not write clock times or dates; do not compute new numbers (products, sums, percentages) - quote
+            the counts exactly as the facts give them;
             one or two sentences per item; at most 3 items per list; say what a reader should do in look_at.
             """;
 

@@ -82,12 +82,14 @@ export class Funnel {
       .map(([label, text]) => ({ count: this.value(label), text }))
       .filter((l): l is Loss => l.count !== null);
     return [
-      out([['Sold out at the queue (409)', 'found it sold out at the queue (409)'], ['Other faults', 'hit a fault']]),
+      out([['Sold out at the queue (409)', 'found it sold out at the queue (409)'],
+        ['Faults at the queue', 'hit a fault joining'], ['Other faults', 'hit a fault (queue or booking)']]),
       out([['Gave up waiting (403)', 'gave up waiting and were refused (403)']]),
       out([['Admitted but refused (403)', 'admitted but refused (403)'],
         ['Sold out at booking (409)', 'sold out by the time they booked (409)'],
-        ['Overloaded (503)', 'turned away by an overloaded service (503)']]),
-      []
+        ['Overloaded (503)', 'turned away by an overloaded service (503)'],
+        ['Faults at booking', 'hit a fault while booking']]),
+      out([['Did not finish', 'did not finish (cut off or an unreadable reply)']])
     ];
   });
 

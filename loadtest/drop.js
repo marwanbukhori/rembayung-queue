@@ -15,7 +15,8 @@ const outcome = {
   refusedAfterAdmission: new Counter('outcome_refused_after_admission'),
   soldOut: new Counter('outcome_sold_out'),
   overloaded: new Counter('outcome_overloaded'),
-  faults: new Counter('outcome_faults'),
+  faultsAtJoin: new Counter('outcome_faults_at_join'),
+  faultsAtBooking: new Counter('outcome_faults_at_booking'),
 };
 const queueWait = new Trend('queue_wait');   // seconds from joining to admission
 const PARTY_SIZE = 2;
@@ -83,7 +84,7 @@ export default function () {
     return;
   }
   if (join.status !== 200) {
-    outcome.faults.add(1);
+    outcome.faultsAtJoin.add(1);
     return;
   }
   joined.add(1);
@@ -133,6 +134,14 @@ export default function () {
     bookingsCreated.add(1);
   } else {
     bookingsRejected.add(1);
+  }
+  // Admission is by time, not by the last poll: a customer whose turn came in
+  // the second after that poll books successfully. The gate admitted them.
+  if (!isAdmitted && [201, 409, 503].includes(booking.status)) {
+    admitted.add(1);
+    isAdmitted = true;
+  }
+  if (booking.status !== 201) {
     if (booking.status === 403) {
       (isAdmitted ? outcome.refusedAfterAdmission : outcome.gaveUp).add(1);
     } else if (booking.status === 409) {
@@ -140,7 +149,7 @@ export default function () {
     } else if (booking.status === 503) {
       outcome.overloaded.add(1);
     } else {
-      outcome.faults.add(1);
+      outcome.faultsAtBooking.add(1);
     }
   }
 }
@@ -172,7 +181,9 @@ export function handleSummary(data) {
     refusedAfterAdmission: count('outcome_refused_after_admission'),
     soldOut: count('outcome_sold_out'),
     overloaded: count('outcome_overloaded'),
-    faults: count('outcome_faults'),
+    faults: count('outcome_faults_at_join') + count('outcome_faults_at_booking'),
+    faultsAtJoin: count('outcome_faults_at_join'),
+    faultsAtBooking: count('outcome_faults_at_booking'),
     queueWaitP50: Math.round(wait('med')),
     queueWaitP95: Math.round(wait('p(95)')),
     queueWaitMax: Math.round(wait('max')),

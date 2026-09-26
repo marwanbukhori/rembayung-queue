@@ -120,6 +120,26 @@ class BaselineTest {
     }
 
     @Test
+    void customersWithNoOutcomeAreCountedAsNotFinished() {
+        // 200 arrived, but the outcomes account for 196 + 105 + 5 + 2 = 308 in NEW_SUMMARY; use a line that falls short.
+        cluster.logs.put("load-rush-1-abc", "running\nK6_SUMMARY {\"vus\":200,\"booked\":80,\"joined\":190,"
+                + "\"admitted\":85,\"soldOutAtJoin\":5,\"gaveUp\":100,\"refusedAfterAdmission\":0,\"soldOut\":0,"
+                + "\"overloaded\":2,\"faults\":3,\"faultsAtJoin\":1,\"faultsAtBooking\":2,\"queueWaitP50\":1,"
+                + "\"queueWaitP95\":2,\"queueWaitMax\":3,\"partySize\":2,\"patienceSeconds\":90}\n");
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f.get("Did not finish")).isEqualTo("10");
+        assertThat(f.get("Faults at the queue")).isEqualTo("1");
+        assertThat(f.get("Faults at booking")).isEqualTo("2");
+        assertThat(f).doesNotContainKey("Other faults");
+    }
+
+    @Test
+    void theAdmissionsPossibleWithinPatienceAreAFactTheModelCanCite() {
+        admitRate = 8;
+        assertThat(byLabel(baseline().gather(WINDOW)).get("Admissions possible within patience")).isEqualTo("720");
+    }
+
+    @Test
     void anOldK6LineGivesOneOutcomesUnavailableFact() {
         cluster.logs.put("load-rush-1-abc", "running\n" + OLD_SUMMARY + "\n");
         Map<String, String> f = byLabel(baseline().gather(WINDOW));
