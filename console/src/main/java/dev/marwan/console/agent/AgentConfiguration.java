@@ -11,7 +11,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import dev.marwan.console.metrics.RangeQuery;
 import dev.marwan.console.objects.ObjectSource;
 import dev.marwan.console.state.DemoStateProvider;
-import io.fabric8.kubernetes.api.model.ConfigMap;
 
 /** Wires the agent from the services the inspector already uses; no new client of its own. */
 @Configuration
