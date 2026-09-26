@@ -1,22 +1,25 @@
-import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, output, signal, untracked } from '@angular/core';
 import { AgentHow } from './agent-how';
+import { AgentIncidents } from './agent-incidents';
 import { AgentMcp } from './agent-mcp';
 import { AgentReports } from './agent-reports';
 import { Analysis, AnalysisService, AnalysisSummary } from './analysis';
+import { IncidentService } from './incidents';
 
-type View = 'reports' | 'mcp' | 'how';
+type View = 'reports' | 'incidents' | 'mcp' | 'how';
 
 /**
  * The run agent and the MCP server it works through, on one page.
  *
- * Three views, because a visitor comes for one of three things: to read what
- * the agent found (Reports), to connect their own Claude to the same tools
- * (MCP), or to see how the agent is built (How it works). The view is kept in
- * the address, so each can be linked on its own.
+ * Four views, because a visitor comes for one of four things: to read what
+ * the agent found (Reports), to watch it run an incident (Incidents), to
+ * connect their own Claude to the same tools (MCP), or to see how the agent is
+ * built (How it works). The view is kept in the address, so each can be linked
+ * on its own.
  */
 @Component({
   selector: 'rb-agent-page',
-  imports: [AgentHow, AgentMcp, AgentReports],
+  imports: [AgentHow, AgentIncidents, AgentMcp, AgentReports],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -32,6 +35,7 @@ type View = 'reports' | 'mcp' | 'how';
           <p class="lede">
             After every rush, an agent inside the console gathers the facts, asks up to five questions through the
             console's MCP server, and writes a report whose every number is checked against the facts it cites.
+            During an incident it diagnoses through the same tools and proposes a fix; a person approves it.
             The same MCP server is open to your own Claude.
           </p>
         </div>
@@ -56,6 +60,7 @@ type View = 'reports' | 'mcp' | 'how';
             </section>
           }
         }
+        @case ('incidents') { <rb-agent-incidents /> }
         @case ('mcp') { <rb-agent-mcp /> }
         @case ('how') { <rb-agent-how [run]="latest()" /> }
       }
@@ -80,13 +85,25 @@ export class AgentPage implements OnInit {
 
   private readonly analyses = inject(AnalysisService);
   protected readonly views: { id: View; label: string }[] = [
-    { id: 'reports', label: 'Reports' }, { id: 'mcp', label: 'MCP' }, { id: 'how', label: 'How it works' }
+    { id: 'reports', label: 'Reports' }, { id: 'incidents', label: 'Incidents' }, { id: 'mcp', label: 'MCP' },
+    { id: 'how', label: 'How it works' }
   ];
   protected readonly view = signal<View>(this.initialView());
   protected readonly runs = signal<AnalysisSummary[]>([]);
   protected readonly latest = signal<Analysis | null>(null);
   protected readonly selected = signal<string | null>(null);
   protected readonly live = computed(() => this.runs().some(r => r.source === 'model'));
+  private readonly incidents = inject(IncidentService);
+
+  constructor() {
+    // The site-wide incident banner asks for the Incidents view; follow it even when this page is already open.
+    const seen = this.incidents.focus();
+    effect(() => {
+      if (this.incidents.focus() > seen) {
+        untracked(() => this.view.set('incidents'));
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.analyses.list().subscribe({
@@ -126,7 +143,7 @@ export class AgentPage implements OnInit {
 
   private initialView(): View {
     const v = new URL(window.location.href).searchParams.get('view');
-    return v === 'mcp' || v === 'how' ? v : 'reports';
+    return v === 'mcp' || v === 'how' || v === 'incidents' ? v : 'reports';
   }
 
   private setParam(name: string, value: string | null): void {

@@ -101,17 +101,46 @@ rules:
   - apiGroups: ["batch"]
     resources: ["cronjobs"]
     verbs: ["get", "list"]
+  # Chaos drills and approved fixes (spec 2026-09-26-chaos-incident-commander,
+  # section 7). Each write is as narrow as RBAC allows, and applied by hand:
+  # CD cannot grant itself rights.
+  #
+  # The "Kill a booking-service pod" drill. RBAC cannot restrict by label, so
+  # the code enforces that only a pod selected by app=booking-service is
+  # deleted; the ReplicaSet replaces it.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  # An approved "scale booking-service". fabric8's scale(n) reads the scale
+  # subresource and PUTs it back, hence get and update; patch is for the same
+  # change sent as a patch.
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    resourceNames: ["booking-service", "queue-gate"]
+    verbs: ["get", "update", "patch"]
+  # An approved "restart booking-service": a patch of the restartedAt
+  # annotation on its pod template, exactly what `oc rollout restart` sends.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["booking-service"]
+    verbs: ["patch"]
+  # An approved autoscaler minimum, raised for 10 minutes and put back.
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    resourceNames: ["booking-service", "queue-gate"]
+    verbs: ["patch"]
 # Deliberately absent: secrets. The console holds one credential — its own
 # access key, injected as an environment variable by the kubelet — and has no
 # reason to read any other. The Oracle wallet lives in this namespace; a console
 # that could read Secrets would be a public Route one bug away from it.
 #
-# Deliberately absent: every write verb on deployments (the inspector reads
-# them, nothing here changes them). Scaling and
-# redeploying go through CD, which is triggered by the GitHub API and runs as
-# `rembayung-cd`. That keeps the account behind a public page read-mostly: the
-# only thing it can create is a Job whose image, command, deadline and budget
-# the console itself decides.
+# Deliberately absent: any other write on deployments. Redeploying goes
+# through CD, which is triggered by the GitHub API and runs as `rembayung-cd`.
+# The writes above are named objects only, and the agent can reach none of
+# them: it proposes over MCP, and only a key holder's approval in the console
+# applies a fix. The account behind a public page stays read-mostly: beyond
+# those, the only thing it can create is a Job whose image, command, deadline
+# and budget the console itself decides.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

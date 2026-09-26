@@ -26,3 +26,4 @@ way it was — particularly where a default was rejected on correctness grounds.
 | [11 — The cluster inspector and the live page](11-cluster-inspector-and-live-page.md) | The object graph and inspector, pod logs, charts from Prometheus through the Thanos tenancy port, and the banded simulation page they sit on | — |
 | [12 — The run agent](12-run-agent.md) | The bounded agent that analyses every load run with the sandbox's Qwen3 8B model, the facts its reports must cite, and why they live in one ConfigMap | — |
 | [13 — The MCP server](13-mcp-server.md) | The console served over MCP at `/mcp`: its tools, which one needs the key, and why the run agent asks its questions through it | — |
+| [14 — Chaos drills and the incident commander](14-chaos-and-incidents.md) | Three self-ending faults, two booking SLOs, incidents that open and resolve on their own, and an agent that diagnoses and proposes while only a person can approve; the grants applied by hand | — |

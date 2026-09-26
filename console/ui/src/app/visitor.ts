@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, effect, inject, output, signal, untracked } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
+import { ChaosCard } from './chaos-card';
 import { ChartsStrip } from './charts-strip';
 import { ClusterResources } from './cluster-resources';
 import { InspectorService } from './inspector.service';
@@ -30,7 +31,7 @@ import { TrafficService } from './traffic.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, ChartsStrip, ClusterResources, Inspector, ObjectGraph, PodPulse, RecentRuns, RunBanner,
+  imports: [CanonicalDrop, ChaosCard, ChartsStrip, ClusterResources, Inspector, ObjectGraph, PodPulse, RecentRuns, RunBanner,
     RunPanel, TrafficLog],
   template: `
     <div class="stack">
@@ -54,7 +55,10 @@ import { TrafficService } from './traffic.service';
         to the platform under it; the objects that explain it last.
       -->
       <div class="band-top">
-        <rb-run-panel />
+        <div class="stack-24">
+          <rb-run-panel />
+          <rb-chaos-card />
+        </div>
         @if (sandbox()) {
           <!--
             The sitting: one figure and the room it fills. The seat map replaces

@@ -1,5 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { AgentPage } from './agent-page';
+import { IncidentBanner } from './incident-banner';
+import { IncidentService } from './incidents';
 import { CicdPage } from './cicd-page';
 import { ClusterPage } from './cluster-page';
 import { DocPage } from './doc-page';
@@ -28,7 +30,7 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
  */
 @Component({
   selector: 'app-root',
-  imports: [PublicHome, SecurityPage, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor],
+  imports: [PublicHome, SecurityPage, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor, IncidentBanner],
   template: `
     <header class="navbar">
       <div class="brandband">
@@ -86,6 +88,8 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
     </header>
 
     <main [class.wide]="surface() === 'visitor'">
+      <!-- On every page while an incident is open: someone reading the CI/CD page should still see it. -->
+      <rb-incident-banner (open)="openIncident()" />
       @switch (surface()) {
         @case ('home') {
           <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" (agent)="show('agent')" />
@@ -217,6 +221,7 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
 export class App {
   private readonly state = inject(StateService);
   protected readonly demoKey = inject(DemoKeyService);
+  private readonly incidents = inject(IncidentService);
 
   /**
    * Hard-coded rather than served from the backend.
@@ -274,6 +279,15 @@ export class App {
   show(surface: Surface): void {
     this.surface.set(surface);
     window.scrollTo(0, 0);
+  }
+
+  /** The banner's link: the Incidents view of the agent page, from anywhere. */
+  openIncident(): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'incidents');
+    history.replaceState(history.state, '', url);
+    this.incidents.focus.update((n) => n + 1);
+    this.show('agent');
   }
 
   openDoc(id: string): void {

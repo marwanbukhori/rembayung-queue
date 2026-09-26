@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { IncidentService } from './incidents';
 import { LoadService } from './load.service';
 import { CHARTS, MetricsService } from './metrics.service';
 import { ChartData, ChartKey } from './state';
@@ -113,7 +114,7 @@ interface Plot {
                   <line class="ref" [attr.x1]="L" [attr.x2]="L + PLOT_W" [attr.y1]="ref.y" [attr.y2]="ref.y" />
                   <text class="ref-text" [attr.x]="L + 2" [attr.y]="ref.y - 3">{{ ref.text }}</text>
                 }
-                @for (m of p.marks; track m.label) {
+                @for (m of p.marks; track $index) {
                   <line class="wave" [attr.x1]="m.x" [attr.x2]="m.x" [attr.y1]="T" [attr.y2]="T + PLOT_H" />
                   <text class="wave-text" [attr.x]="m.x + 2" [attr.y]="T + 8">{{ m.label }}</text>
                 }
@@ -226,6 +227,7 @@ interface Plot {
 export class ChartsStrip {
   private readonly metrics = inject(MetricsService);
   private readonly loads = inject(LoadService);
+  private readonly incidents = inject(IncidentService);
   /** Pod label to colour slot, kept while the pod exists so no other line changes colour. */
   private readonly podSlots = new Map<string, number>();
 
@@ -308,7 +310,7 @@ export class ChartsStrip {
       : (empty ?? 'no data'));
 
     // Where each wave of a two-wave run began, when that moment is on this chart.
-    const marks = this.loads.waveMarks()
+    const marks = [...this.loads.waveMarks(), ...this.incidents.marks()]
       .filter((m) => m.t >= start && m.t <= end)
       .map((m) => ({ label: m.label, x: x(m.t) }));
 

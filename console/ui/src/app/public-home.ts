@@ -88,7 +88,7 @@ interface Outward {
           </button>
           <button class="tile" (click)="agent.emit()">
             <span class="tile-name">AI Agent &amp; MCP <span class="tag live">● Live</span></span>
-            <span class="tile-what">Reads every rush and reports what it found, citing its facts. Connect your own Claude to the same tools over MCP</span>
+            <span class="tile-what">Reads every rush and reports what it found, citing its facts, and runs incidents: it diagnoses a drill and proposes a fix for a person to approve. Connect your own Claude to the same tools over MCP</span>
           </button>
           <button class="tile" (click)="docs.emit()">
             <span class="tile-name">Build notes</span>

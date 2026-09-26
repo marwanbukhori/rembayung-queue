@@ -28,7 +28,7 @@ interface Frame { dir: 'sent' | 'received'; method: string; body: string; ms?: n
           </div>
           <div class="wire" aria-hidden="true"></div>
           <div class="col mid">
-            <div class="node server">/mcp<span>rembayung-console · 10 tools · Streamable HTTP</span></div>
+            <div class="node server">/mcp<span>rembayung-console · 15 tools · Streamable HTTP</span></div>
           </div>
           <div class="wire" aria-hidden="true"></div>
           <div class="col">
@@ -57,7 +57,8 @@ interface Frame { dir: 'sent' | 'received'; method: string; body: string; ms?: n
       </section>
 
       <section class="card pad">
-        <h2>The ten tools</h2>
+        <h2>The fifteen tools</h2>
+        <p class="note">None of them approves a fix. The agent proposes; a key holder approves on the Incidents tab.</p>
         @for (group of groups; track group.title) {
           <div class="label">{{ group.title }}</div>
           <div class="tools">
@@ -171,8 +172,15 @@ export class AgentMcp {
       { name: 'endpoints', what: 'The pods ready behind a Service.' },
       { name: 'pod_logs', what: 'App events; raw lines with the key.', key: 'raw' }
     ] },
+    { title: 'SLOs and incidents', tools: [
+      { name: 'get_slo', what: 'Booking success and p95 now and over 15 minutes, with the burn rate.' },
+      { name: 'list_incidents', what: 'Recent incidents: drill or breach, status, when.' },
+      { name: 'get_incident', what: 'One incident: timeline, diagnoses, proposals, postmortem.' }
+    ] },
     { title: 'Action', tools: [
-      { name: 'start_rush', what: 'Start a one- or two-wave rush on a fresh sitting.', key: 'always' }
+      { name: 'start_rush', what: 'Start a one- or two-wave rush on a fresh sitting.', key: 'always' },
+      { name: 'inject_fault', what: 'Start a chaos drill; one at a time, ends by itself.', key: 'always' },
+      { name: 'propose_remediation', what: 'File a fix from a fixed menu. Only a person can approve it.', key: 'always' }
     ] }
   ];
 
@@ -180,7 +188,8 @@ export class AgentMcp {
     { label: 'The sitting now', tool: 'get_state', args: {} },
     { label: 'Analysed runs', tool: 'list_runs', args: {} },
     { label: 'queue-gate Deployment', tool: 'describe_object', args: { kind: 'deployment', name: 'queue-gate' } },
-    { label: 'Replicas, 15 min', tool: 'metric', args: { chart: 'replicas' } }
+    { label: 'Replicas, 15 min', tool: 'metric', args: { chart: 'replicas' } },
+    { label: 'The SLOs', tool: 'get_slo', args: {} }
   ];
   protected readonly preset = signal<Preset>(this.presets[0]);
   protected readonly frames = signal<Frame[]>([]);
