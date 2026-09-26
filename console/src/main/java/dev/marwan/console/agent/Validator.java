@@ -33,6 +33,19 @@ public class Validator {
             problems.add("the report has no claims");
             return problems;
         }
+        // A two-wave run exists to compare its waves: that comparison is the report's point.
+        if (facts.all().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived"))) {
+            if (report.beforeAfter().isEmpty()) {
+                problems.add("the before_after section is empty: compare wave 1 with wave 2");
+            }
+            for (Claim c : report.beforeAfter()) {
+                boolean one = cites(c, facts, "Wave 1 · ");
+                boolean two = cites(c, facts, "Wave 2 · ");
+                if (!one || !two) {
+                    problems.add("\"" + c.text() + "\" must cite facts from both waves");
+                }
+            }
+        }
         // With the funnel known, a report that does not say where the customers went has missed the point.
         if (facts.all().stream().anyMatch(f -> f.label().equals("Arrived"))) {
             if (report.summary().isEmpty() && report.wentWell().isEmpty()) {
@@ -64,6 +77,11 @@ public class Validator {
             }
         }
         return problems;
+    }
+
+    private static boolean cites(Claim c, Facts facts, String prefix) {
+        return c.facts() != null && c.facts().stream()
+                .anyMatch(id -> facts.get(id).map(f -> f.label().startsWith(prefix)).orElse(false));
     }
 
     static Set<String> numbers(String text) {

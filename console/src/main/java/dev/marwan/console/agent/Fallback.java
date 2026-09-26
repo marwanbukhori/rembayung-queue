@@ -102,7 +102,56 @@ public final class Fallback {
         if (summary.isEmpty() && !facts.all().isEmpty()) {
             summary.add(claim("The run finished and its facts were gathered.", facts.all().get(0)));
         }
-        return Report.sections(summary, customers, capacity, errors, look);
+        return Report.sections(summary, customers, capacity, errors, look).withBeforeAfter(beforeAfter(facts));
+    }
+
+    /**
+     * Wave 1 beside wave 2, one line a measure, then a verdict from the two
+     * that matter most: did wave 2 meet more ready pods, and did it wait less?
+     */
+    static List<Claim> beforeAfter(Facts facts) {
+        List<Claim> out = new ArrayList<>();
+        if (find(facts, "Wave 2 · Arrived").isEmpty()) {
+            return out;
+        }
+        List<Fact> pods1 = facts.all().stream().filter(f -> f.label().startsWith("Wave 1 · Ready pods at start, ")).toList();
+        for (Fact one : pods1) {
+            String hpa = one.label().substring("Wave 1 · Ready pods at start, ".length());
+            find(facts, "Wave 2 · Ready pods at start, " + hpa).ifPresent(two -> out.add(new Claim(
+                    "Ready pods at start, " + hpa + ": wave 1 " + one.value() + ", wave 2 " + two.value() + ".",
+                    List.of(one.id(), two.id()))));
+        }
+        for (String measure : List.of("Latency p95 / max", "Overloaded (503)", "Booked")) {
+            Optional<Fact> one = find(facts, "Wave 1 · " + measure);
+            Optional<Fact> two = find(facts, "Wave 2 · " + measure);
+            if (one.isPresent() && two.isPresent()) {
+                out.add(new Claim(measure + ": wave 1 " + one.get().value() + ", wave 2 " + two.get().value() + ".",
+                        List.of(one.get().id(), two.get().id())));
+            }
+        }
+        Optional<Fact> p1 = find(facts, "Wave 1 · Latency p95 / max");
+        Optional<Fact> p2 = find(facts, "Wave 2 · Latency p95 / max");
+        Optional<Fact> g1 = find(facts, "Wave 1 · Ready pods at start, queue-gate").or(() -> pods1.stream().findFirst());
+        Optional<Fact> g2 = g1.flatMap(g -> find(facts, g.label().replace("Wave 1 · ", "Wave 2 · ")));
+        if (g1.isPresent() && g2.isPresent()) {
+            long before = leading(g1.get());
+            long after = leading(g2.get());
+            boolean faster = p1.isPresent() && p2.isPresent() && leading(p2.get()) < leading(p1.get());
+            String verdict = after == before ? "Scaling did not happen before wave 2: it met the same ready pods as wave 1."
+                    : after > before && faster ? "Scaling helped: wave 2 met more ready pods and a lower p95 than wave 1."
+                    : "No clear difference between the waves: more pods did not bring a lower p95.";
+            List<String> ids = new ArrayList<>(List.of(g1.get().id(), g2.get().id()));
+            p1.ifPresent(f -> ids.add(f.id()));
+            p2.ifPresent(f -> ids.add(f.id()));
+            out.add(new Claim(verdict, ids));
+        }
+        return out;
+    }
+
+    /** The first whole number in a fact's value: "2100 / 4000 ms" is 2100. */
+    private static long leading(Fact f) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(f.value());
+        return m.find() ? Long.parseLong(m.group()) : 0;
     }
 
     private static Optional<Fact> find(Facts facts, String label) {

@@ -223,6 +223,60 @@ class AnalystTest {
         assertThat(Analyst.REPORT).contains("do not compute new numbers");
     }
 
+    /** Two waves: wave 1 on 2 queue-gate pods, wave 2 on the given count, with the given p95s. */
+    Facts twoWaves(int podsAtWave2, int p95Wave1, int p95Wave2) {
+        Facts f = new Facts();
+        f.add("k6", "Wave 1 · Arrived", "100");
+        f.add("k6", "Wave 1 · Booked", "60");
+        f.add("k6", "Wave 1 · Overloaded (503)", "10");
+        f.add("k6", "Wave 1 · Latency p95 / max", p95Wave1 + " / 4000 ms");
+        f.add("k6", "Wave 2 · Arrived", "100");
+        f.add("k6", "Wave 2 · Booked", "90");
+        f.add("k6", "Wave 2 · Overloaded (503)", "5");
+        f.add("k6", "Wave 2 · Latency p95 / max", p95Wave2 + " / 900 ms");
+        f.add("Prometheus", "Wave 1 · Ready pods at start, queue-gate", "2");
+        f.add("Prometheus", "Wave 2 · Ready pods at start, queue-gate", String.valueOf(podsAtWave2));
+        return f;
+    }
+
+    @Test
+    void theFallbackComparesTheWavesAndSaysScalingHelped() {
+        Facts f = twoWaves(6, 2100, 400);
+        Report r = Fallback.from(f);
+        assertThat(r.beforeAfter()).anyMatch(c -> c.text().contains("Scaling helped"));
+        assertThat(r.beforeAfter()).anyMatch(c -> c.text().startsWith("Ready pods at start, queue-gate"));
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
+    void theFallbackSaysWhenScalingDidNotHappenBeforeWave2() {
+        Facts f = twoWaves(2, 2100, 1900);
+        Report r = Fallback.from(f);
+        assertThat(r.beforeAfter()).anyMatch(c -> c.text().contains("Scaling did not happen before wave 2"));
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
+    void theFallbackSaysWhenThereIsNoClearDifference() {
+        Facts f = twoWaves(6, 2100, 2500);
+        Report r = Fallback.from(f);
+        assertThat(r.beforeAfter()).anyMatch(c -> c.text().contains("No clear difference"));
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
+    void theModelsBeforeAndAfterIsRead() {
+        baseline = twoWaves(6, 2100, 400);
+        model.then("{\"done\":true}").then("{\"summary\":[{\"text\":\"Two waves of 100.\",\"facts\":[\"F1\",\"F5\"]}],"
+                + "\"before_after\":[{\"text\":\"Wave 1 met 2 pods, wave 2 met 6.\",\"facts\":[\"F9\",\"F10\"]}]}");
+
+        Analysis a = analyst().analyse(WINDOW);
+
+        assertThat(a.source()).isEqualTo("model");
+        assertThat(a.report().beforeAfter()).singleElement().satisfies(c -> assertThat(c.facts()).containsExactly("F9", "F10"));
+        assertThat(Analyst.REPORT).contains("before_after");
+    }
+
     @Test
     void jsonInsideAFenceIsAccepted() {
         model.then("```json\n{\"done\":true}\n```").then("```json\n" + GOOD_REPORT + "\n```");

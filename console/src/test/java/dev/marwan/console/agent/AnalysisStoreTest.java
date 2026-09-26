@@ -112,6 +112,7 @@ class AnalysisStoreTest {
 
         assertThat(r.wentWell()).hasSize(1);
         assertThat(r.summary()).isEmpty();
+        assertThat(r.beforeAfter()).isEmpty();
     }
 
     @Test

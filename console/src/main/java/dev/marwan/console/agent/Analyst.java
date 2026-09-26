@@ -62,6 +62,9 @@ public class Analyst {
             summary: 1-2 items, the headline outcome. customers: where the customers went, one item per drop-off
             with its reason. capacity: pool use and replicas. errors: 503s, faults, timeouts, warnings, or say none.
             look_at: what to try next.
+            When there are "Wave 1 · " and "Wave 2 · " facts, also before_after: compare wave 1 and wave 2 - ready
+            pods at each start, p95, 503s, booked - stating both values, then say whether scaling helped, made no
+            difference, or did not happen before wave 2. Each before_after item cites at least one fact from each wave.
             Rules: every item cites the fact ids it rests on; every number you write must appear in a cited fact;
             do not write clock times or dates; do not compute new numbers (products, sums, percentages) - quote
             the counts exactly as the facts give them;
@@ -183,11 +186,13 @@ public class Analyst {
     }
 
     static Report report(JsonNode node) {
-        if (node == null || Stream.of("summary", "customers", "capacity", "errors", "look_at").noneMatch(node::has)) {
+        if (node == null || Stream.of("summary", "customers", "capacity", "errors", "look_at", "before_after")
+                .noneMatch(node::has)) {
             return null;
         }
         return Report.sections(claims(node.path("summary")), claims(node.path("customers")),
-                claims(node.path("capacity")), claims(node.path("errors")), claims(node.path("look_at")));
+                claims(node.path("capacity")), claims(node.path("errors")), claims(node.path("look_at")))
+                .withBeforeAfter(claims(node.path("before_after")));
     }
 
     private static List<Claim> claims(JsonNode list) {

@@ -63,6 +63,34 @@ class ValidatorTest {
         assertThat(validator.problems(onlySummary, facts())).isEmpty();
     }
 
+    Facts twoWaves() {
+        Facts f = new Facts();
+        f.add("k6", "Wave 1 · Arrived", "100");                          // F1
+        f.add("k6", "Wave 2 · Arrived", "100");                          // F2
+        f.add("k6", "Wave 1 · Latency p95 / max", "2100 / 4000 ms");     // F3
+        f.add("k6", "Wave 2 · Latency p95 / max", "400 / 900 ms");       // F4
+        return f;
+    }
+
+    Report withBeforeAfter(Claim... items) {
+        return Report.sections(List.of(new Claim("Two waves ran.", List.of("F1"))), List.of(), List.of(),
+                List.of(), List.of()).withBeforeAfter(List.of(items));
+    }
+
+    @Test
+    void aTwoWaveRunNeedsABeforeAndAfter() {
+        assertThat(validator.problems(withBeforeAfter(), twoWaves())).anyMatch(p -> p.contains("before_after"));
+    }
+
+    @Test
+    void aBeforeAndAfterItemMustCiteBothWaves() {
+        assertThat(validator.problems(withBeforeAfter(new Claim("Wave 1 p95 was 2100 ms.", List.of("F3"))), twoWaves()))
+                .anyMatch(p -> p.contains("both waves"));
+        assertThat(validator.problems(withBeforeAfter(
+                new Claim("p95 went from 2100 ms in wave 1 to 400 ms in wave 2.", List.of("F3", "F4"))), twoWaves()))
+                .isEmpty();
+    }
+
     @Test
     void aClaimWithoutFactsIsAProblem() {
         assertThat(check("Everything was fine.")).singleElement().asString().contains("cites no facts");
