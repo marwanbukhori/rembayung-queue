@@ -50,11 +50,17 @@ public class AgentConfiguration {
         }
     }
 
+    /** The read-only tools, shared by the run agent and the MCP server. */
     @Bean
-    Analyst analyst(ObjectSource objects, RangeQuery prometheus, DemoStateProvider state, Model agentModel,
+    Tools agentTools(ObjectSource objects, RangeQuery prometheus) {
+        return new Tools(objects, prometheus);
+    }
+
+    @Bean
+    Analyst analyst(ObjectSource objects, RangeQuery prometheus, DemoStateProvider state, Model agentModel, Tools agentTools,
                     Clock clock, dev.marwan.console.ConsoleProperties console) {
         Baseline baseline = new Baseline(objects, prometheus, console.pool().perReplica(), state::currentFor);
-        return new Analyst(baseline::gather, new Tools(objects, prometheus), agentModel, clock);
+        return new Analyst(baseline::gather, agentTools, agentModel, clock);
     }
 
     @Bean

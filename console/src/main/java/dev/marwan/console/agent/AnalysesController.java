@@ -41,11 +41,16 @@ public class AnalysesController {
 
     @GetMapping("/api/analyses")
     public List<Summary> list() {
-        return store.list().stream().map(a -> new Summary(a.key(), a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
+        return store.list().stream().map(AnalysesController::summary).toList();
+    }
+
+    /** One run's line in a list, shared with the MCP tool that lists runs. */
+    public static Summary summary(Analysis a) {
+        return new Summary(a.key(), a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
                 a.source(), a.model(), a.note(), a.report().all().size(),
                 number(a.facts(), "Arrived"), number(a.facts(), "Booked"),
                 number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"),
-                a.facts().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived")) ? 2 : 1)).toList();
+                a.facts().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived")) ? 2 : 1);
     }
 
     /**
@@ -83,7 +88,7 @@ public class AnalysesController {
         return presented != null ? presented : request.getParameter(KeyFilter.QUERY_PARAM);
     }
 
-    static Analysis withoutRawLogs(Analysis a) {
+    public static Analysis withoutRawLogs(Analysis a) {
         List<Fact> facts = a.facts().stream().map(f -> f.source().equals("tool: pod_logs")
                 ? new Fact(f.id(), f.source(), f.label(), "raw log lines: shown with the console key ("
                         + f.value().lines().count() + " lines)")
