@@ -47,13 +47,15 @@ The agent should be the one that says this. Today it cannot: its facts hold no q
 
 `handleSummary` adds these to the one `K6_SUMMARY` line.
 
-**Outcome counters.** Each customer ends in exactly one:
+**Counters.** `joined` and `admitted` are funnel steps; each customer then ends in exactly one outcome:
 
 | Field | Meaning |
 |---|---|
+| `joined` | joining the queue answered 200 (a funnel step, not an outcome) |
+| `admitted` | the queue said admitted before the customer tried to book (a funnel step) |
 | `booked` | booking answered 201 (already present) |
 | `soldOutAtJoin` | joining the queue answered 409 |
-| `gaveUp` | never admitted within `patienceSeconds`, then refused with 403 |
+| `gaveUp` | not admitted when they tried to book (patience ran out, or the token expired), then refused with 403 |
 | `refusedAfterAdmission` | admitted, but the booking answered 403 |
 | `soldOut` | booking answered 409 |
 | `overloaded` | booking answered 503 |
@@ -90,9 +92,11 @@ New facts, in this order, after the existing k6 facts:
 
 **The funnel, from k6.** One fact per step, so each step can be cited:
 - `Arrived`: VUs
-- `Joined the queue`: arrived minus soldOutAtJoin
-- `Admitted`: joined minus gaveUp
+- `Joined the queue`: joined, as counted
+- `Admitted`: admitted, as counted
 - `Booked`: booked
+
+Steps are counted directly rather than derived, because a join can also fail with a fault, and a token can expire. The outcome facts account for every drop-off.
 - `Seats taken by this run`: booked × partySize
 
 **Where the others went, from k6.** One fact per non-zero outcome:
@@ -200,7 +204,7 @@ The Analysis tab uses the same report component, funnel included.
 - **Queue-gate:** `DropState` includes `admitRate`, in the existing controller test.
 - **Console:**
   - `K6Summary` parses the new fields, and an old line without them.
-  - `Baseline` produces the funnel facts, with numbers that add up: Arrived = Joined + soldOutAtJoin, and so on.
+  - `Baseline` produces the funnel facts, and the outcomes add up to Arrived: booked + gaveUp + soldOutAtJoin + soldOut + refusedAfterAdmission + overloaded + faults.
   - Funnel facts are absent with "outcomes unavailable" when the summary is old.
   - The admit rate is unavailable when the gate omits it.
   - The five-section report is parsed and validated, including the rule that `summary` and `customers` are required.
