@@ -15,4 +15,6 @@ public record DropState(
         long ticketsIssued,
         long admitted,
         long waiting,
-        int ticketCap) { }
+        int ticketCap,
+        /** Admissions per second; null from a gate that predates reporting it. */
+        Integer admitRate) { }

@@ -106,6 +106,7 @@ class InternalControllerTest extends RedisTestBase {
         mvc.perform(get("/internal/drops/" + id + "/state"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.slotId").value(4242))
+                .andExpect(jsonPath("$.admitRate").value(8))
                 .andExpect(jsonPath("$.ticketsIssued").value(0));
     }
 

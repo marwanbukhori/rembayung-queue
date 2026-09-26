@@ -127,11 +127,12 @@ public class InternalController {
             long ticketsIssued,
             long admitted,
             long waiting,
-            int ticketCap) {
+            int ticketCap,
+            int admitRate) {
 
         static DropState of(DropRecord drop, QueueState queue) {
             return new DropState(drop.id(), drop.slotId(),
-                    queue.ticketsIssued(), queue.admitted(), queue.waiting(), queue.ticketCap());
+                    queue.ticketsIssued(), queue.admitted(), queue.waiting(), queue.ticketCap(), drop.admitRate());
         }
     }
 }

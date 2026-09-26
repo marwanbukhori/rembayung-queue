@@ -30,6 +30,33 @@ class DemoStateProviderTest {
     // dependency blinking made it throw, it would be the second casualty of
     // every incident rather than the thing explaining the first.
     @Test
+    void carriesTheDropsAdmitRateAndNullWhenTheGateOmitsIt() {
+        RestClient.Builder booking = RestClient.builder().baseUrl("http://booking-service:8081");
+        RestClient.Builder gate = RestClient.builder().baseUrl("http://queue-gate:8080");
+        MockRestServiceServer gateServer = MockRestServiceServer.bindTo(gate).build();
+        MockRestServiceServer bookingServer = MockRestServiceServer.bindTo(booking).build();
+        gateServer.expect(requestTo("http://queue-gate:8080/internal/drops/d-rate0001/state"))
+                .andRespond(withSuccess("""
+                        {"dropId":"d-rate0001","slotId":1,"ticketsIssued":3,"admitted":2,"waiting":1,"ticketCap":250,"admitRate":8}
+                        """, MediaType.APPLICATION_JSON));
+        bookingServer.expect(requestTo("http://booking-service:8081/internal/slots/1"))
+                .andRespond(withSuccess(SLOT_JSON, MediaType.APPLICATION_JSON));
+        assertThat(new DemoStateProvider(booking.build(), gate.build(), properties(), clock)
+                .currentFor("d-rate0001").admitRate()).isEqualTo(8);
+
+        RestClient.Builder booking2 = RestClient.builder().baseUrl("http://booking-service:8081");
+        RestClient.Builder gate2 = RestClient.builder().baseUrl("http://queue-gate:8080");
+        MockRestServiceServer.bindTo(gate2).build()
+                .expect(requestTo("http://queue-gate:8080/internal/drops/default/state"))
+                .andRespond(withSuccess(DROP_JSON, MediaType.APPLICATION_JSON));
+        MockRestServiceServer.bindTo(booking2).build()
+                .expect(requestTo("http://booking-service:8081/internal/slots/1"))
+                .andRespond(withSuccess(SLOT_JSON, MediaType.APPLICATION_JSON));
+        assertThat(new DemoStateProvider(booking2.build(), gate2.build(), properties(), clock)
+                .currentFor("default").admitRate()).isNull();
+    }
+
+    @Test
     void aServiceThatFailsBecomesAReasonRatherThanAnException() {
         RestClient.Builder booking = RestClient.builder().baseUrl("http://booking-service:8081");
         RestClient.Builder gate = RestClient.builder().baseUrl("http://queue-gate:8080");

@@ -128,7 +128,7 @@ public class DemoStateProvider {
 
         return new DemoState(true, null, dropId, slotId,
                 slot.capacity(), slot.seatsTaken(), slot.remaining(), slot.oversold(),
-                drop.ticketsIssued(), drop.admitted(), drop.waiting());
+                drop.ticketsIssued(), drop.admitted(), drop.waiting(), drop.admitRate());
     }
 
     /**

@@ -24,7 +24,16 @@ public record DemoState(
         int oversold,
         long ticketsIssued,
         long admitted,
-        long waiting) {
+        long waiting,
+        /** The drop's admissions per second, from the gate; null when it did not say. */
+        Integer admitRate) {
+
+    /** The shape before the admit rate was reported, for callers that have none. */
+    public DemoState(boolean available, String detail, String dropId, long slotId, int capacity, int seatsTaken,
+                     int remaining, int oversold, long ticketsIssued, long admitted, long waiting) {
+        this(available, detail, dropId, slotId, capacity, seatsTaken, remaining, oversold,
+                ticketsIssued, admitted, waiting, null);
+    }
 
     public static DemoState unavailable(String detail) {
         return new DemoState(false, detail, null, 0, 0, 0, 0, 0, 0, 0, 0);
