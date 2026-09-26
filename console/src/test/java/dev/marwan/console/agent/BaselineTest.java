@@ -21,7 +21,16 @@ class BaselineTest {
     static final Instant END = Instant.parse("2026-09-25T13:41:30Z");
     static final RunWindow WINDOW = new RunWindow("load-rush-1", "rush-1", START, END);
 
+    static final String NEW_SUMMARY = "K6_SUMMARY {\"vus\":200,\"iterations\":200,\"booked\":196,"
+            + "\"rejected\":4,\"notClean\":4,\"p50\":120,\"p95\":2100,\"max\":3050,\"durationMs\":61000,"
+            + "\"joined\":195,\"admitted\":90,\"soldOutAtJoin\":5,\"gaveUp\":105,\"refusedAfterAdmission\":0,"
+            + "\"soldOut\":0,\"overloaded\":2,\"faults\":0,\"queueWaitP50\":44,\"queueWaitP95\":86,"
+            + "\"queueWaitMax\":89,\"partySize\":2,\"patienceSeconds\":90}";
+    static final String OLD_SUMMARY = "K6_SUMMARY {\"vus\":200,\"iterations\":200,\"booked\":196,"
+            + "\"rejected\":4,\"notClean\":4,\"p50\":120,\"p95\":2100,\"max\":3050,\"durationMs\":61000}";
+
     FakeCluster cluster;
+    Integer admitRate = 1;
     RangeQuery prometheus;
     int oversold;
 
@@ -29,8 +38,7 @@ class BaselineTest {
     void cluster() {
         cluster = new FakeCluster();
         cluster.pods.add(FakeCluster.loadPod("load-rush-1-abc", "load-rush-1"));
-        cluster.logs.put("load-rush-1-abc", "running\nK6_SUMMARY {\"vus\":200,\"iterations\":200,\"booked\":196,"
-                + "\"rejected\":4,\"notClean\":4,\"p50\":120,\"p95\":2100,\"max\":3050,\"durationMs\":61000}\n");
+                cluster.logs.put("load-rush-1-abc", "running\n" + NEW_SUMMARY + "\n");
         cluster.pods.add(FakeCluster.pod("booking-service-a", "booking-service", 0));
         cluster.pods.add(FakeCluster.pod("booking-service-b", "booking-service", 1));
         cluster.logs.put("booking-service-a", String.join("\n",
@@ -62,7 +70,8 @@ class BaselineTest {
     }
 
     Baseline baseline() {
-        return new Baseline(cluster, prometheus, 5, drop -> new DemoState(true, null, drop, 1, 250, 196, 54, oversold, 0, 0, 0));
+        return new Baseline(cluster, prometheus, 5, drop -> new DemoState(true, null, drop, 1, 250, 196, 54, oversold, 200, 90, 0,
+                admitRate));
     }
 
     Map<String, String> byLabel(Facts facts) {
@@ -86,6 +95,43 @@ class BaselineTest {
         assertThat(f.get("Peak replicas, booking-service")).isEqualTo("3 (from 2)");
         assertThat(f.get("Warning events in the window")).isEqualTo("FailedScheduling ×2 on Deployment/booking-service");
         assertThat(f.get("Pod restarts")).isEqualTo("booking-service-b: 1");
+    }
+
+    @Test
+    void turnsTheCustomerCountsIntoFunnelFacts() {
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+
+        assertThat(f.get("Arrived")).isEqualTo("200");
+        assertThat(f.get("Joined the queue")).isEqualTo("195");
+        assertThat(f.get("Admitted")).isEqualTo("90");
+        assertThat(f.get("Booked")).isEqualTo("196");
+        assertThat(f.get("Seats taken by this run")).isEqualTo("392");
+        assertThat(f.get("Gave up waiting (403)")).isEqualTo("105");
+        assertThat(f.get("Sold out at the queue (409)")).isEqualTo("5");
+        assertThat(f.get("Overloaded (503)")).isEqualTo("2");
+        assertThat(f).doesNotContainKey("Sold out at booking (409)");
+        assertThat(f.get("Admit rate")).isEqualTo("1 per second");
+        assertThat(f.get("Queue patience")).isEqualTo("90 s");
+        assertThat(f.get("Party size")).isEqualTo("2");
+        assertThat(f.get("Queue wait p50 / p95 / max")).isEqualTo("44 / 86 / 89 s");
+        assertThat(f.get("Still waiting")).isEqualTo("0");
+        assertThat(f.get("Tickets issued")).isEqualTo("200");
+        assertThat(f.get("Seats taken / capacity")).isEqualTo("196 / 250");
+    }
+
+    @Test
+    void anOldK6LineGivesOneOutcomesUnavailableFact() {
+        cluster.logs.put("load-rush-1-abc", "running\n" + OLD_SUMMARY + "\n");
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f.get("Customer outcomes")).startsWith("unavailable");
+        assertThat(f).doesNotContainKey("Arrived");
+    }
+
+    @Test
+    void aGateWithoutAnAdmitRateSaysSo() {
+        admitRate = null;
+        assertThat(byLabel(baseline().gather(WINDOW)).get("Admit rate"))
+                .isEqualTo("unavailable: the gate did not report it");
     }
 
     @Test

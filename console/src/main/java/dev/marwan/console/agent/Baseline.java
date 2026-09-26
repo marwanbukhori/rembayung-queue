@@ -93,6 +93,32 @@ public class Baseline {
         facts.add("k6", "Request latency p50 / p95 / max",
                 Math.round(s.p50()) + " / " + Math.round(s.p95()) + " / " + Math.round(s.max()) + " ms");
         facts.add("k6", "Run duration", Math.round(s.durationMs() / 1000.0) + " s");
+        if (!s.hasOutcomes()) {
+            facts.add("k6", "Customer outcomes", "unavailable: this run's k6 script predates outcome counting");
+            return;
+        }
+        // The funnel, one fact a step, then one per way out of it - so each drop-off can be cited.
+        facts.add("k6", "Party size", String.valueOf(s.partySize()));
+        facts.add("k6", "Queue patience", s.patienceSeconds() + " s");
+        facts.add("k6", "Arrived", String.valueOf(s.vus()));
+        facts.add("k6", "Joined the queue", String.valueOf(s.joined()));
+        facts.add("k6", "Admitted", String.valueOf(s.admitted()));
+        facts.add("k6", "Booked", String.valueOf(s.booked()));
+        facts.add("k6", "Seats taken by this run", String.valueOf(s.booked() * (s.partySize() == null ? 0 : s.partySize())));
+        outcome(facts, "Gave up waiting (403)", s.gaveUp());
+        outcome(facts, "Sold out at the queue (409)", s.soldOutAtJoin());
+        outcome(facts, "Sold out at booking (409)", s.soldOut());
+        outcome(facts, "Admitted but refused (403)", s.refusedAfterAdmission());
+        outcome(facts, "Overloaded (503)", s.overloaded());
+        outcome(facts, "Other faults", s.faults());
+        facts.add("k6", "Queue wait p50 / p95 / max",
+                s.queueWaitP50() + " / " + s.queueWaitP95() + " / " + s.queueWaitMax() + " s");
+    }
+
+    private static void outcome(Facts facts, String label, Integer n) {
+        if (n != null && n > 0) {
+            facts.add("k6", label, String.valueOf(n));
+        }
     }
 
     private void oversold(RunWindow w, Facts facts) {
@@ -100,6 +126,14 @@ public class Baseline {
             DemoState s = state.apply(w.dropId());
             facts.add("invariant", "Seats oversold", s.available() ? String.valueOf(s.oversold())
                     : "unavailable: " + s.detail());
+            if (s.available()) {
+                facts.add("queue-gate", "Admit rate", s.admitRate() == null
+                        ? "unavailable: the gate did not report it" : s.admitRate() + " per second");
+                facts.add("queue-gate", "Tickets issued", String.valueOf(s.ticketsIssued()));
+                facts.add("queue-gate", "Admitted by the gate", String.valueOf(s.admitted()));
+                facts.add("queue-gate", "Still waiting", String.valueOf(s.waiting()));
+                facts.add("booking-service", "Seats taken / capacity", s.seatsTaken() + " / " + s.capacity());
+            }
         } catch (RuntimeException e) {
             facts.add("invariant", "Seats oversold", "unavailable: " + e.getMessage());
         }

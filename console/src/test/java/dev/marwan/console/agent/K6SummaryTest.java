@@ -24,6 +24,30 @@ class K6SummaryTest {
     }
 
     @Test
+    void readsTheCustomerFunnelAndOutcomes() {
+        String log = "K6_SUMMARY {\"vus\":200,\"booked\":88,\"joined\":195,\"admitted\":90,\"soldOutAtJoin\":5,"
+                + "\"gaveUp\":105,\"refusedAfterAdmission\":0,\"soldOut\":0,\"overloaded\":2,\"faults\":0,"
+                + "\"queueWaitP50\":44,\"queueWaitP95\":86,\"queueWaitMax\":89,\"partySize\":2,\"patienceSeconds\":90}";
+
+        K6Summary s = K6Summary.parse(log).orElseThrow();
+
+        assertThat(s.hasOutcomes()).isTrue();
+        assertThat(s.joined()).isEqualTo(195);
+        assertThat(s.gaveUp()).isEqualTo(105);
+        assertThat(s.overloaded()).isEqualTo(2);
+        assertThat(s.queueWaitP95()).isEqualTo(86);
+        assertThat(s.partySize()).isEqualTo(2);
+        assertThat(s.patienceSeconds()).isEqualTo(90);
+    }
+
+    @Test
+    void anOlderLineHasNoOutcomes() {
+        K6Summary s = K6Summary.parse("K6_SUMMARY {\"vus\":200,\"booked\":196}").orElseThrow();
+        assertThat(s.hasOutcomes()).isFalse();
+        assertThat(s.gaveUp()).isNull();
+    }
+
+    @Test
     void theLastSummaryWins() {
         String log = "K6_SUMMARY {\"vus\":1}\nK6_SUMMARY {\"vus\":2}\n";
         assertThat(K6Summary.parse(log).orElseThrow().vus()).isEqualTo(2);
