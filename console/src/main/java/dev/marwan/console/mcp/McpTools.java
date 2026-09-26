@@ -4,6 +4,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +20,13 @@ import dev.marwan.console.agent.Facts;
 import dev.marwan.console.agent.RunWindow;
 import dev.marwan.console.agent.Tools;
 import dev.marwan.console.auth.AccessKey;
+import dev.marwan.console.chaos.ChaosService;
+import dev.marwan.console.incident.Incident;
+import dev.marwan.console.incident.IncidentCommander;
+import dev.marwan.console.incident.IncidentStore;
+import dev.marwan.console.incident.IncidentWatcher;
 import dev.marwan.console.objects.LogLine;
+import dev.marwan.console.objects.LogLines;
 import dev.marwan.console.objects.LogPage;
 import dev.marwan.console.objects.ObjectSource;
 import dev.marwan.console.objects.ObjectsProvider;
@@ -25,6 +34,8 @@ import dev.marwan.console.objects.PodLogs;
 import dev.marwan.console.ops.DropOps;
 import dev.marwan.console.ops.LoadOps;
 import dev.marwan.console.ops.LoadRun;
+import dev.marwan.console.slo.SloReading;
+import dev.marwan.console.slo.SloService;
 import dev.marwan.console.state.ClusterStateProvider;
 import dev.marwan.console.state.DemoStateProvider;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
@@ -59,11 +70,16 @@ public class McpTools {
     private final ObjectSource source;
     private final DropOps dropOps;
     private final LoadOps loadOps;
+    private final SloService slo;
+    private final IncidentStore incidents;
+    private final IncidentWatcher watcher;
+    private final ChaosService chaos;
     private final Clock clock;
 
     public McpTools(DemoStateProvider demo, ClusterStateProvider cluster, ConsoleProperties properties,
                     AccessKey key, AnalysisStore store, ObjectsProvider objects, PodLogs podLogs, Tools tools,
-                    ObjectSource source, DropOps dropOps, LoadOps loadOps, Clock clock) {
+                    ObjectSource source, DropOps dropOps, LoadOps loadOps, SloService slo, IncidentStore incidents,
+                    IncidentWatcher watcher, ChaosService chaos, Clock clock) {
         this.demo = demo;
         this.cluster = cluster;
         this.properties = properties;
@@ -75,6 +91,10 @@ public class McpTools {
         this.source = source;
         this.dropOps = dropOps;
         this.loadOps = loadOps;
+        this.slo = slo;
+        this.incidents = incidents;
+        this.watcher = watcher;
+        this.chaos = chaos;
         this.clock = clock;
     }
 
@@ -170,7 +190,130 @@ public class McpTools {
                             "takes", waves == 2 ? "about 5 minutes" : "about 2 minutes",
                             "then", "list_runs shows the agent's report about a minute after it ends"));
                 }));
+        tools.addAll(incidentTools());
         return tools;
+    }
+
+    /**
+     * SLOs, incidents, drills and proposals. There is deliberately no tool that
+     * approves, dismisses or applies a proposal: that is a keyed request from a
+     * person in the console, so no MCP client - the incident commander included -
+     * can act on its own advice.
+     */
+    private List<SyncToolSpecification> incidentTools() {
+        List<SyncToolSpecification> list = new ArrayList<>();
+        list.add(tool("get_slo",
+                "The two booking SLOs now and over the last 15 minutes: success ratio (target 0.99) and p95 latency "
+                        + "(target 2 s) on booking-service /bookings over 5-minute windows, with the error-budget burn rate.",
+                Map.of(), List.of(), (ex, args) -> {
+                    SloReading now = slo.now();
+                    List<Map<String, Object>> history = slo.history(DEFAULT_WINDOW).stream().map(McpTools::slo).toList();
+                    return json(Map.of("now", slo(now), "history", history,
+                            "targets", Map.of("successRatio", 0.99, "p95Seconds", 2.0)));
+                }));
+        list.add(tool("list_incidents",
+                "Recent incidents, newest first: id, drill or breach, the fault, status, when opened and resolved.",
+                Map.of(), List.of(), (ex, args) -> json(incidents.list().stream().map(i -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", i.id);
+                    m.put("kind", i.kind);
+                    m.put("fault", i.fault);
+                    m.put("status", i.status);
+                    m.put("openedAt", i.openedAt);
+                    m.put("resolvedAt", i.resolvedAt);
+                    m.put("proposals", i.proposals.size());
+                    return m;
+                }).toList())));
+        list.add(tool("get_incident",
+                "One incident in full: timeline, diagnoses with their facts, proposals and their decisions, postmortem.",
+                Map.of("id", str("The incident id from list_incidents")), List.of("id"),
+                (ex, args) -> incidents.get(text(args, "id", ""))
+                        .map(McpTools::json)
+                        .orElseThrow(() -> new ToolError("no incident '" + text(args, "id", "") + "'; list_incidents shows them"))));
+        list.add(tool("inject_fault",
+                "Start a chaos drill: kill-booking-pod, slow-database or squeeze-pool. Each ends by itself within 2 "
+                        + "minutes and opens a drill incident. One fault at a time. Needs the console key.",
+                Map.of("fault", str("kill-booking-pod, slow-database or squeeze-pool")), List.of("fault"),
+                (ex, args) -> {
+                    if (!keyed(ex)) {
+                        throw new ToolError(NEEDS_KEY);
+                    }
+                    try {
+                        ChaosService.ActiveFault started = chaos.inject(text(args, "fault", ""));
+                        return json(Map.of("fault", started.fault(), "until", started.until(),
+                                "then", "list_incidents shows the drill incident; get_slo shows its effect"));
+                    } catch (ChaosService.Busy e) {
+                        throw new ToolError(e.getMessage() + "; one fault at a time");
+                    } catch (IllegalArgumentException e) {
+                        throw new ToolError("unknown fault; the faults are " + String.join(", ", ChaosService.FAULTS));
+                    }
+                }));
+        list.add(tool("propose_remediation",
+                "File a proposed fix on an open incident, from a fixed menu: restart-booking, scale-booking (replicas "
+                        + "1-4), raise-hpa-min (target booking-service or queue-gate, replicas 1-4), end-fault. It is only "
+                        + "a proposal: a person approves or dismisses it in the console. One pending proposal at a time. "
+                        + "Needs the console key.",
+                Map.of("incident", str("Incident id; default the open incident"),
+                        "action", str("restart-booking, scale-booking, raise-hpa-min or end-fault"),
+                        "target", str("booking-service (default) or queue-gate, for raise-hpa-min"),
+                        "replicas", integer("1 to 4, for scale-booking and raise-hpa-min"),
+                        "reason", str("Why, in one sentence")),
+                List.of("action", "reason"),
+                (ex, args) -> {
+                    if (!keyed(ex)) {
+                        throw new ToolError(NEEDS_KEY);
+                    }
+                    String action = text(args, "action", "");
+                    if (!IncidentCommander.ACTIONS.contains(action)) {
+                        throw new ToolError("not on the menu; the actions are " + String.join(", ", IncidentCommander.ACTIONS));
+                    }
+                    String id = text(args, "incident", null);
+                    Optional<Incident> target = id == null ? incidents.open() : incidents.get(id);
+                    if (target.isEmpty()) {
+                        throw new ToolError(id == null ? "no incident is open" : "no incident '" + id + "'");
+                    }
+                    int n = Integer.parseInt(text(args, "replicas", "0"));
+                    AtomicReference<Object> filed = new AtomicReference<>("the incident is no longer open");
+                    watcher.update(target.get().id, i -> {
+                        if (!i.isOpen()) {
+                            return;
+                        }
+                        if (i.proposals.stream().anyMatch(p -> "pending".equals(p.status()))) {
+                            filed.set("a proposal is already pending; a person must approve or dismiss it first");
+                            return;
+                        }
+                        Instant now = clock.instant();
+                        Incident.Proposal p = new Incident.Proposal(i.proposals.size() + 1, now, action,
+                                "queue-gate".equals(text(args, "target", "")) ? "queue-gate" : "booking-service",
+                                n <= 0 ? null : Math.min(n, 4), LogLines.mask(text(args, "reason", "")), List.of(),
+                                "pending", null);
+                        i.proposals.add(p);
+                        i.add(now, "agent", "proposes " + IncidentCommander.describe(p)
+                                + " (over MCP) - awaiting a person's approval");
+                        filed.set(p);
+                    });
+                    if (!(filed.get() instanceof Incident.Proposal p)) {
+                        throw new ToolError(String.valueOf(filed.get()));
+                    }
+                    return json(Map.of("incident", target.get().id, "proposal", p.n(), "status", "pending",
+                            "then", "a person approves or dismisses it on the console's Incidents page; "
+                                    + "no MCP tool can approve"));
+                }));
+        return list;
+    }
+
+    private static Map<String, Object> slo(SloReading r) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("at", r.at());
+        m.put("available", r.available());
+        m.put("hasTraffic", r.hasTraffic());
+        m.put("successRatio", r.successRatio());
+        m.put("p95Seconds", r.p95Seconds());
+        m.put("state", !r.available() ? "unavailable" : !r.hasTraffic() ? "no traffic" : r.breached() ? "breached" : "ok");
+        if (r.successRatio() != null) {
+            m.put("burnRate", Math.round((1 - r.successRatio()) / (1 - 0.99) * 10) / 10.0);
+        }
+        return m;
     }
 
     /** A tool answered by the run agent's own read-only tools, over a window. */

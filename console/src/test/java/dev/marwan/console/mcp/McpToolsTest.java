@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.net.http.HttpRequest;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +29,13 @@ import dev.marwan.console.agent.Fact;
 import dev.marwan.console.agent.Facts;
 import dev.marwan.console.agent.Report;
 import dev.marwan.console.agent.Tools;
+import dev.marwan.console.chaos.ChaosService;
+import dev.marwan.console.incident.Incident;
+import dev.marwan.console.incident.IncidentStore;
+import dev.marwan.console.incident.IncidentWatcher;
+import dev.marwan.console.incident.Remediation;
+import dev.marwan.console.slo.SloReading;
+import dev.marwan.console.slo.SloService;
 import dev.marwan.console.objects.LogPage;
 import dev.marwan.console.objects.ObjectSource;
 import dev.marwan.console.objects.ObjectsProvider;
@@ -55,6 +64,11 @@ class McpToolsTest {
     @MockitoBean LoadOps loadOps;
     @MockitoBean Tools tools;
     @MockitoBean ObjectSource source;
+    @MockitoBean SloService slo;
+    @MockitoBean IncidentStore incidents;
+    @MockitoBean IncidentWatcher watcher;
+    @MockitoBean ChaosService chaos;
+    @MockitoBean Remediation remediation;
 
     McpSyncClient client(String key) {
         HttpRequest.Builder request = HttpRequest.newBuilder();
@@ -84,12 +98,88 @@ class McpToolsTest {
     }
 
     @Test
-    void listsTheTenTools() {
-        try (McpSyncClient c = client(null)) {
-            assertThat(c.listTools().tools()).extracting(McpSchema.Tool::name).containsExactlyInAnyOrder(
+    void listsTheFifteenToolsAndNoneOfThemApproves() {
+        try (McpSyncClient c = client("s3cret-demo-key")) {
+            List<String> names = c.listTools().tools().stream().map(McpSchema.Tool::name).toList();
+            assertThat(names).containsExactlyInAnyOrder(
                     "get_state", "list_runs", "get_report", "describe_object", "metric", "events", "pod_status",
-                    "endpoints", "pod_logs", "start_rush");
+                    "endpoints", "pod_logs", "start_rush",
+                    "get_slo", "list_incidents", "get_incident", "inject_fault", "propose_remediation");
+            assertThat(names).noneMatch(n -> n.contains("approve") || n.contains("apply") || n.contains("dismiss"));
         }
+    }
+
+    static Incident openIncident() {
+        Incident i = new Incident();
+        i.id = "inc-1";
+        i.kind = "drill";
+        i.fault = "squeeze-pool";
+        i.status = "open";
+        i.openedAt = Instant.parse("2026-09-26T12:00:00Z");
+        return i;
+    }
+
+    @Test
+    void sloAndIncidentsAreReadableWithoutTheKey() {
+        Instant t = Instant.parse("2026-09-26T12:00:00Z");
+        when(slo.now()).thenReturn(new SloReading(t, true, null, true, 0.93, 2.6));
+        when(slo.history(any())).thenReturn(List.of());
+        when(incidents.list()).thenReturn(List.of(openIncident()));
+        when(incidents.get("inc-1")).thenReturn(Optional.of(openIncident()));
+        try (McpSyncClient c = client(null)) {
+            assertThat(text(call(c, "get_slo", Map.of()))).contains("0.93").contains("breached");
+            assertThat(text(call(c, "list_incidents", Map.of()))).contains("inc-1");
+            assertThat(text(call(c, "get_incident", Map.of("id", "inc-1")))).contains("squeeze-pool");
+            assertThat(call(c, "get_incident", Map.of("id", "nope")).isError()).isTrue();
+        }
+    }
+
+    @Test
+    void injectingAFaultNeedsTheKeyAndOneAtATime() {
+        Instant t = Instant.parse("2026-09-26T12:00:00Z");
+        when(chaos.inject("squeeze-pool")).thenReturn(new ChaosService.ActiveFault("squeeze-pool", t, t.plusSeconds(120)))
+                .thenThrow(new ChaosService.Busy(new ChaosService.ActiveFault("squeeze-pool", t, t.plusSeconds(120))));
+        try (McpSyncClient open = client(null); McpSyncClient keyed = client("s3cret-demo-key")) {
+            CallToolResult refused = call(open, "inject_fault", Map.of("fault", "squeeze-pool"));
+            assertThat(refused.isError()).isTrue();
+            assertThat(text(refused)).contains("/api/demo-key");
+            verify(chaos, never()).inject(anyString());
+
+            assertThat(call(keyed, "inject_fault", Map.of("fault", "squeeze-pool")).isError()).isFalse();
+            CallToolResult busy = call(keyed, "inject_fault", Map.of("fault", "squeeze-pool"));
+            assertThat(busy.isError()).isTrue();
+            assertThat(text(busy)).contains("squeeze-pool is running");
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aProposalStaysPendingAndNothingIsApplied() {
+        Incident incident = openIncident();
+        when(incidents.open()).thenReturn(Optional.of(incident));
+        when(incidents.get("inc-1")).thenReturn(Optional.of(incident));
+        when(watcher.update(eq("inc-1"), any())).thenAnswer(inv -> {
+            ((Consumer<Incident>) inv.getArgument(1)).accept(incident);
+            return Optional.of(incident);
+        });
+        try (McpSyncClient open = client(null); McpSyncClient keyed = client("s3cret-demo-key")) {
+            assertThat(call(open, "propose_remediation", Map.of("action", "restart-booking", "reason", "r")).isError())
+                    .isTrue();
+            assertThat(call(keyed, "propose_remediation", Map.of("action", "delete-everything", "reason", "r")).isError())
+                    .isTrue();
+            CallToolResult filed = call(keyed, "propose_remediation",
+                    Map.of("action", "scale-booking", "replicas", 3, "reason", "the pool is saturated"));
+            assertThat(filed.isError()).isFalse();
+            assertThat(text(filed)).contains("pending").contains("approve");
+            assertThat(incident.proposals).singleElement().satisfies(p -> {
+                assertThat(p.status()).isEqualTo("pending");
+                assertThat(p.replicas()).isEqualTo(3);
+            });
+            CallToolResult second = call(keyed, "propose_remediation", Map.of("action", "restart-booking", "reason", "r"));
+            assertThat(second.isError()).isTrue();
+            assertThat(incident.proposals).hasSize(1);
+        }
+        verifyNoInteractions(remediation);
     }
 
     @Test

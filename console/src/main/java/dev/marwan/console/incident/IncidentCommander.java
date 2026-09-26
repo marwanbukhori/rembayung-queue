@@ -207,7 +207,7 @@ public class IncidentCommander {
         return facts;
     }
 
-    static String describe(Incident.Proposal p) {
+    public static String describe(Incident.Proposal p) {
         return switch (p.action()) {
             case "scale-booking" -> "scaling booking-service to " + p.replicas();
             case "raise-hpa-min" -> "raising " + p.target() + "'s autoscaler minimum to " + p.replicas();
