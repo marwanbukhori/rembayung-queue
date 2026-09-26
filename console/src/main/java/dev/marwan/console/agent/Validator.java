@@ -33,6 +33,15 @@ public class Validator {
             problems.add("the report has no claims");
             return problems;
         }
+        // With the funnel known, a report that does not say where the customers went has missed the point.
+        if (facts.all().stream().anyMatch(f -> f.label().equals("Arrived"))) {
+            if (report.summary().isEmpty() && report.wentWell().isEmpty()) {
+                problems.add("the summary section is empty");
+            }
+            if (report.customers().isEmpty() && report.wentWell().isEmpty()) {
+                problems.add("the customers section is empty: say where the customers went");
+            }
+        }
         for (Claim claim : report.all()) {
             String text = claim.text() == null ? "" : claim.text();
             if (claim.facts() == null || claim.facts().isEmpty()) {

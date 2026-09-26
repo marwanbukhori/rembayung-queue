@@ -54,7 +54,7 @@ class AnalysesControllerTest {
         when(store.get("load-a")).thenReturn(Optional.of(one()));
         mvc.perform(get("/api/analyses/load-a"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.report.wentWell[0].facts[0]").value("F1"));
+                .andExpect(jsonPath("$.report.summary[0].facts[0]").value("F1"));
     }
 
     static Analysis withRawLogs() {

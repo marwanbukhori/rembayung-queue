@@ -45,9 +45,11 @@ class AnalystTest {
     }
 
     static final String GOOD_REPORT = """
-            {"went_well":[{"text":"No seat was oversold.","facts":["F6"]}],
-             "caught":[{"text":"196 booked and 4 not clean.","facts":["F2"]}],
-             "look_at":[{"text":"booking-service-a peaked at 5 connections.","facts":["F7"]}]}
+            {"summary":[{"text":"No seat was oversold.","facts":["F6"]}],
+             "customers":[{"text":"196 booked and 4 not clean.","facts":["F2"]}],
+             "capacity":[{"text":"booking-service-a peaked at 5 connections.","facts":["F7"]}],
+             "errors":[{"text":"At most 4 5xx responses in one minute.","facts":["F5"]}],
+             "look_at":[]}
             """;
 
     Facts baseline;
@@ -99,7 +101,7 @@ class AnalystTest {
         assertThat(a.trail().get(0).factId()).isEqualTo("F10");
         assertThat(a.trail().get(0).why()).isEqualTo("pool timeouts on pod a");
         assertThat(a.facts()).hasSize(10);
-        assertThat(a.report().caught().get(0).facts()).containsExactly("F2");
+        assertThat(a.report().customers().get(0).facts()).containsExactly("F2");
         assertThat(a.problems()).isEmpty();
     }
 
@@ -121,7 +123,7 @@ class AnalystTest {
     @Test
     void anInventedNumberIsSentBackOnceAndCorrected() {
         model.then("{\"done\":true}")
-                .then("{\"went_well\":[],\"caught\":[{\"text\":\"17 bookings failed.\",\"facts\":[\"F2\"]}],\"look_at\":[]}")
+                .then("{\"summary\":[{\"text\":\"No seat was oversold.\",\"facts\":[\"F6\"]}],\"customers\":[{\"text\":\"17 bookings failed.\",\"facts\":[\"F2\"]}]}")
                 .then(GOOD_REPORT);
 
         Analysis a = analyst().analyse(WINDOW);
@@ -134,7 +136,7 @@ class AnalystTest {
 
     @Test
     void inventingTwiceFallsBackToTheFactsAlone() {
-        String invented = "{\"went_well\":[],\"caught\":[{\"text\":\"17 bookings failed.\",\"facts\":[\"F2\"]}],\"look_at\":[]}";
+        String invented = "{\"summary\":[{\"text\":\"No seat was oversold.\",\"facts\":[\"F6\"]}],\"customers\":[{\"text\":\"17 bookings failed.\",\"facts\":[\"F2\"]}]}";
         model.then("{\"done\":true}").then(invented).then(invented);
 
         Analysis a = analyst().analyse(WINDOW);
@@ -147,8 +149,8 @@ class AnalystTest {
     @Test
     void anUnknownFactIdIsAProblem() {
         model.then("{\"done\":true}")
-                .then("{\"went_well\":[{\"text\":\"Fine.\",\"facts\":[\"F99\"]}],\"caught\":[],\"look_at\":[]}")
-                .then("{\"went_well\":[{\"text\":\"Fine.\",\"facts\":[\"F99\"]}],\"caught\":[],\"look_at\":[]}");
+                .then("{\"summary\":[{\"text\":\"Fine.\",\"facts\":[\"F99\"]}]}")
+                .then("{\"summary\":[{\"text\":\"Fine.\",\"facts\":[\"F99\"]}]}");
 
         Analysis a = analyst().analyse(WINDOW);
 
@@ -164,7 +166,7 @@ class AnalystTest {
 
         assertThat(a.source()).isEqualTo("fallback");
         assertThat(a.note()).contains("timed out");
-        assertThat(a.report().wentWell()).isNotEmpty();
+        assertThat(a.report().summary()).isNotEmpty();
     }
 
     @Test
@@ -179,8 +181,8 @@ class AnalystTest {
     @Test
     void oddlyShapedJsonFallsBackRatherThanThrowing() {
         model.then("{\"call\":{\"name\":\"pod_logs\"},\"args\":{}}")
-                .then("{\"went_well\":[{\"text\":{\"x\":1},\"facts\":[{\"id\":\"F1\"}]}],\"caught\":[],\"look_at\":[]}")
-                .then("{\"went_well\":\"none\"}");
+                .then("{\"summary\":[{\"text\":{\"x\":1},\"facts\":[{\"id\":\"F1\"}]}]}")
+                .then("{\"summary\":\"none\"}");
         Analysis a = analyst().analyse(WINDOW);
         assertThat(a.report()).isNotNull();
         assertThat(a.source()).isEqualTo("fallback");
@@ -205,13 +207,13 @@ class AnalystTest {
     @Test
     void anEmptyPlaceholderItemIsDroppedNotHeldAgainstTheReport() {
         model.then("{\"done\":true}").then("""
-                {"went_well":[{"text":"No seat was oversold.","facts":["F6"]}],
-                 "caught":[{"text":"196 booked and 4 not clean.","facts":["F2"]}, {}],
+                {"summary":[{"text":"No seat was oversold.","facts":["F6"]}],
+                 "customers":[{"text":"196 booked and 4 not clean.","facts":["F2"]}, {}],
                  "look_at":[{"text":"","facts":[]}]}
                 """);
         Analysis a = analyst().analyse(WINDOW);
         assertThat(a.source()).isEqualTo("model");
-        assertThat(a.report().caught()).hasSize(1);
+        assertThat(a.report().customers()).hasSize(1);
         assertThat(a.report().lookAt()).isEmpty();
     }
 
@@ -243,19 +245,63 @@ class AnalystTest {
     @Test
     void theFallbackFilesUncleanBookingsAsCaughtNotAsWentWell() {
         Report r = Fallback.from(baseline);   // F2 says 4 not clean
-        assertThat(r.caught()).anyMatch(c -> c.facts().contains("F2"));
-        assertThat(r.wentWell()).noneMatch(c -> c.facts().contains("F2"));
+        assertThat(r.errors()).anyMatch(c -> c.facts().contains("F2") && c.text().contains("not clean"));
 
         Facts clean = new Facts();
         clean.add("k6", "Bookings: clean, rejected, not clean", "200 booked, 0 rejected, 0 not clean");
-        assertThat(Fallback.from(clean).wentWell()).anyMatch(c -> c.facts().contains("F1"));
+        assertThat(Fallback.from(clean).errors()).noneMatch(c -> c.text().contains("not clean"));
+        assertThat(Fallback.from(clean).summary()).anyMatch(c -> c.facts().contains("F1"));
     }
 
     @Test
     void theFallbackReportCitesOnlyRealFactsAndPassesValidation() {
         Report r = Fallback.from(baseline);
         assertThat(new Validator().problems(r, baseline)).isEmpty();
-        assertThat(r.wentWell()).anyMatch(c -> c.facts().contains("F6"));
-        assertThat(r.caught()).anyMatch(c -> c.facts().contains("F9"));
+        assertThat(r.summary()).anyMatch(c -> c.facts().contains("F6"));
+        assertThat(r.errors()).anyMatch(c -> c.facts().contains("F9"));
+    }
+
+    /** The baseline plus the funnel facts Task 3 adds, numbered after F9. */
+    Facts withFunnel() {
+        Facts f = copy(baseline);
+        f.add("k6", "Arrived", "200");                       // F10
+        f.add("k6", "Joined the queue", "195");              // F11
+        f.add("k6", "Admitted", "90");                       // F12
+        f.add("k6", "Booked", "88");                         // F13
+        f.add("k6", "Seats taken by this run", "176");       // F14
+        f.add("k6", "Gave up waiting (403)", "105");         // F15
+        f.add("k6", "Sold out at the queue (409)", "5");     // F16
+        f.add("k6", "Overloaded (503)", "2");                // F17
+        f.add("queue-gate", "Admit rate", "1 per second");   // F18
+        return f;
+    }
+
+    @Test
+    void theFallbackTellsTheCustomerStoryFromTheFunnel() {
+        Facts f = withFunnel();
+        Report r = Fallback.from(f);
+        assertThat(r.summary()).singleElement().satisfies(c -> assertThat(c.facts()).contains("F13", "F10"));
+        assertThat(r.customers()).anyMatch(c -> c.facts().contains("F15"))
+                .anyMatch(c -> c.facts().contains("F16")).anyMatch(c -> c.facts().contains("F17"));
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
+    void aGaveUpMajorityGetsALookAtAboutTheAdmitRate() {
+        Report r = Fallback.from(withFunnel());
+        assertThat(r.lookAt()).anyMatch(c -> c.facts().contains("F15") && c.text().contains("admit rate"));
+    }
+
+    @Test
+    void aReportWithoutTheCustomersSectionIsRetriedThenFallsBackWhenFunnelFactsExist() {
+        Facts funnel = withFunnel();
+        baseline = funnel;
+        String noCustomers = "{\"summary\":[{\"text\":\"No seat was oversold.\",\"facts\":[\"F6\"]}]}";
+        model.then("{\"done\":true}").then(noCustomers).then(noCustomers);
+
+        Analysis a = analyst().analyse(WINDOW);
+
+        assertThat(a.source()).isEqualTo("fallback");
+        assertThat(a.problems()).anyMatch(p -> p.contains("customers"));
     }
 }

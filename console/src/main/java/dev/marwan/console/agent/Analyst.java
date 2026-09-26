@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import dev.marwan.console.objects.LogLines;
 import tools.jackson.core.JacksonException;
@@ -38,6 +39,8 @@ public class Analyst {
             You analyse one load test ("a rush") against a restaurant's virtual queue and booking service on OpenShift.
             queue-gate admits customers from a Redis queue; booking-service books seats in Oracle through a pool of 5
             database connections per pod; the invariant is that no seat is ever sold twice ("oversold" must be 0).
+            Each customer books a party (see the "Party size" fact). A queue drained at N per second admits about
+            N x patience customers; customers not admitted in time book anyway and are refused with 403.
             A pool at its size (5 of 5) is saturated: requests queue for a connection and time out, which is a
             finding to explain, not efficiency. Rejections of 403 or 409 are the system working; 5xx and
             "not clean" bookings are not.
@@ -53,7 +56,11 @@ public class Analyst {
 
     static final String REPORT = """
             Now write the report. Reply with exactly one JSON object and nothing else:
-            {"went_well": [{"text": "...", "facts": ["F1"]}], "caught": [...], "look_at": [...]}
+            {"summary": [{"text": "...", "facts": ["F1"]}], "customers": [...], "capacity": [...],
+             "errors": [...], "look_at": [...]}
+            summary: 1-2 items, the headline outcome. customers: where the customers went, one item per drop-off
+            with its reason. capacity: pool use and replicas. errors: 503s, faults, timeouts, warnings, or say none.
+            look_at: what to try next.
             Rules: every item cites the fact ids it rests on; every number you write must appear in a cited fact;
             do not write clock times or dates;
             one or two sentences per item; at most 3 items per list; say what a reader should do in look_at.
@@ -174,10 +181,11 @@ public class Analyst {
     }
 
     static Report report(JsonNode node) {
-        if (node == null || !(node.has("went_well") || node.has("caught") || node.has("look_at"))) {
+        if (node == null || Stream.of("summary", "customers", "capacity", "errors", "look_at").noneMatch(node::has)) {
             return null;
         }
-        return new Report(claims(node.path("went_well")), claims(node.path("caught")), claims(node.path("look_at")));
+        return Report.sections(claims(node.path("summary")), claims(node.path("customers")),
+                claims(node.path("capacity")), claims(node.path("errors")), claims(node.path("look_at")));
     }
 
     private static List<Claim> claims(JsonNode list) {

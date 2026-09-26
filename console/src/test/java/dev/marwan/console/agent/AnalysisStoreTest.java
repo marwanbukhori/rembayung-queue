@@ -65,7 +65,7 @@ class AnalysisStoreTest {
     static Analysis analysis(String job, Instant at, String bigValue) {
         return new Analysis(job, "drop", at, at.plusSeconds(60),
                 List.of(new Fact("F1", "k6", "Bookings", bigValue == null ? "196 booked" : bigValue)),
-                List.of(), new Report(List.of(new Claim("Fine.", List.of("F1"))), List.of(), List.of()),
+                List.of(), Report.sections(List.of(new Claim("Fine.", List.of("F1"))), List.of(), List.of(), List.of(), List.of()),
                 "scripted", "model", null, List.of(), at.plusSeconds(90), 1000);
     }
 
@@ -96,6 +96,22 @@ class AnalysisStoreTest {
         assertThat(port.lastUpdate.getMetadata().getManagedFields()).isNullOrEmpty();
         assertThat(port.lastUpdate.getMetadata().getResourceVersion()).isNotNull();
         assertThat(port.lastUpdate.getMetadata().getLabels()).containsEntry("app.kubernetes.io/component", "run-analysis");
+    }
+
+    @Test
+    void aReportStoredBeforeSectionsIsStillRead() {
+        FakePort port = new FakePort();
+        AnalysisStore store = new AnalysisStore(port);
+        store.put(analysis("load-old", Instant.parse("2026-09-25T10:00:00Z"), null));
+        String key = port.stored.getData().keySet().iterator().next();
+        String legacy = port.stored.getData().get(key).replaceAll("\"report\":\\{.*?\\},\"model\"",
+                "\"report\":{\"wentWell\":[{\"text\":\"Fine.\",\"facts\":[\"F1\"]}],\"caught\":[],\"lookAt\":[]},\"model\"");
+        port.stored.getData().put(key, legacy);
+
+        Report r = store.get(key).orElseThrow().report();
+
+        assertThat(r.wentWell()).hasSize(1);
+        assertThat(r.summary()).isEmpty();
     }
 
     @Test

@@ -19,7 +19,7 @@ class ValidatorTest {
     }
 
     List<String> check(String text, String... ids) {
-        return validator.problems(new Report(List.of(new Claim(text, List.of(ids))), List.of(), List.of()), facts());
+        return validator.problems(Report.sections(List.of(new Claim(text, List.of(ids))), List.of(), List.of(), List.of(), List.of()), facts());
     }
 
     @Test
@@ -54,12 +54,22 @@ class ValidatorTest {
     }
 
     @Test
+    void withFunnelFactsTheSummaryAndCustomersAreRequired() {
+        Facts f = facts();
+        f.add("k6", "Arrived", "200");
+        Report onlySummary = Report.sections(List.of(new Claim("Fine.", List.of("F1"))),
+                List.of(), List.of(), List.of(), List.of());
+        assertThat(validator.problems(onlySummary, f)).anyMatch(p -> p.contains("customers"));
+        assertThat(validator.problems(onlySummary, facts())).isEmpty();
+    }
+
+    @Test
     void aClaimWithoutFactsIsAProblem() {
         assertThat(check("Everything was fine.")).singleElement().asString().contains("cites no facts");
     }
 
     @Test
     void anEmptyReportIsAProblem() {
-        assertThat(validator.problems(new Report(List.of(), List.of(), List.of()), facts())).isNotEmpty();
+        assertThat(validator.problems(Report.sections(List.of(), List.of(), List.of(), List.of(), List.of()), facts())).isNotEmpty();
     }
 }
