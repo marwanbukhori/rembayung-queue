@@ -55,13 +55,17 @@ public class Validator {
                 problems.add("the customers section is empty: say where the customers went");
             }
         }
+        Set<String> vocabulary = new HashSet<>();
+        facts.all().forEach(f -> vocabulary.addAll(numbers(f.label())));
         for (Claim claim : report.all()) {
             String text = claim.text() == null ? "" : claim.text();
             if (claim.facts() == null || claim.facts().isEmpty()) {
                 problems.add("\"" + text + "\" cites no facts");
                 continue;
             }
-            Set<String> supported = new HashSet<>();
+            // Numbers in any fact's label - status codes like 503, "p95" - are vocabulary, usable anywhere.
+            // Numbers in values are what a claim asserts, and those must come from the facts it cites.
+            Set<String> supported = new HashSet<>(vocabulary);
             for (String id : claim.facts()) {
                 facts.get(id).ifPresentOrElse(
                         f -> {

@@ -92,6 +92,21 @@ class ValidatorTest {
     }
 
     @Test
+    void statusCodesAndOtherNumbersFromFactLabelsAreVocabularyNotClaims() {
+        Facts f = facts();
+        f.add("k6", "Overloaded (503)", "167");                       // F4
+        f.add("Prometheus", "Peak DB pool in use, booking-service-a", "5"); // F5
+        assertThat(validator.problems(Report.sections(List.of(new Claim(
+                "The pool peaked at 5 and requests got 503 errors.", List.of("F5"))),
+                List.of(), List.of(), List.of(), List.of()), f)).isEmpty();
+        assertThat(validator.problems(Report.sections(List.of(new Claim("Pool at 5 caused 503s.", List.of("F5"))),
+                List.of(), List.of(), List.of(), List.of()), f)).isEmpty();
+        // A value is still a claim: 167 must be cited.
+        assertThat(validator.problems(Report.sections(List.of(new Claim("167 got 503s.", List.of("F5"))),
+                List.of(), List.of(), List.of(), List.of()), f)).singleElement().asString().contains("167");
+    }
+
+    @Test
     void aClaimWithoutFactsIsAProblem() {
         assertThat(check("Everything was fine.")).singleElement().asString().contains("cites no facts");
     }
