@@ -122,7 +122,32 @@ public class Baseline {
         outcome(facts, "Did not finish", s.vus() - finished);
         facts.add("k6", "Queue wait p50 / p95 / max",
                 s.queueWaitP50() + " / " + s.queueWaitP95() + " / " + s.queueWaitMax() + " s");
+        if (s.waves() == 2) {
+            // Each wave on its own, so the report can set wave 1 beside wave 2. A run cut
+            // off before wave 2 lists only the wave it had.
+            for (K6Summary.Wave wave : s.perWave()) {
+                wave(facts, wave);
+            }
+        }
         return summary;
+    }
+
+    private static void wave(Facts facts, K6Summary.Wave w) {
+        String p = "Wave " + w.wave() + " · ";
+        facts.add("k6", p + "Arrived", String.valueOf(w.vus()));
+        facts.add("k6", p + "Joined the queue", String.valueOf(nz(w.joined())));
+        facts.add("k6", p + "Admitted", String.valueOf(nz(w.admitted())));
+        facts.add("k6", p + "Booked", String.valueOf(w.booked()));
+        outcome(facts, p + "Gave up waiting (403)", w.gaveUp());
+        outcome(facts, p + "Sold out at the queue (409)", w.soldOutAtJoin());
+        outcome(facts, p + "Sold out at booking (409)", w.soldOut());
+        outcome(facts, p + "Admitted but refused (403)", w.refusedAfterAdmission());
+        outcome(facts, p + "Overloaded (503)", w.overloaded());
+        outcome(facts, p + "Faults at the queue", w.faultsAtJoin());
+        outcome(facts, p + "Faults at booking", w.faultsAtBooking());
+        if (w.p95() != null && w.max() != null) {
+            facts.add("k6", p + "Latency p95 / max", w.p95() + " / " + w.max() + " ms");
+        }
     }
 
     private static int nz(Integer n) {
@@ -171,6 +196,13 @@ public class Baseline {
             }
             for (Series s : range(ChartName.REPLICAS.promql(), ChartName.REPLICAS.labelKey(), w)) {
                 facts.add("Prometheus", "Peak replicas, " + s.label(), num(max(s)) + " (from " + num(first(s)) + ")");
+                timeline(s, w).ifPresent(t -> facts.add("Prometheus", "Scaling, " + s.label(), t));
+                if (w.waves() == 2) {
+                    for (int n = 1; n <= 2; n++) {
+                        facts.add("Prometheus", "Wave " + n + " · Ready pods at start, " + s.label(),
+                                num(valueAt(s, w.waveStart(n))));
+                    }
+                }
             }
         } catch (Exception e) {
             facts.add("Prometheus", "Prometheus", "unavailable: " + e.getMessage());
@@ -183,11 +215,15 @@ public class Baseline {
 
     private void warnings(RunWindow w, Facts facts) {
         List<String> seen = new ArrayList<>();
+        List<String> held = new ArrayList<>();
         try {
             for (String app : WATCHED) {
-                collect("Deployment", app, w, seen);
+                collect("Deployment", app, w, seen, held);
+                for (var rs : objects.replicaSets(app)) {
+                    collect("ReplicaSet", rs.getMetadata().getName(), w, seen, held);
+                }
                 for (Pod pod : objects.pods(app)) {
-                    collect("Pod", pod.getMetadata().getName(), w, seen);
+                    collect("Pod", pod.getMetadata().getName(), w, seen, held);
                 }
             }
         } catch (RuntimeException e) {
@@ -195,14 +231,24 @@ public class Baseline {
             return;
         }
         facts.add("Kubernetes", "Warning events in the window", seen.isEmpty() ? "none" : String.join("; ", seen));
+        facts.add("Kubernetes", "Pods waiting for CPU during the run", held.isEmpty() ? "none"
+                : String.join("; ", held.stream().limit(3).toList()));
     }
 
-    private void collect(String kind, String name, RunWindow w, List<String> seen) {
+    private void collect(String kind, String name, RunWindow w, List<String> seen, List<String> held) {
         for (Event e : objects.events(kind, name)) {
             Instant at = at(e);
             if ("Warning".equals(e.getType()) && at != null && !at.isBefore(w.start()) && !at.isAfter(w.end())) {
                 int count = e.getCount() == null ? 1 : e.getCount();
                 seen.add(e.getReason() + (count > 1 ? " ×" + count : "") + " on " + kind + "/" + name);
+                String message = e.getMessage() == null ? "" : e.getMessage();
+                if (message.contains("exceeded quota") || message.contains("Insufficient cpu")) {
+                    String line = kind + "/" + name + ": " + message;
+                    String cut = line.length() > 200 ? line.substring(0, 200) + "…" : line;
+                    if (!held.contains(cut)) {
+                        held.add(cut);
+                    }
+                }
             }
         }
     }
@@ -265,6 +311,41 @@ public class Baseline {
         } catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    /** Each change in an autoscaler's replicas during the run, as "2 → 6 at +1m15s"; empty if it never changed. */
+    static Optional<String> timeline(Series s, RunWindow w) {
+        List<String> changes = new ArrayList<>();
+        Long previous = null;
+        for (double[] p : s.points()) {
+            if (Double.isNaN(p[1]) || p[0] < w.start().getEpochSecond()) {
+                continue;
+            }
+            long value = Math.round(p[1]);
+            if (previous != null && value != previous) {
+                long offset = (long) p[0] - w.start().getEpochSecond();
+                changes.add(previous + " → " + value + " at +" + offset / 60 + "m" + offset % 60 + "s");
+            }
+            previous = value;
+        }
+        return changes.isEmpty() ? Optional.empty() : Optional.of(String.join(", ", changes));
+    }
+
+    /** The series' last value at or before a moment, or its first if it starts later. */
+    static double valueAt(Series s, Instant at) {
+        double value = Double.NaN;
+        for (double[] p : s.points()) {
+            if (Double.isNaN(p[1])) {
+                continue;
+            }
+            if (p[0] <= at.getEpochSecond() || Double.isNaN(value)) {
+                value = p[1];
+            }
+            if (p[0] > at.getEpochSecond()) {
+                break;
+            }
+        }
+        return Double.isNaN(value) ? 0 : value;
     }
 
     private static double max(Series s) {

@@ -1,5 +1,7 @@
 package dev.marwan.console.agent;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import tools.jackson.core.JacksonException;
@@ -20,7 +22,13 @@ public record K6Summary(int vus, int iterations, int booked, int rejected, int n
                         Integer refusedAfterAdmission, Integer soldOut, Integer overloaded, Integer faults,
                         Integer queueWaitP50, Integer queueWaitP95, Integer queueWaitMax,
                         Integer partySize, Integer patienceSeconds,
-                        Integer faultsAtJoin, Integer faultsAtBooking) {
+                        Integer faultsAtJoin, Integer faultsAtBooking,
+                        int waves, List<Wave> perWave) {
+
+    /** One wave of a rush, as k6 counted it. */
+    public record Wave(int wave, int vus, Integer joined, Integer admitted, int booked, Integer soldOutAtJoin,
+                       Integer gaveUp, Integer refusedAfterAdmission, Integer soldOut, Integer overloaded,
+                       Integer faultsAtJoin, Integer faultsAtBooking, Integer p95, Integer max) { }
 
     /** True when the run's script counted each customer's path; older scripts did not. */
     public boolean hasOutcomes() {
@@ -50,10 +58,24 @@ public record K6Summary(int vus, int iterations, int booked, int rejected, int n
                     opt(n, "refusedAfterAdmission"), opt(n, "soldOut"), opt(n, "overloaded"), opt(n, "faults"),
                     opt(n, "queueWaitP50"), opt(n, "queueWaitP95"), opt(n, "queueWaitMax"),
                     opt(n, "partySize"), opt(n, "patienceSeconds"),
-                    opt(n, "faultsAtJoin"), opt(n, "faultsAtBooking")));
+                    opt(n, "faultsAtJoin"), opt(n, "faultsAtBooking"),
+                    n.path("waves").asInt(1), waves(n.path("perWave"))));
         } catch (JacksonException e) {
             return Optional.empty();
         }
+    }
+
+    private static List<Wave> waves(JsonNode list) {
+        List<Wave> out = new ArrayList<>();
+        if (list.isArray()) {
+            for (JsonNode w : list) {
+                out.add(new Wave(w.path("wave").asInt(), w.path("vus").asInt(), opt(w, "joined"), opt(w, "admitted"),
+                        w.path("booked").asInt(), opt(w, "soldOutAtJoin"), opt(w, "gaveUp"),
+                        opt(w, "refusedAfterAdmission"), opt(w, "soldOut"), opt(w, "overloaded"),
+                        opt(w, "faultsAtJoin"), opt(w, "faultsAtBooking"), opt(w, "p95"), opt(w, "max")));
+            }
+        }
+        return List.copyOf(out);
     }
 
     private static Integer opt(JsonNode n, String field) {

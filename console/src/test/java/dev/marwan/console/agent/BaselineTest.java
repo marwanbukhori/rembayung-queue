@@ -139,6 +139,70 @@ class BaselineTest {
         assertThat(byLabel(baseline().gather(WINDOW)).get("Admissions possible within patience")).isEqualTo("720");
     }
 
+    static final String TWO_WAVES = "K6_SUMMARY {\"vus\":200,\"booked\":150,\"joined\":200,\"admitted\":165,"
+            + "\"soldOutAtJoin\":0,\"gaveUp\":35,\"refusedAfterAdmission\":0,\"soldOut\":0,\"overloaded\":15,"
+            + "\"faults\":0,\"faultsAtJoin\":0,\"faultsAtBooking\":0,\"queueWaitP50\":1,\"queueWaitP95\":2,"
+            + "\"queueWaitMax\":3,\"partySize\":2,\"patienceSeconds\":90,\"waves\":2,\"perWave\":["
+            + "{\"wave\":1,\"vus\":100,\"joined\":100,\"admitted\":70,\"booked\":60,\"soldOutAtJoin\":0,\"gaveUp\":30,"
+            + "\"refusedAfterAdmission\":0,\"soldOut\":0,\"overloaded\":10,\"faultsAtJoin\":0,\"faultsAtBooking\":0,"
+            + "\"p95\":2100,\"max\":4000},"
+            + "{\"wave\":2,\"vus\":100,\"joined\":100,\"admitted\":95,\"booked\":90,\"soldOutAtJoin\":0,\"gaveUp\":5,"
+            + "\"refusedAfterAdmission\":0,\"soldOut\":0,\"overloaded\":5,\"faultsAtJoin\":0,\"faultsAtBooking\":0,"
+            + "\"p95\":400,\"max\":900}]}";
+    static final RunWindow TWO_WAVE_WINDOW = new RunWindow("load-rush-1", "rush-1", START, START.plusSeconds(330), 2, 180);
+
+    void twoWaveCluster() {
+        cluster.logs.put("load-rush-1-abc", "running\n" + TWO_WAVES + "\n");
+        long t0 = START.getEpochSecond();
+        prometheus = (promql, label, s, e, step) -> promql.contains("kube_horizontalpodautoscaler")
+                ? List.of(new Series("queue-gate", List.of(new double[] {t0, 2}, new double[] {t0 + 60, 2},
+                        new double[] {t0 + 75, 6}, new double[] {t0 + 180, 6}, new double[] {t0 + 300, 4})))
+                : List.of();
+    }
+
+    @Test
+    void aTwoWaveRunGetsEachWavesFacts() {
+        twoWaveCluster();
+        Map<String, String> f = byLabel(baseline().gather(TWO_WAVE_WINDOW));
+
+        assertThat(f.get("Wave 1 · Arrived")).isEqualTo("100");
+        assertThat(f.get("Wave 2 · Booked")).isEqualTo("90");
+        assertThat(f.get("Wave 1 · Gave up waiting (403)")).isEqualTo("30");
+        assertThat(f.get("Wave 2 · Overloaded (503)")).isEqualTo("5");
+        assertThat(f.get("Wave 1 · Latency p95 / max")).isEqualTo("2100 / 4000 ms");
+        assertThat(f.get("Wave 1 · Ready pods at start, queue-gate")).isEqualTo("2");
+        assertThat(f.get("Wave 2 · Ready pods at start, queue-gate")).isEqualTo("6");
+        assertThat(f.get("Scaling, queue-gate")).isEqualTo("2 → 6 at +1m15s, 6 → 4 at +5m0s");
+    }
+
+    @Test
+    void aTwoWaveRunCutOffAfterWaveOneGetsOnlyWaveOneFacts() {
+        cluster.logs.put("load-rush-1-abc", "running\n" + TWO_WAVES.replaceAll(",\\{\"wave\":2.*\\]", "]") + "\n");
+        Map<String, String> f = byLabel(baseline().gather(TWO_WAVE_WINDOW));
+        assertThat(f).containsKey("Wave 1 · Arrived").doesNotContainKey("Wave 2 · Arrived");
+    }
+
+    @Test
+    void podsHeldBackByTheCpuBudgetAreAFact() {
+        cluster.events.put("Deployment/queue-gate", List.of(new EventBuilder().withType("Warning")
+                .withReason("FailedCreate").withMessage("pods \"queue-gate-x\" is forbidden: exceeded quota: compute-deploy")
+                .withLastTimestamp("2026-09-25T13:40:30Z").build()));
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f.get("Pods waiting for CPU during the run")).contains("exceeded quota");
+    }
+
+    @Test
+    void aOneWaveRunHasNoWaveFactsAndASteadyAutoscalerNoScalingFact() {
+        prometheus = (promql, label, s, e, step) -> promql.contains("kube_horizontalpodautoscaler")
+                ? List.of(new Series("queue-gate", List.of(new double[] {START.getEpochSecond(), 2},
+                        new double[] {START.getEpochSecond() + 60, 2})))
+                : List.of();
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f.keySet()).noneMatch(k -> k.startsWith("Wave "));
+        assertThat(f).doesNotContainKey("Scaling, queue-gate");
+        assertThat(f.get("Pods waiting for CPU during the run")).isEqualTo("none");
+    }
+
     @Test
     void anOldK6LineGivesOneOutcomesUnavailableFact() {
         cluster.logs.put("load-rush-1-abc", "running\n" + OLD_SUMMARY + "\n");

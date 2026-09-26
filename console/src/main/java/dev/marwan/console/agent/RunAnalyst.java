@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -159,8 +160,20 @@ public class RunAnalyst {
         if (end == null) {
             return null;
         }
+        Map<String, String> notes = job.getMetadata().getAnnotations() == null ? Map.of()
+                : job.getMetadata().getAnnotations();
+        int waves = "2".equals(notes.get("rembayung.dev/waves")) ? 2 : 1;
+        int gap = waves == 2 ? parse(notes.get("rembayung.dev/wave-gap-seconds"), 180) : 0;
         return new RunWindow(job.getMetadata().getName(), dropId(job),
-                Instant.parse(job.getStatus().getStartTime()), end.plus(TAIL));
+                Instant.parse(job.getStatus().getStartTime()), end.plus(TAIL), waves, gap);
+    }
+
+    private static int parse(String value, int otherwise) {
+        try {
+            return value == null ? otherwise : Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return otherwise;
+        }
     }
 
     /** The drop as the run was given it; the label is a DNS-safe copy that may differ in case. */

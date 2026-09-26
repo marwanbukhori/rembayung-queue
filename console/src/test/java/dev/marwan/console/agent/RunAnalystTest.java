@@ -122,6 +122,21 @@ class RunAnalystTest {
     }
 
     @Test
+    void aTwoWaveJobGivesATwoWaveWindow() {
+        Job job = withDropEnv(FakeCluster.loadJob("load-two", "t", NOW.minusSeconds(900), NOW.minusSeconds(500), false), "t");
+        job.getMetadata().setAnnotations(new java.util.HashMap<>(java.util.Map.of(
+                "rembayung.dev/waves", "2", "rembayung.dev/wave-gap-seconds", "180")));
+        cluster.jobs.add(job);
+
+        reconciler().reconcileOnce();
+
+        assertThat(analysed).singleElement().satisfies(w -> {
+            assertThat(w.waves()).isEqualTo(2);
+            assertThat(w.waveGapSeconds()).isEqualTo(180);
+        });
+    }
+
+    @Test
     void aClusterThatCannotBeReadIsSkippedQuietly() {
         RunAnalyst r = new RunAnalyst(new FakeCluster() {
             @Override

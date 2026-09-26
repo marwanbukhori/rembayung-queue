@@ -41,6 +41,29 @@ class K6SummaryTest {
     }
 
     @Test
+    void readsEachWaveOfATwoWaveRun() {
+        String log = "K6_SUMMARY {\"vus\":200,\"booked\":150,\"joined\":200,\"admitted\":165,\"gaveUp\":35,"
+                + "\"waves\":2,\"perWave\":[{\"wave\":1,\"vus\":100,\"joined\":100,\"admitted\":70,\"booked\":60,"
+                + "\"gaveUp\":30,\"overloaded\":10,\"p95\":2100,\"max\":4000},{\"wave\":2,\"vus\":100,\"joined\":100,"
+                + "\"admitted\":95,\"booked\":90,\"gaveUp\":5,\"overloaded\":5,\"p95\":400,\"max\":900}]}";
+
+        K6Summary s = K6Summary.parse(log).orElseThrow();
+
+        assertThat(s.waves()).isEqualTo(2);
+        assertThat(s.perWave()).hasSize(2);
+        assertThat(s.perWave().get(1).booked()).isEqualTo(90);
+        assertThat(s.perWave().get(0).p95()).isEqualTo(2100);
+        assertThat(s.perWave().get(1).vus()).isEqualTo(100);
+    }
+
+    @Test
+    void anOlderLineIsOneWaveWithNoPerWaveList() {
+        K6Summary s = K6Summary.parse("K6_SUMMARY {\"vus\":200,\"booked\":196}").orElseThrow();
+        assertThat(s.waves()).isEqualTo(1);
+        assertThat(s.perWave()).isEmpty();
+    }
+
+    @Test
     void anOlderLineHasNoOutcomes() {
         K6Summary s = K6Summary.parse("K6_SUMMARY {\"vus\":200,\"booked\":196}").orElseThrow();
         assertThat(s.hasOutcomes()).isFalse();
