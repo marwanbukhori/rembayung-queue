@@ -72,12 +72,16 @@ public class Analyst {
             """;
 
     private final Function<RunWindow, Facts> baseline;
-    private final Tools tools;
+    private final ToolCaller tools;
     private final Model model;
     private final Clock clock;
     private final Validator validator = new Validator();
 
     public Analyst(Function<RunWindow, Facts> baseline, Tools tools, Model model, Clock clock) {
+        this(baseline, ToolCaller.inProcess(tools), model, clock);
+    }
+
+    public Analyst(Function<RunWindow, Facts> baseline, ToolCaller tools, Model model, Clock clock) {
         this.baseline = baseline;
         this.tools = tools;
         this.model = model;
@@ -103,6 +107,7 @@ public class Analyst {
         messages.add(new Message("system", SYSTEM));
         messages.add(new Message("user", "Facts:\n" + render(facts.all()) + "\nCalls left: " + MAX_CALLS));
         List<String> problems = new ArrayList<>();
+        boolean viaMcp = true;
         try {
             for (int calls = 0; calls < MAX_CALLS && clock.instant().isBefore(deadline); calls++) {
                 String reply = model.chat(messages, timeout(deadline));
@@ -110,9 +115,11 @@ public class Analyst {
                 if (step == null || !step.path("call").isString()) {
                     break;
                 }
-                Fact fact = tools.call(step.path("call").asString(), step.path("args"), w, facts);
+                ToolCaller.Call call = tools.call(step.path("call").asString(), step.path("args"), w, facts);
+                Fact fact = call.fact();
+                viaMcp &= "mcp".equals(call.via());
                 trail.add(new TrailStep(step.path("call").asString(), LogLines.mask(step.path("args").toString()),
-                        LogLines.mask(text(step.path("why"))), fact.id()));
+                        LogLines.mask(text(step.path("why"))), fact.id(), call.via()));
                 messages.add(new Message("assistant", reply));
                 messages.add(new Message("user", render(List.of(fact)) + "\nCalls left: " + (MAX_CALLS - calls - 1)));
             }
@@ -126,7 +133,8 @@ public class Analyst {
                 problems = report == null ? List.of("the answer was not the report JSON") : validator.problems(report, facts);
                 if (problems.isEmpty()) {
                     return new Analysis(w.job(), w.dropId(), w.start(), w.end(), facts.all(), trail, report,
-                            model.name(), "model", null, List.of(), clock.instant(), millis(began));
+                            model.name(), "model", viaMcp ? null : "MCP unavailable, tools called in-process",
+                            List.of(), clock.instant(), millis(began));
                 }
                 messages.add(new Message("assistant", reply));
                 messages.add(new Message("user", "Fix these and answer with the corrected JSON only:\n- "

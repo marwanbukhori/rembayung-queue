@@ -58,9 +58,12 @@ public class AgentConfiguration {
 
     @Bean
     Analyst analyst(ObjectSource objects, RangeQuery prometheus, DemoStateProvider state, Model agentModel, Tools agentTools,
-                    Clock clock, dev.marwan.console.ConsoleProperties console) {
+                    Clock clock, dev.marwan.console.ConsoleProperties console, dev.marwan.console.auth.AccessKey key,
+                    @org.springframework.beans.factory.annotation.Value("${server.port:8082}") int port) {
         Baseline baseline = new Baseline(objects, prometheus, console.pool().perReplica(), state::currentFor);
-        return new Analyst(baseline::gather, agentTools, agentModel, clock);
+        // The agent asks through the console's own MCP endpoint, over loopback, like any other client.
+        ToolCaller viaMcp = new McpToolCaller("http://localhost:" + port + "/mcp", key.value(), agentTools);
+        return new Analyst(baseline::gather, viaMcp, agentModel, clock);
     }
 
     @Bean
