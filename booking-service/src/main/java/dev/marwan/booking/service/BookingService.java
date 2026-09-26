@@ -48,11 +48,16 @@ public class BookingService {
      */
     private final BookingService self;
 
+    /** A drill's extra hold on the connection; zero unless one is running. */
+    private final dev.marwan.booking.chaos.ChaosState chaos;
+
     public BookingService(SlotRepository slotRepository,
                           BookingRepository bookingRepository,
                           @Value("${booking.deposit-cents-per-head}") long depositCentsPerHead,
                           @Value("${booking.hold-ttl}") Duration holdTtl,
-                          @Lazy BookingService self) {
+                          @Lazy BookingService self,
+                          dev.marwan.booking.chaos.ChaosState chaos) {
+        this.chaos = chaos;
         this.slotRepository = slotRepository;
         this.bookingRepository = bookingRepository;
         this.depositCentsPerHead = depositCentsPerHead;
@@ -137,6 +142,17 @@ public class BookingService {
         }
 
         slot.takeSeats(request.partySize());
+
+        // A "slow database" drill holds the locked row and its connection longer, as a
+        // slow Oracle would. Zero outside a drill.
+        long drillDelay = chaos.delayMillis();
+        if (drillDelay > 0) {
+            try {
+                Thread.sleep(drillDelay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
 
         Instant now = Instant.now();
         Booking booking = bookingRepository.save(new Booking(
