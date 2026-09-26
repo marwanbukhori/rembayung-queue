@@ -50,8 +50,8 @@ public class IncidentConfiguration {
 
     @Bean
     Remediation remediation(dev.marwan.console.chaos.ClusterWrites writes, ChaosService chaos, IncidentWatcher watcher,
-                            IncidentStore store, Clock clock) {
-        return new Remediation(writes, chaos, watcher, store, clock);
+                            dev.marwan.console.agent.KubernetesConfigMaps maps, Clock clock) {
+        return new Remediation(writes, chaos, watcher, new RevertStore(maps), clock);
     }
 
     @Bean

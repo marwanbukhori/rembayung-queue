@@ -167,6 +167,14 @@ class McpToolsTest {
                     .isTrue();
             assertThat(call(keyed, "propose_remediation", Map.of("action", "delete-everything", "reason", "r")).isError())
                     .isTrue();
+            // Review minor 11 and I3: a malformed or out-of-range count is a tool error, not a crash or a proposal.
+            CallToolResult garbled = call(keyed, "propose_remediation",
+                    Map.of("action", "scale-booking", "replicas", "2.5x", "reason", "r"));
+            assertThat(garbled.isError()).isTrue();
+            assertThat(text(garbled)).contains("replicas");
+            assertThat(call(keyed, "propose_remediation",
+                    Map.of("action", "scale-booking", "replicas", 1, "reason", "r")).isError()).isTrue();
+            assertThat(incident.proposals).isEmpty();
             CallToolResult filed = call(keyed, "propose_remediation",
                     Map.of("action", "scale-booking", "replicas", 3, "reason", "the pool is saturated"));
             assertThat(filed.isError()).isFalse();

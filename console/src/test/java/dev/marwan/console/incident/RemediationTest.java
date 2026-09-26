@@ -19,7 +19,15 @@ class RemediationTest {
     IncidentWatcherTest.MovingClock clock;
     IncidentStore store;
     IncidentWatcher watcher;
-    ChaosServiceTest.Writes writes;
+    /** Writes that remember each autoscaler's minimum, starting at the manifest's 2. */
+    static class Hpas extends ChaosServiceTest.Writes {
+        final java.util.Map<String, Integer> min = new java.util.HashMap<>(java.util.Map.of("booking-service", 2, "queue-gate", 2));
+        @Override public void setHpaMin(String h, int n) { super.setHpaMin(h, n); min.put(h, n); }
+        @Override public int hpaMin(String h) { return min.get(h); }
+    }
+
+    Hpas writes;
+    RevertStore reverts;
     ChaosService chaos;
     Remediation remediation;
     String id;
@@ -31,9 +39,10 @@ class RemediationTest {
         SloReading breach = new SloReading(clock.now, true, null, true, 0.9, 3.0);
         watcher = new IncidentWatcher(() -> breach, store, Optional::empty, List::of, List::of, clock, i -> { });
         watcher.drillStarted(new ChaosService.ActiveFault("squeeze-pool", clock.now, clock.now.plusSeconds(120)));
-        writes = new ChaosServiceTest.Writes();
+        writes = new Hpas();
         chaos = mock(ChaosService.class);
-        remediation = new Remediation(writes, chaos, watcher, store, clock);
+        reverts = new RevertStore(new ChaosServiceTest.Maps());
+        remediation = new Remediation(writes, chaos, watcher, reverts, clock);
         id = store.open().orElseThrow().id;
     }
 
@@ -50,9 +59,9 @@ class RemediationTest {
         Incident i = store.get(id).orElseThrow();
         assertThat(i.status).isEqualTo("mitigating");
         assertThat(i.proposals.get(0).status()).isEqualTo("approved");
-        assertThat(i.reverts).singleElement().satisfies(r -> {
+        assertThat(reverts.pending()).singleElement().satisfies(r -> {
             assertThat(r.hpa()).isEqualTo("booking-service");
-            assertThat(r.minReplicas()).isEqualTo(2);
+            assertThat(r.original()).isEqualTo(2);
         });
         assertThat(i.timeline).anyMatch(e -> e.source().equals("human") && e.text().contains("approved"));
     }
@@ -68,7 +77,42 @@ class RemediationTest {
         clock.advance(2);
         remediation.revertDue();
         assertThat(writes.calls).containsExactly("hpa queue-gate 2");
-        assertThat(store.get(id).orElseThrow().reverts).isEmpty();
+        assertThat(reverts.pending()).isEmpty();
+    }
+
+    /** Review I3: a second raise must not record the first raise as the thing to go back to. */
+    @Test
+    void twoRaisesInARowStillRevertToTheOriginalMinimum() {
+        propose("raise-hpa-min", "booking-service", 3);
+        remediation.approve(id, 1);
+        clock.advance(300);
+        propose("raise-hpa-min", "booking-service", 4);
+        remediation.approve(id, 2);
+        writes.calls.clear();
+        clock.advance(601);
+        remediation.revertDue();
+        assertThat(writes.calls).containsExactly("hpa booking-service 2");
+        assertThat(writes.min.get("booking-service")).isEqualTo(2);
+    }
+
+    @Test
+    void aScaleAndARaiseTogetherStillRevertToTheOriginal() {
+        propose("scale-booking", "booking-service", 3);
+        remediation.approve(id, 1);
+        propose("raise-hpa-min", "booking-service", 4);
+        remediation.approve(id, 2);
+        clock.advance(700);
+        remediation.revertDue();
+        assertThat(writes.min.get("booking-service")).isEqualTo(2);
+    }
+
+    @Test
+    void fewerThanTwoOrMoreThanFourReplicasIsRefused() {
+        propose("scale-booking", "booking-service", 1);
+        assertThat(remediation.approve(id, 1)).isEqualTo(Remediation.Result.FAILED);
+        propose("raise-hpa-min", "queue-gate", 9);
+        assertThat(remediation.approve(id, 2)).isEqualTo(Remediation.Result.FAILED);
+        assertThat(writes.calls).isEmpty();
     }
 
     @Test
@@ -99,7 +143,7 @@ class RemediationTest {
         ChaosServiceTest.Writes refusing = new ChaosServiceTest.Writes() {
             @Override public void restart(String d) { throw new IllegalStateException("forbidden: deployments patch"); }
         };
-        Remediation r = new Remediation(refusing, chaos, watcher, store, clock);
+        Remediation r = new Remediation(refusing, chaos, watcher, reverts, clock);
         assertThat(r.approve(id, 1)).isEqualTo(Remediation.Result.FAILED);
         Incident i = store.get(id).orElseThrow();
         assertThat(i.proposals.get(0).status()).isEqualTo("failed");

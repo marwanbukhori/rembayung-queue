@@ -81,6 +81,13 @@ class IncidentCommanderTest {
     }
 
     @Test
+    void aProposedCountBelowTheManifestFloorIsRaisedToTwo() {
+        model.then("{\"done\":true}").then(DIAGNOSIS.replace("\"replicas\":3", "\"replicas\":1"));
+        commander.cycle();
+        assertThat(open().proposals).singleElement().satisfies(p -> assertThat(p.replicas()).isEqualTo(2));
+    }
+
+    @Test
     void lowConfidenceProposesNothing() {
         model.then("{\"done\":true}").then(DIAGNOSIS.replace("\"high\"", "\"low\""));
         commander.cycle();

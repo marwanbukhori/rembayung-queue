@@ -258,7 +258,7 @@ public class McpTools {
                 Map.of("incident", str("Incident id; default the open incident"),
                         "action", str("restart-booking, scale-booking, raise-hpa-min or end-fault"),
                         "target", str("booking-service (default) or queue-gate, for raise-hpa-min"),
-                        "replicas", integer("1 to 4, for scale-booking and raise-hpa-min"),
+                        "replicas", integer("2 to 4, for scale-booking and raise-hpa-min"),
                         "reason", str("Why, in one sentence")),
                 List.of("action", "reason"),
                 (ex, args) -> {
@@ -274,7 +274,7 @@ public class McpTools {
                     if (target.isEmpty()) {
                         throw new ToolError(id == null ? "no incident is open" : "no incident '" + id + "'");
                     }
-                    int n = Integer.parseInt(text(args, "replicas", "0"));
+                    Integer n = replicasOf(text(args, "replicas", null));
                     AtomicReference<Object> filed = new AtomicReference<>("the incident is no longer open");
                     watcher.update(target.get().id, i -> {
                         if (!i.isOpen()) {
@@ -287,7 +287,7 @@ public class McpTools {
                         Instant now = clock.instant();
                         Incident.Proposal p = new Incident.Proposal(i.proposals.size() + 1, now, action,
                                 "queue-gate".equals(text(args, "target", "")) ? "queue-gate" : "booking-service",
-                                n <= 0 ? null : Math.min(n, 4), LogLines.mask(text(args, "reason", "")), List.of(),
+                                n, LogLines.mask(text(args, "reason", "")), List.of(),
                                 "pending", null);
                         i.proposals.add(p);
                         i.add(now, "agent", "proposes " + IncidentCommander.describe(p)
@@ -386,6 +386,22 @@ public class McpTools {
     static String text(Map<String, Object> args, String name, String otherwise) {
         Object v = args.get(name);
         return v == null || v.toString().isBlank() ? otherwise : v.toString();
+    }
+
+    /** A proposal's replica count: absent, or a whole number from 2 to 4 - anything else is refused. */
+    static Integer replicasOf(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int n = new java.math.BigDecimal(value).intValueExact();
+            if (n >= 2 && n <= 4) {
+                return n;
+            }
+        } catch (NumberFormatException | ArithmeticException e) {
+            // Falls through to the refusal.
+        }
+        throw new ToolError("replicas must be a whole number from 2 to 4, not '" + value + "'");
     }
 
     /** The console's own agents: raw logs, and nothing that needs the key. */

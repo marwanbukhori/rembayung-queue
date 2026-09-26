@@ -66,7 +66,7 @@ public class IncidentCommander {
             {"cause": "...", "confidence": "low"|"medium"|"high",
              "claims": [{"text": "...", "facts": ["F1"]}],
              "proposal": {"action": "restart-booking"|"scale-booking"|"raise-hpa-min"|"end-fault",
-                          "target": "booking-service"|"queue-gate", "replicas": 1-4, "reason": "...", "facts": ["F1"]} or null}
+                          "target": "booking-service"|"queue-gate", "replicas": 2-4, "reason": "...", "facts": ["F1"]} or null}
             Every number in a claim must appear in a cited fact; do not compute new numbers. Propose only with medium or
             high confidence. A person approves or dismisses the proposal; you cannot apply it.
             """;
@@ -224,7 +224,8 @@ public class IncidentCommander {
 
     private static Integer replicas(JsonNode p) {
         int n = p.path("replicas").asInt(0);
-        return n <= 0 ? null : Math.min(n, 4);
+        // The manifest's minimum is 2 and the menu's ceiling 4: nothing the model says goes outside them.
+        return n <= 0 ? null : Math.max(2, Math.min(n, 4));
     }
 
     private static String confidence(JsonNode answer) {

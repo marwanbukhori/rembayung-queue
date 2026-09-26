@@ -30,15 +30,17 @@ public class Remediation {
     private final ClusterWrites writes;
     private final ChaosService chaos;
     private final IncidentWatcher watcher;
-    private final IncidentStore store;
+    private final RevertStore reverts;
+    static final int MIN_REPLICAS = 2;
+    static final int MAX_REPLICAS = 4;
     private final Clock clock;
 
-    public Remediation(ClusterWrites writes, ChaosService chaos, IncidentWatcher watcher, IncidentStore store,
+    public Remediation(ClusterWrites writes, ChaosService chaos, IncidentWatcher watcher, RevertStore reverts,
                        Clock clock) {
         this.writes = writes;
         this.chaos = chaos;
         this.watcher = watcher;
-        this.store = store;
+        this.reverts = reverts;
         this.clock = clock;
     }
 
@@ -87,46 +89,52 @@ public class Remediation {
         switch (p.action()) {
             case "restart-booking" -> writes.restart("booking-service");
             case "scale-booking" -> {
-                int n = p.replicas() == null ? 3 : p.replicas();
-                int previous = writes.hpaMin("booking-service");
+                int n = replicas(p);
+                reverts.raise("booking-service", writes.hpaMin("booking-service"), now.plus(TEMPORARY), i.id);
                 writes.scale("booking-service", n);
                 writes.setHpaMin("booking-service", n);
-                i.reverts.add(new Incident.Revert("booking-service", previous, now.plus(TEMPORARY)));
             }
             case "raise-hpa-min" -> {
                 String hpa = "queue-gate".equals(p.target()) ? "queue-gate" : "booking-service";
-                int previous = writes.hpaMin(hpa);
-                writes.setHpaMin(hpa, p.replicas() == null ? 3 : p.replicas());
-                i.reverts.add(new Incident.Revert(hpa, previous, now.plus(TEMPORARY)));
+                int n = replicas(p);
+                reverts.raise(hpa, writes.hpaMin(hpa), now.plus(TEMPORARY), i.id);
+                writes.setHpaMin(hpa, n);
             }
             case "end-fault" -> chaos.end();
             default -> throw new IllegalArgumentException("not on the menu: " + p.action());
         }
     }
 
-    /** Undo temporary raises whose ten minutes are up, on any incident, open or not. */
+    /** Replicas within the manifest's floor and the menu's ceiling, or the fix is refused. */
+    private static int replicas(Incident.Proposal p) {
+        int n = p.replicas() == null ? 3 : p.replicas();
+        if (n < MIN_REPLICAS || n > MAX_REPLICAS) {
+            throw new IllegalArgumentException("replicas must be between " + MIN_REPLICAS + " and " + MAX_REPLICAS
+                    + ", not " + n);
+        }
+        return n;
+    }
+
+    /** Put back each temporary raise whose time is up, to the minimum it had before the first raise. */
     public void revertDue() {
         Instant now = clock.instant();
-        for (Incident incident : store.list()) {
-            if (incident.reverts.stream().anyMatch(r -> !r.at().isAfter(now))) {
-                watcher.update(incident.id, i -> {
-                    List<Incident.Revert> keep = new ArrayList<>();
-                    for (Incident.Revert r : i.reverts) {
-                        if (r.at().isAfter(now)) {
-                            keep.add(r);
-                            continue;
-                        }
-                        try {
-                            writes.setHpaMin(r.hpa(), r.minReplicas());
-                            i.add(now, "action", "reverted " + r.hpa() + "'s autoscaler minimum to " + r.minReplicas());
-                        } catch (RuntimeException e) {
-                            keep.add(r);
-                            i.add(now, "action", "could not revert " + r.hpa() + ": " + KubernetesAccess.summarise(e));
-                        }
-                    }
-                    i.reverts = keep;
-                });
+        for (RevertStore.Pending r : reverts.pending()) {
+            if (r.until().isAfter(now)) {
+                continue;
             }
+            try {
+                writes.setHpaMin(r.hpa(), r.original());
+                reverts.remove(r.hpa());
+                note(r.incident(), now, "reverted " + r.hpa() + "'s autoscaler minimum to " + r.original());
+            } catch (RuntimeException e) {
+                note(r.incident(), now, "could not revert " + r.hpa() + ": " + KubernetesAccess.summarise(e));
+            }
+        }
+    }
+
+    private void note(String incident, Instant now, String text) {
+        if (incident != null && !incident.isBlank()) {
+            watcher.update(incident, i -> i.add(now, "action", text));
         }
     }
 }
