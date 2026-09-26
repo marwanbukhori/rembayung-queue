@@ -26,7 +26,8 @@ public class AnalysesController {
 
     /** One line per run for lists: enough to choose one without loading them all. */
     public record Summary(String key, String job, String dropId, Instant start, Instant end, Instant analysedAt,
-                          String source, String model, String note, int claims) { }
+                          String source, String model, String note, int claims,
+                          Integer customers, Integer booked, Integer seats, Integer oversold) { }
 
     private final AnalysisStore store;
     private final RunAnalyst runAnalyst;
@@ -41,7 +42,9 @@ public class AnalysesController {
     @GetMapping("/api/analyses")
     public List<Summary> list() {
         return store.list().stream().map(a -> new Summary(a.key(), a.job(), a.dropId(), a.start(), a.end(), a.analysedAt(),
-                a.source(), a.model(), a.note(), a.report().all().size())).toList();
+                a.source(), a.model(), a.note(), a.report().all().size(),
+                number(a.facts(), "Arrived"), number(a.facts(), "Booked"),
+                number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"))).toList();
     }
 
     /**
@@ -66,6 +69,12 @@ public class AnalysesController {
             case BUSY -> ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "BUSY"));
             case UNKNOWN -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "NOT_FOUND"));
         };
+    }
+
+    /** A fact's value as a whole number, or null when it is missing or says something else. */
+    static Integer number(List<Fact> facts, String label) {
+        return facts.stream().filter(f -> f.label().equals(label) && f.value().matches("\\d{1,9}")).findFirst()
+                .map(f -> Integer.valueOf(f.value())).orElse(null);
     }
 
     private static String presented(HttpServletRequest request) {

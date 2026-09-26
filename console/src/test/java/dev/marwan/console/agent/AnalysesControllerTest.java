@@ -50,6 +50,22 @@ class AnalysesControllerTest {
     }
 
     @Test
+    void listsCarryTheHeadlineNumbers() throws Exception {
+        Analysis a = one();
+        Analysis withFunnel = new Analysis(a.job(), a.dropId(), a.start(), a.end(), List.of(
+                new Fact("F1", "k6", "Arrived", "200"), new Fact("F2", "k6", "Booked", "88"),
+                new Fact("F3", "k6", "Seats taken by this run", "176"), new Fact("F4", "invariant", "Seats oversold", "0")),
+                a.trail(), a.report(), a.model(), a.source(), a.note(), a.problems(), a.analysedAt(), a.millis());
+        when(store.list()).thenReturn(List.of(withFunnel, one()));
+        mvc.perform(get("/api/analyses"))
+                .andExpect(jsonPath("$[0].customers").value(200))
+                .andExpect(jsonPath("$[0].booked").value(88))
+                .andExpect(jsonPath("$[0].seats").value(176))
+                .andExpect(jsonPath("$[0].oversold").value(0))
+                .andExpect(jsonPath("$[1].customers").doesNotExist());
+    }
+
+    @Test
     void readsOneReport() throws Exception {
         when(store.get("load-a")).thenReturn(Optional.of(one()));
         mvc.perform(get("/api/analyses/load-a"))
