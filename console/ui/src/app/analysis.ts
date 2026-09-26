@@ -50,6 +50,8 @@ export interface AnalysisSummary {
   oversold: number | null;
   /** 1, or 2 for a two-wave rush. */
   waves?: number;
+  /** How long the analysis took. */
+  millis?: number;
 }
 
 @Injectable({ providedIn: 'root' })

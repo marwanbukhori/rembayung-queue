@@ -27,7 +27,7 @@ public class AnalysesController {
     /** One line per run for lists: enough to choose one without loading them all. */
     public record Summary(String key, String job, String dropId, Instant start, Instant end, Instant analysedAt,
                           String source, String model, String note, int claims,
-                          Integer customers, Integer booked, Integer seats, Integer oversold, int waves) { }
+                          Integer customers, Integer booked, Integer seats, Integer oversold, int waves, long millis) { }
 
     private final AnalysisStore store;
     private final RunAnalyst runAnalyst;
@@ -50,7 +50,7 @@ public class AnalysesController {
                 a.source(), a.model(), a.note(), a.report().all().size(),
                 number(a.facts(), "Arrived"), number(a.facts(), "Booked"),
                 number(a.facts(), "Seats taken by this run"), number(a.facts(), "Seats oversold"),
-                a.facts().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived")) ? 2 : 1);
+                a.facts().stream().anyMatch(f -> f.label().equals("Wave 2 · Arrived")) ? 2 : 1, a.millis());
     }
 
     /**

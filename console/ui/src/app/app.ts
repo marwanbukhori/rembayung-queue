@@ -230,7 +230,7 @@ export class App {
     { surface: 'visitor', label: 'Run a simulation' },
     { surface: 'cluster', label: 'Cluster' },
     { surface: 'cicd', label: 'CI/CD' },
-    { surface: 'agent', label: 'AI Agent' },
+    { surface: 'agent', label: 'AI Agent & MCP' },
     { surface: 'docs', label: 'Build notes' }
   ];
 

@@ -87,8 +87,8 @@ interface Outward {
             <span class="tile-what">How a commit reaches a pod, with real runs and their logs</span>
           </button>
           <button class="tile" (click)="agent.emit()">
-            <span class="tile-name">AI Agent <span class="tag">In progress</span></span>
-            <span class="tile-what">A bounded agent that reads each rush and reports what it found, citing its facts</span>
+            <span class="tile-name">AI Agent &amp; MCP <span class="tag live">● Live</span></span>
+            <span class="tile-what">Reads every rush and reports what it found, citing its facts. Connect your own Claude to the same tools over MCP</span>
           </button>
           <button class="tile" (click)="docs.emit()">
             <span class="tile-name">Build notes</span>
@@ -211,6 +211,7 @@ interface Outward {
     .tile-name { font-size: 18px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
     .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
            background: var(--chip-warn-bg); color: var(--chip-warn-fg); }
+    .tag.live { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
     .tile-what { font-size: 14px; color: var(--ink-soft); }
     .tile.primary .tile-what { color: rgba(255, 255, 255, .9); }
     .tile-go { margin-top: auto; padding-top: 16px; font-size: 22px; font-weight: 700; }
