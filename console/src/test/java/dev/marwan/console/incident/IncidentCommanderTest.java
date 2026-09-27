@@ -147,6 +147,26 @@ class IncidentCommanderTest {
     }
 
     @Test
+    void aDrillsRootCauseIsTheInjectedFaultAndRecoveryIsCountedToTheFirstRecovery() {
+        Incident i = open();
+        i.detectedAt = i.openedAt.plusSeconds(10);
+        i.add(i.openedAt.plusSeconds(100), "slo", "recovered: success 99.5%, p95 0.4 s");
+        i.resolvedAt = i.openedAt.plusSeconds(400);
+        i.status = "resolved";
+        i.diagnoses.add(new Incident.Diagnosis(i.openedAt.plusSeconds(60), "queue-gate startup probes", "high",
+                java.util.List.of(), java.util.List.of()));
+        model.then(new ModelUnavailable("down"));
+        Incident.Postmortem pm = new PostmortemWriter(model).write(i);
+        assertThat(pm.rootCause()).contains("squeeze-pool").doesNotContain("startup probes");
+        assertThat(pm.timeToRecoverSeconds()).isEqualTo(90);
+    }
+
+    @Test
+    void thePromptTellsTheAgentADrillsFaultIsTheKnownCause() {
+        assertThat(IncidentCommander.SYSTEM).contains("drill").contains("known cause");
+    }
+
+    @Test
     void aModelWrittenPostmortemIsValidated() {
         Incident i = open();
         i.detectedAt = i.openedAt.plusSeconds(40);

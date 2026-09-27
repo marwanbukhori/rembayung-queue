@@ -42,9 +42,13 @@ public class PostmortemWriter {
     public Incident.Postmortem write(Incident incident) {
         long detect = incident.detectedAt == null ? -1
                 : Duration.between(incident.openedAt, incident.detectedAt).toSeconds();
-        long recover = incident.resolvedAt == null ? -1
-                : Duration.between(incident.detectedAt != null ? incident.detectedAt : incident.openedAt,
-                        incident.resolvedAt).toSeconds();
+        // Recovery is the first moment the SLOs were back in target, not when the incident was finally closed
+        // (which, on an idle system, waits for the traffic to stop).
+        java.time.Instant from = incident.detectedAt != null ? incident.detectedAt : incident.openedAt;
+        java.time.Instant recoveredAt = incident.timeline.stream()
+                .filter(e -> "slo".equals(e.source()) && e.text().startsWith("recovered") && !e.at().isBefore(from))
+                .map(IncidentEvent::at).findFirst().orElse(incident.resolvedAt);
+        long recover = recoveredAt == null ? -1 : Duration.between(from, recoveredAt).toSeconds();
         Facts facts = facts(incident, detect, recover);
         try {
             String reply = model.chat(List.of(new Message("system", PROMPT),
@@ -74,6 +78,9 @@ public class PostmortemWriter {
     private static Facts facts(Incident i, long detect, long recover) {
         Facts facts = new Facts();
         facts.add("incident", "Kind", i.kind + (i.fault == null ? "" : ", fault " + i.fault));
+        if ("drill".equals(i.kind) && i.fault != null) {
+            facts.add("incident", "Known cause", knownCause(i.fault));
+        }
         facts.add("incident", "Outcome", i.status);
         facts.add("incident", "Time to detect", detect < 0 ? "not detected" : detect + " s");
         facts.add("incident", "Time to recover", recover < 0 ? "not recovered" : recover + " s");
@@ -91,9 +98,20 @@ public class PostmortemWriter {
         return out.toString();
     }
 
+    static String knownCause(String fault) {
+        return switch (fault) {
+            case "squeeze-pool" -> "The drill's injected fault, squeeze-pool: booking-service's connection pool was cut to one connection, so bookings queued for it and were turned away.";
+            case "slow-database" -> "The drill's injected fault, slow-database: each booking held its database connection longer, so the pool saturated.";
+            case "kill-booking-pod" -> "The drill's injected fault, kill-booking-pod: one booking-service pod was deleted, halving the connections until its replacement was ready.";
+            default -> "The drill's injected fault, " + fault + ".";
+        };
+    }
+
     static Incident.Postmortem fallback(Incident i, long detect, long recover) {
-        String cause = i.diagnoses.stream().filter(d -> !d.cause().startsWith("could not"))
-                .reduce((a, b) -> b).map(Incident.Diagnosis::cause).orElse("not established");
+        // A drill's cause is known: it is the fault that was injected, whatever the agent said last.
+        String cause = "drill".equals(i.kind) && i.fault != null ? knownCause(i.fault)
+                : i.diagnoses.stream().filter(d -> !d.cause().startsWith("could not"))
+                        .reduce((a, b) -> b).map(Incident.Diagnosis::cause).orElse("not established");
         List<String> fixes = i.proposals.stream().filter(p -> "approved".equals(p.status()))
                 .map(IncidentCommander::describe).toList();
         String summary = ("drill".equals(i.kind) ? "A drill (" + i.fault + ")" : "An SLO breach")

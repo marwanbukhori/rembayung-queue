@@ -133,6 +133,11 @@ public class IncidentWatcher {
             incident.knownPods = new ArrayList<>(current);
         }
         for (String warning : warnings.get()) {
+            // A new pod fails its startup probe until the JVM is up: expected during any scale-up, and on the
+            // live drill it led the agent away from the real cause. Liveness and readiness failures still count.
+            if (warning.contains("Startup probe failed")) {
+                continue;
+            }
             if (!incident.seenWarnings.contains(warning)) {
                 incident.seenWarnings.add(warning);
                 incident.add(now, "kubernetes", warning);
@@ -149,6 +154,7 @@ public class IncidentWatcher {
             if (!now.isBefore(incident.unreadableSince.plus(HOLD))) {
                 incident.status = "unresolved";
                 incident.resolvedAt = now;
+                expirePending(incident, now);
                 incident.add(now, "slo", "closed unresolved: the SLOs could not be read for 60 s after the fault"
                         + " ended" + (reading.detail() == null ? "" : " (" + reading.detail() + ")"));
                 log.info("incident {} closed unresolved: SLOs unreadable", incident.id);
@@ -167,6 +173,7 @@ public class IncidentWatcher {
         if (!now.isBefore(incident.healthySince.plus(HOLD))) {
             incident.status = "resolved";
             incident.resolvedAt = now;
+            expirePending(incident, now);
             incident.add(now, "slo", reading.hasTraffic() ? "resolved: both SLOs held for 60 s"
                     : "resolved: the fault has ended and there is no traffic to breach them");
             log.info("incident {} resolved", incident.id);
@@ -209,5 +216,20 @@ public class IncidentWatcher {
         }
         return "success " + (r.successRatio() == null ? "?" : Math.round(r.successRatio() * 1000) / 10.0 + "%")
                 + ", p95 " + (r.p95Seconds() == null ? "?" : r.p95Seconds() + " s");
+    }
+
+    /** A proposal nobody decided before the incident closed can no longer be approved. */
+    static void expirePending(Incident incident, java.time.Instant now) {
+        boolean any = false;
+        for (int n = 0; n < incident.proposals.size(); n++) {
+            Incident.Proposal p = incident.proposals.get(n);
+            if ("pending".equals(p.status())) {
+                incident.proposals.set(n, p.decided("expired", now));
+                any = true;
+            }
+        }
+        if (any) {
+            incident.add(now, "slo", "a proposal still waiting when the incident closed has expired");
+        }
     }
 }

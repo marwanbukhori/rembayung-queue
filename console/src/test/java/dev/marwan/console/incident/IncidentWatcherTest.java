@@ -191,6 +191,37 @@ class IncidentWatcherTest {
     }
 
     @Test
+    void startupProbeFailuresOfPodsStillStartingStayOutOfTheTimeline() {
+        IncidentWatcher w = watcher();
+        w.drillStarted(drill(120));
+        warnings.add("Unhealthy on Pod/queue-gate-x: Startup probe failed: Get \"http://10.1.1.1:9090/actuator/health/liveness\"");
+        warnings.add("Unhealthy on Pod/booking-service-a: Readiness probe failed: timeout");
+        reading = breach();
+        w.tick();
+        Incident i = store.open().orElseThrow();
+        assertThat(i.timeline).noneMatch(e -> e.text().contains("Startup probe failed"));
+        assertThat(i.timeline).anyMatch(e -> e.text().contains("Readiness probe failed"));
+    }
+
+    @Test
+    void closingAnIncidentExpiresAProposalStillWaiting() {
+        IncidentWatcher w = watcher();
+        w.drillStarted(drill(120));
+        Incident open = store.open().orElseThrow();
+        open.proposals.add(new Incident.Proposal(1, clock.instant(), "scale-booking", "booking-service", 3,
+                "more pods", java.util.List.of(), "pending", null));
+        store.put(open);
+        reading = healthy();
+        for (int s = 0; s <= 60; s += 15) {
+            clock.advance(15);
+            w.tick();
+        }
+        Incident closedOne = store.list().get(0);
+        assertThat(closedOne.status).isEqualTo("resolved");
+        assertThat(closedOne.proposals).allMatch(p -> p.status().equals("expired"));
+    }
+
+    @Test
     void aRestartedConsoleCarriesOnWithTheOpenIncident() {
         watcher().drillStarted(drill(120));
         IncidentWatcher after = watcher();

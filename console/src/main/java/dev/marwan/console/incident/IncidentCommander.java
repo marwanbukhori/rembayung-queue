@@ -55,6 +55,9 @@ public class IncidentCommander {
             You are the incident commander for a restaurant's virtual queue (queue-gate) and booking service
             (booking-service, a pool of 5 Oracle connections per pod) on OpenShift. An incident is open: an SLO
             breach, or a deliberate drill. Find the cause from the numbered facts and, if you can, propose ONE fix.
+            In a drill the injected fault (the "Active fault" fact) is the known cause: explain its effects and what
+            would restore service, rather than looking for another culprit. Pods that are still starting up during a
+            scale-up are expected, not a cause.
             You may ask up to %d questions with these read-only tools (each answer becomes a new fact):
             %s
             get_slo {} - both booking SLOs now and over the last 15 minutes
