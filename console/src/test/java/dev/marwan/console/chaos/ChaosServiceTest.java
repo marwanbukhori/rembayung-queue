@@ -218,4 +218,12 @@ public class ChaosServiceTest {
         booking.failStart = false;
         chaos.inject("slow-database");
     }
+
+    @Test
+    void aDrillNeedsARushRunning() {
+        ChaosService idle = new ChaosService(maps, () -> pods, writes, booking, drills::add, clock, () -> false);
+        assertThatThrownBy(() -> idle.inject("squeeze-pool"))
+                .isInstanceOf(ChaosService.Refused.class).hasMessageContaining("rush");
+        assertThat(drills).isEmpty();
+    }
 }

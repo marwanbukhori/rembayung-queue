@@ -100,17 +100,21 @@ export class LoadService {
   }
 
   setRate(admitRate: number): void {
-    // During wave 2 the running sitting is wave 2's own, so that is the one to change.
+    // A two-wave run has two sittings. Both are changed, so a rate chosen in wave 1 or
+    // between the waves is the one wave 2 opens with, not only the sitting that has finished.
     const run = this.run();
-    const dropId = run?.waves === 2 && run.currentWave === 2 && run.wave2DropId ? run.wave2DropId : this.dropId;
-    if (!dropId) {
+    const two = run?.waves === 2 && run.phase !== 'NONE' && run.wave2DropId;
+    const dropIds = [this.dropId, two ? run!.wave2DropId : null].filter((d): d is string => !!d);
+    if (dropIds.length === 0) {
       return;
     }
     this.rateFailure.set(null);
-    this.http.post<{ admitRate: number }>(`/api/drops/${dropId}/rate`, { admitRate }).subscribe({
-      next: (rate) => this.admitRate.set(rate.admitRate),
-      error: (err) => this.rateFailure.set(describe(err, 'the rate could not be changed just now'))
-    });
+    for (const dropId of dropIds) {
+      this.http.post<{ admitRate: number }>(`/api/drops/${dropId}/rate`, { admitRate }).subscribe({
+        next: (rate) => this.admitRate.set(rate.admitRate),
+        error: (err) => this.rateFailure.set(describe(err, 'the rate could not be changed just now'))
+      });
+    }
   }
 
   private poll(): void {

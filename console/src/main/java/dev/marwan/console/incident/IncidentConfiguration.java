@@ -73,24 +73,23 @@ public class IncidentConfiguration {
 
     @Bean
     CommanderTicker commanderTicker(IncidentCommander commander, IncidentWatcher watcher, IncidentHooks hooks,
-                                    dev.marwan.console.agent.Model agentModel,
+                                    IncidentStore store, dev.marwan.console.agent.Model agentModel,
                                     @Value("${console.incidents.enabled:false}") boolean enabled) {
-        PostmortemWriter writer = new PostmortemWriter(agentModel);
+        Postmortems postmortems = new Postmortems(new PostmortemWriter(agentModel), store, watcher);
         // Written off the watcher's lock: a model call can take a minute.
-        hooks.onClosed(closed -> Thread.ofVirtual().start(() -> {
-            Incident.Postmortem pm = writer.write(closed);
-            watcher.update(closed.id, i -> i.postmortem = pm);
-        }));
-        return new CommanderTicker(commander, enabled);
+        hooks.onClosed(closed -> Thread.ofVirtual().start(() -> postmortems.write(closed)));
+        return new CommanderTicker(commander, postmortems, enabled);
     }
 
-    /** One commander cycle every 30 s while an incident is open. */
+    /** One commander cycle every 30 s while an incident is open, then any missing postmortems. */
     public static class CommanderTicker {
         private final IncidentCommander commander;
+        private final Postmortems postmortems;
         private final boolean enabled;
 
-        CommanderTicker(IncidentCommander commander, boolean enabled) {
+        CommanderTicker(IncidentCommander commander, Postmortems postmortems, boolean enabled) {
             this.commander = commander;
+            this.postmortems = postmortems;
             this.enabled = enabled;
         }
 
@@ -101,6 +100,11 @@ public class IncidentConfiguration {
                     commander.cycle();
                 } catch (RuntimeException e) {
                     org.slf4j.LoggerFactory.getLogger(CommanderTicker.class).warn("commander cycle skipped: {}", e.toString());
+                }
+                try {
+                    postmortems.backfill();
+                } catch (RuntimeException e) {
+                    org.slf4j.LoggerFactory.getLogger(CommanderTicker.class).warn("postmortem sweep skipped: {}", e.toString());
                 }
             }
         }

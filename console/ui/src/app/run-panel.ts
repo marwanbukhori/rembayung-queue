@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { DemoKeyService, hasConsoleKey } from './key';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
@@ -43,12 +43,12 @@ const CROWDS = [
 @Component({
   selector: 'rb-run-panel',
   template: `
-    <section class="panel">
-      <div class="accent-top"></div>
+    <section [class.panel]="!bare()">
+      @if (!bare()) { <div class="accent-top"></div> }
       <div class="body">
         <div class="head">
           <div>
-            <h2 class="title">Run a rush</h2>
+            @if (!bare()) { <h2 class="title">Run a rush</h2> }
             <p class="sub">
               A 9pm opening of your own, with its own 250 seats and its own queue. Nothing here touches the
               public sitting or anyone else on this page, and running it again is free.
@@ -191,6 +191,8 @@ const CROWDS = [
 export class RunPanel {
   /** Read once: the key arrives with the page and does not appear mid-session. */
   protected readonly readOnly = !hasConsoleKey();
+  /** Inside the controls card's tab, which already says "Run a rush". */
+  readonly bare = input(false);
 
   private readonly sandboxes = inject(SandboxService);
   protected readonly demoKey = inject(DemoKeyService);

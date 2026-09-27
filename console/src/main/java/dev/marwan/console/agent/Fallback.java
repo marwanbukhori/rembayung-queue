@@ -60,6 +60,11 @@ public final class Fallback {
         }
         find(facts, "Admit rate").filter(f -> !f.value().startsWith("unavailable"))
                 .ifPresent(f -> customers.add(claim("The queue admitted customers at " + f.value() + ".", f)));
+        // No refusals counted and no rate to report: say where they went, rather than leave the section blank.
+        if (customers.isEmpty() && arrived.isPresent() && booked.isPresent()) {
+            customers.add(new Claim(booked.get().value() + " of the " + arrived.get().value()
+                    + " customers who arrived booked a seat; no refusals were counted.", ids(booked, arrived)));
+        }
 
         for (Fact f : facts.all()) {
             String v = f.value();

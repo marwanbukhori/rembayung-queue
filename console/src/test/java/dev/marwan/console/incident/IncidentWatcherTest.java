@@ -70,6 +70,38 @@ class IncidentWatcherTest {
     }
 
     @Test
+    void aDrillWhoseIncidentWasNeverWrittenIsOpenedOnTheNextTick() {
+        // The console restarted, or the store refused the write, between the fault and its incident.
+        IncidentWatcher w = watcher();
+        fault = Optional.of(drill(120));
+        reading = healthy();
+        clock.advance(15);
+        w.tick();
+        Incident i = store.open().orElseThrow();
+        assertThat(i.kind).isEqualTo("drill");
+        assertThat(i.fault).isEqualTo("squeeze-pool");
+        assertThat(i.timeline).anyMatch(e -> e.source().equals("chaos"));
+    }
+
+    @Test
+    void aDrillWhoseIncidentHasClosedIsNotOpenedAgain() {
+        IncidentWatcher w = watcher();
+        ChaosService.ActiveFault f = drill(300);
+        w.drillStarted(f);
+        fault = Optional.of(f);
+        reading = healthy();
+        for (int n = 0; n < 6; n++) {
+            clock.advance(15);
+            w.tick();
+        }
+        assertThat(store.open()).isEmpty();
+        clock.advance(15);
+        w.tick();
+        assertThat(store.open()).isEmpty();
+        assertThat(store.list()).hasSize(1);
+    }
+
+    @Test
     void aBriefBreachDoesNotOpenAnIncidentButASustainedOneDoes() {
         IncidentWatcher w = watcher();
         reading = breach();

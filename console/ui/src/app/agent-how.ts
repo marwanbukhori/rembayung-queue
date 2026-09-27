@@ -161,7 +161,6 @@ interface Step { tool: string; why: string; found: string }
       .run .k { display: inline; }
     }
     .badge.live { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
-    .older { margin-top: 12px; }
     .badge.soft { background: var(--chip-neutral-bg); color: var(--chip-neutral-fg); font-weight: 600; }
     .note { font-size: 14px; color: var(--ink-soft); margin: 0 0 8px; text-wrap: pretty; }
     .mono { font-family: var(--mono); }

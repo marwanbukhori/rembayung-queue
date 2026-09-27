@@ -18,6 +18,10 @@ public class ChaosConfiguration {
     ChaosService chaosService(KubernetesConfigMaps maps, ObjectSource objects, ClusterWrites writes,
                               ApplicationEventPublisher events, Clock clock) {
         return new ChaosService(maps, () -> objects.pods("booking-service"), writes,
-                new RestBookingChaos(RestClient.builder()), events::publishEvent, clock);
+                new RestBookingChaos(RestClient.builder()), events::publishEvent, clock,
+                () -> objects.jobs().stream().anyMatch(j -> j.getMetadata().getLabels() != null
+                        && "rembayung-load".equals(j.getMetadata().getLabels().get("app"))
+                        && j.getStatus() != null && j.getStatus().getActive() != null
+                        && j.getStatus().getActive() > 0));
     }
 }

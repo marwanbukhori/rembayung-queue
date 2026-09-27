@@ -91,6 +91,14 @@ public class IncidentWatcher {
         breachSince = reading.breached() ? (breachSince == null ? now : breachSince) : null;
         Optional<Incident> open = store.open();
         if (open.isEmpty()) {
+            // A drill with no incident of its own: the console restarted, or the store refused the
+            // write, between the fault and its incident. One that has already closed is not reopened.
+            Optional<ChaosService.ActiveFault> active = fault.get();
+            if (active.isPresent() && store.list().stream()
+                    .noneMatch(i -> !i.openedAt.isBefore(active.get().startedAt().minusSeconds(5)))) {
+                drillStarted(active.get());
+                return;
+            }
             if (breachSince != null && !now.isBefore(breachSince.plus(SUSTAINED))) {
                 Incident i = open(now, "breach");
                 i.add(now, "slo", describe(reading) + " - breached for " + SUSTAINED.toSeconds() + " s");

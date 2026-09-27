@@ -48,10 +48,10 @@ public class Validator {
         }
         // With the funnel known, a report that does not say where the customers went has missed the point.
         if (facts.all().stream().anyMatch(f -> f.label().equals("Arrived"))) {
-            if (report.summary().isEmpty() && report.wentWell().isEmpty()) {
+            if (report.summary().isEmpty()) {
                 problems.add("the summary section is empty");
             }
-            if (report.customers().isEmpty() && report.wentWell().isEmpty()) {
+            if (report.customers().isEmpty()) {
                 problems.add("the customers section is empty: say where the customers went");
             }
         }

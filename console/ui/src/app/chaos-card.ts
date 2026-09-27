@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FAULTS, IncidentService, duration, faultName } from './incidents';
 import { DemoKeyService, hasConsoleKey } from './key';
@@ -15,14 +15,14 @@ import { LoadService } from './load.service';
 @Component({
   selector: 'rb-chaos-card',
   template: `
-    <section class="card chaos">
+    <section class="chaos" [class.card]="!bare()" [class.bare]="bare()">
       <div class="head">
-        <h2 class="title">Chaos drill</h2>
+        @if (!bare()) { <h2 class="title">Chaos drill</h2> }
         <span class="chip">up to 2 minutes</span>
       </div>
       <p class="sub">
         Break one thing and watch the SLOs, the incident and the agent respond. Every fault ends by itself.
-        @if (!rushing()) { <span class="hint">Start a rush first, or there is no traffic to hurt.</span> }
+        @if (!rushing()) { <span class="hint">Start a rush first: a drill needs traffic to hurt.</span> }
       </p>
 
       @if (incidents.active(); as a) {
@@ -36,7 +36,7 @@ import { LoadService } from './load.service';
 
       <div class="faults">
         @for (f of faults; track f.id) {
-          <button class="fault" [disabled]="readOnly || busy() || !!incidents.active()" (click)="start(f.id)">
+          <button class="fault" [disabled]="readOnly || busy() || !rushing() || !!incidents.active()" (click)="start(f.id)">
             <span class="name">{{ f.name }}</span>
             <span class="effect">{{ f.effect }}</span>
           </button>
@@ -56,6 +56,7 @@ import { LoadService } from './load.service';
   `,
   styles: `
     .chaos { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; border-top: 4px solid var(--dhl-red); }
+    .chaos.bare { padding: 24px; border-top: 0; }
     .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .title { margin: 0; font-size: 20px; }
     .chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
@@ -82,6 +83,8 @@ export class ChaosCard {
   protected readonly demoKey = inject(DemoKeyService);
   private readonly loads = inject(LoadService);
 
+  /** Inside the controls card's tab rather than a card of its own. */
+  readonly bare = input(false);
   protected readonly faults = FAULTS;
   protected readonly readOnly = !hasConsoleKey();
   protected readonly busy = signal(false);
@@ -104,7 +107,8 @@ export class ChaosCard {
       error: (e: HttpErrorResponse) => {
         this.busy.set(false);
         this.failure.set(e.status === 409
-          ? `${faultName(e.error?.active?.fault)} is already running; one fault at a time.`
+          ? (e.error?.error === 'REFUSED' ? e.error.detail
+            : `${faultName(e.error?.active?.fault)} is already running; one fault at a time.`)
           : e.status === 401 ? 'The console key was refused.' : 'The drill could not start. Try again in a moment.');
         this.incidents.refresh();
       }

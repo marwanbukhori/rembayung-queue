@@ -264,9 +264,11 @@ public class LoadOps {
             return;
         }
         if (isLive(existing)) {
+            // The Job's own deadline: a two-wave run has twice the one-wave limit.
+            Long deadline = existing.getSpec() == null ? null : existing.getSpec().getActiveDeadlineSeconds();
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "a load run for this drop is already in flight; it stops by itself within "
-                            + DEADLINE_SECONDS + " seconds");
+                            + (deadline == null ? DEADLINE_SECONDS : deadline) + " seconds");
         }
         kubernetes.client().batch().v1().jobs()
                 .inNamespace(properties.namespace()).withName(jobName).delete();

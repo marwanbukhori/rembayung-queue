@@ -122,6 +122,19 @@ class LoadOpsTest {
     }
 
     @Test
+    void aLiveTwoWaveRunIsSaidToStopWithinItsOwnDeadline() {
+        KubernetesClient client = mock(KubernetesClient.class, RETURNS_DEEP_STUBS);
+        Job live = new JobBuilder().withNewMetadata().withName("load-d-1").endMetadata()
+                .withNewSpec().withActiveDeadlineSeconds(600L).endSpec()
+                .withNewStatus().withActive(1).endStatus().build();
+        LoadOps busy = twoWaveOps(client, live, rate -> new DropOps.Sandbox("d-wave2", 77, rate));
+
+        assertThatThrownBy(() -> busy.start("d-1", new LoadOps.SendLoad(200, 2)))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getReason()).contains("600 seconds"));
+    }
+
+    @Test
     void aSecondTwoWaveRunWhileOneIsLiveIsRefusedBeforeASittingIsCreated() {
         KubernetesClient client = mock(KubernetesClient.class, RETURNS_DEEP_STUBS);
         Job live = new JobBuilder().withNewMetadata().withName("load-d-1").endMetadata()

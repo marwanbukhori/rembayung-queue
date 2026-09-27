@@ -85,9 +85,18 @@ public class ChaosService {
     private final BookingChaos booking;
     private final Consumer<ActiveFault> onDrill;
     private final Clock clock;
+    private final java.util.function.BooleanSupplier rushLive;
 
     public ChaosService(AnalysisStore.ConfigMapPort maps, Supplier<List<Pod>> bookingPods, ClusterWrites writes,
                         BookingChaos booking, Consumer<ActiveFault> onDrill, Clock clock) {
+        this(maps, bookingPods, writes, booking, onDrill, clock, () -> true);
+    }
+
+    /** {@code rushLive} says whether a load run is going: a drill needs traffic to hurt. */
+    public ChaosService(AnalysisStore.ConfigMapPort maps, Supplier<List<Pod>> bookingPods, ClusterWrites writes,
+                        BookingChaos booking, Consumer<ActiveFault> onDrill, Clock clock,
+                        java.util.function.BooleanSupplier rushLive) {
+        this.rushLive = rushLive;
         this.maps = maps;
         this.bookingPods = bookingPods;
         this.writes = writes;
@@ -99,6 +108,11 @@ public class ChaosService {
     public ActiveFault inject(String fault) {
         if (!FAULTS.contains(fault)) {
             throw new IllegalArgumentException("unknown fault: " + fault + "; one of " + FAULTS);
+        }
+        // A drill with no traffic hurts no one and teaches nothing: the SLOs say "no data" and the incident
+        // only waits for the fault to end. Refused here, not just greyed out on the page, so MCP obeys it too.
+        if (!rushLive.getAsBoolean()) {
+            throw new Refused("start a rush first: a drill needs traffic to hurt");
         }
         Instant now = clock.instant();
         Optional<ConfigMap> existing = maps.get(NAME);

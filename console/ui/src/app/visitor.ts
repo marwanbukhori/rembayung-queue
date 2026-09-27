@@ -1,15 +1,14 @@
 import { Component, OnDestroy, OnInit, computed, effect, inject, output, signal, untracked } from '@angular/core';
 import { CanonicalDrop } from './canonical-drop';
-import { ChaosCard } from './chaos-card';
 import { ChartsStrip } from './charts-strip';
 import { ClusterResources } from './cluster-resources';
+import { ControlsCard } from './controls-card';
 import { InspectorService } from './inspector.service';
 import { PodPulse } from './pod-pulse';
 import { Inspector } from './inspector';
 import { ObjectGraph } from './object-graph';
 import { RecentRuns } from './recent-runs';
 import { RunBanner } from './run-banner';
-import { RunPanel } from './run-panel';
 import { TrafficLog } from './traffic-log';
 import { LoadService } from './load.service';
 import { SandboxService } from './sandbox.service';
@@ -31,8 +30,8 @@ import { TrafficService } from './traffic.service';
  */
 @Component({
   selector: 'rb-visitor',
-  imports: [CanonicalDrop, ChaosCard, ChartsStrip, ClusterResources, Inspector, ObjectGraph, PodPulse, RecentRuns, RunBanner,
-    RunPanel, TrafficLog],
+  imports: [CanonicalDrop, ChartsStrip, ClusterResources, ControlsCard, Inspector, ObjectGraph, PodPulse, RecentRuns,
+    RunBanner, TrafficLog],
   template: `
     <div class="stack">
       <div class="crumbs">
@@ -55,10 +54,7 @@ import { TrafficService } from './traffic.service';
         to the platform under it; the objects that explain it last.
       -->
       <div class="band-top">
-        <div class="stack-24">
-          <rb-run-panel />
-          <rb-chaos-card />
-        </div>
+        <rb-controls-card />
         @if (sandbox()) {
           <!--
             The sitting: one figure and the room it fills. The seat map replaces

@@ -240,6 +240,17 @@ public class AnalystTest {
     }
 
     @Test
+    void theFallbacksCustomersSectionIsNeverEmptyWhenTheFunnelIsKnown() {
+        // Everyone booked: no refusal counts, and no admit rate to report.
+        Facts f = new Facts();
+        f.add("k6", "Arrived", "60");
+        f.add("k6", "Booked", "60");
+        Report r = Fallback.from(f);
+        assertThat(r.customers()).isNotEmpty();
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
     void theFallbackComparesTheWavesAndSaysScalingHelped() {
         Facts f = twoWaves(6, 2100, 400);
         Report r = Fallback.from(f);

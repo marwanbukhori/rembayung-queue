@@ -28,6 +28,8 @@ A visitor with the key starts a rush, then presses a fault on the simulation pag
 | Slow the database | booking-service holds each booking's connection 400 ms longer | booking-service reverts at its deadline |
 | Squeeze the pool | booking-service shrinks Hikari from 5 connections to 1 | booking-service restores 5 at its deadline |
 
+**Only during a rush.** A drill with no traffic has nothing to hurt, so its incident would show no breach and teach nothing. The console refuses a fault with 409 unless a load Job is running, and the page's Chaos drill tab stays disabled until one is.
+
 **One fault at a time.** The lock is ConfigMap `chaos-state`:
 - It survives a console restart.
 - A second fault is refused with 409, naming the one that is running.
