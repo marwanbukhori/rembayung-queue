@@ -128,8 +128,11 @@ public class IncidentCommander {
             }
             JsonNode p = outcome.proposal();
             boolean pending = i.proposals.stream().anyMatch(x -> "pending".equals(x.status()));
+            String action = p == null ? "" : Analyst.text(p.path("action"));
+            // Ending a fault that has already ended would be approved for nothing, so it is not offered.
+            boolean pointless = "end-fault".equals(action) && fault.get().isEmpty();
             if (p != null && outcome.named() && !pending && !"low".equals(d.confidence())
-                    && ACTIONS.contains(Analyst.text(p.path("action")))) {
+                    && ACTIONS.contains(action) && !pointless) {
                 Incident.Proposal proposal = new Incident.Proposal(i.proposals.size() + 1, now,
                         Analyst.text(p.path("action")), target(p), replicas(p),
                         LogLines.mask(Analyst.text(p.path("reason"))), ids(p.path("facts")), "pending", null);
@@ -197,9 +200,9 @@ public class IncidentCommander {
     Facts baseline(Incident incident) {
         Facts facts = new Facts();
         SloReading r = slo.get();
-        facts.add("slo", "Booking success (5 m)", r.successRatio() == null ? "no traffic"
+        facts.add("slo", "Booking success (last minute)", r.successRatio() == null ? "no traffic"
                 : Math.round(r.successRatio() * 1000) / 10.0 + "%");
-        facts.add("slo", "Booking p95 (5 m)", r.p95Seconds() == null ? "no traffic" : r.p95Seconds() + " s");
+        facts.add("slo", "Booking p95 (last minute)", r.p95Seconds() == null ? "no traffic" : r.p95Seconds() + " s");
         facts.add("slo", "SLO state", !r.available() ? "unavailable: " + r.detail() : r.breached() ? "breached" : "within target");
         facts.add("chaos", "Active fault", fault.get().map(f -> f.fault() + ", ends by itself").orElse("none"));
         List<IncidentEvent> recent = incident.timeline.subList(Math.max(0, incident.timeline.size() - 6),

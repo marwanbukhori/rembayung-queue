@@ -81,6 +81,13 @@ class IncidentCommanderTest {
     }
 
     @Test
+    void endingAFaultIsNotProposedWhenNoFaultIsActive() {
+        model.then("{\"done\":true}").then(DIAGNOSIS.replace("scale-booking", "end-fault"));
+        commander.cycle();
+        assertThat(open().proposals).isEmpty();
+    }
+
+    @Test
     void aProposedCountBelowTheManifestFloorIsRaisedToTwo() {
         model.then("{\"done\":true}").then(DIAGNOSIS.replace("\"replicas\":3", "\"replicas\":1"));
         commander.cycle();

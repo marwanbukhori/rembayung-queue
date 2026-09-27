@@ -69,6 +69,9 @@ spec:
         # The two booking SLOs, the same expressions the console evaluates for its
         # incidents (console/.../slo/SloService.java), so the cluster's alerting and
         # the page agree. 30s matches the console's "sustained breach" rule.
+        # These alerts use 5-minute windows, the usual choice for paging. The console's own
+        # incident watcher reads the same two SLOs over the last minute instead, so a drill's
+        # recovery shows promptly rather than lingering in the window (note 14).
         - alert: BookingSuccessSLO
           expr: >-
             (1 - sum(rate(http_server_requests_seconds_count{job="booking-service",uri="/bookings",status=~"5.."}[5m]))

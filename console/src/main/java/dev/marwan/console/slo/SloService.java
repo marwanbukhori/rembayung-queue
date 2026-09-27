@@ -22,11 +22,11 @@ import dev.marwan.console.metrics.Series;
 public class SloService {
 
     static final String SELECTOR = "job=\"booking-service\",uri=\"/bookings\"";
-    static final String TOTAL = "sum by (job) (rate(http_server_requests_seconds_count{" + SELECTOR + "}[5m]))";
+    static final String TOTAL = "sum by (job) (rate(http_server_requests_seconds_count{" + SELECTOR + "}[1m]))";
     static final String ERRORS = "sum by (job) (rate(http_server_requests_seconds_count{" + SELECTOR
-            + ",status=~\"5..\"}[5m]))";
+            + ",status=~\"5..\"}[1m]))";
     static final String P95 = "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{"
-            + SELECTOR + "}[5m])))";
+            + SELECTOR + "}[1m])))";
     static final Duration STEP = Duration.ofSeconds(15);
 
     private final RangeQuery prometheus;

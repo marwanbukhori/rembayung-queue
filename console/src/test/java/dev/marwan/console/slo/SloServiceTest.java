@@ -66,4 +66,14 @@ class SloServiceTest {
         assertThat(r.breached()).isFalse();
         assertThat(r.detail()).contains("503");
     }
+
+    @Test
+    void theSlosAreReadOverTheLastMinuteSoRecoveryShowsPromptly() {
+        java.util.List<String> asked = new java.util.ArrayList<>();
+        new SloService((promql, label, s, e, step) -> {
+            asked.add(promql);
+            return java.util.List.of();
+        }, java.time.Clock.systemUTC()).now();
+        assertThat(asked).isNotEmpty().allMatch(q -> q.contains("[1m]") && !q.contains("[5m]"));
+    }
 }

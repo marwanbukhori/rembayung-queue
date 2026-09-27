@@ -38,8 +38,8 @@ A visitor with the key starts a rush, then presses a fault on the simulation pag
 
 | SLO | Measured | Target |
 |---|---|---|
-| Booking success | 1 − 5xx ÷ all, on booking-service `/bookings`, over 5 minutes | ≥ 99% |
-| Booking latency | p95 of `/bookings`, over 5 minutes | < 2 s |
+| Booking success | 1 − 5xx ÷ all, on booking-service `/bookings`, over the last minute | ≥ 99% |
+| Booking latency | p95 of `/bookings`, over the last minute | < 2 s |
 
 **Evaluation.** The console evaluates both every 15 s. The `PrometheusRule` carries the same two conditions as alerts, `BookingSuccessSLO` and `BookingLatencySLO`.
 
@@ -112,3 +112,9 @@ What it adds to the console Role:
 - `horizontalpodautoscalers`: `patch`, on booking-service and queue-gate.
 
 Incidents run behind `CONSOLE_INCIDENTS_ENABLED`, which the Deployment sets to `true`.
+
+**Why one minute, not five.** The first live drills read both SLOs over 5 minutes. After a rush,
+the breach lingered in that window for minutes: recovery was measured at 296 s when service
+had come back far sooner, and the "not recovered 3 minutes after the fix" rule fired against a
+fix that had worked. The console now evaluates over the last minute. The PrometheusRule alerts
+keep their 5-minute windows, the conventional choice for paging, and say so.

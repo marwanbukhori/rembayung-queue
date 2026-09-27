@@ -18,7 +18,7 @@ import { malaysiaTime } from './time';
       <section class="card pad">
         <div class="row-head">
           <h2>Booking SLOs</h2>
-          <span class="quiet">booking-service /bookings, over 5 minutes</span>
+          <span class="quiet">booking-service /bookings, over the last minute</span>
         </div>
         <div class="gauges">
           @for (g of gauges(); track g.name) {
