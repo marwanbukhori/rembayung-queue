@@ -28,6 +28,8 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
  * The palette and the brand strip are from console/design/demo-console-v3.html,
  * which is the repository owner's design and the source of truth for this page.
  */
+interface RunningVersion { commit: string | null; mixed: boolean; services: { name: string; tag: string | null }[] }
+
 @Component({
   selector: 'app-root',
   imports: [PublicHome, SecurityPage, ClusterPage, CicdPage, AgentPage, DocsPage, DocPage, Visitor, IncidentBanner],
@@ -70,6 +72,21 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
               </svg>
               <span>GitHub</span>
             </a>
+            <!--
+              Which commit is live, read from the three Deployments' image tags: CI
+              tags every image with its commit SHA, so this is the code actually
+              running, one click from its diff on GitHub.
+            -->
+            @if (version(); as v) {
+              @if (v.commit) {
+                <a class="badge repo mono" [href]="repoUrl + '/commit/' + v.commit" target="_blank" rel="noreferrer"
+                   [title]="versionTitle(v)" [attr.aria-label]="'Running commit ' + v.commit.slice(0, 7) + ', on GitHub'">
+                  build {{ v.commit.slice(0, 7) }}
+                </a>
+              } @else if (v.mixed) {
+                <span class="badge mono mixed" [title]="versionTitle(v)">build mixed</span>
+              }
+            }
           </div>
         </div>
       </div>
@@ -92,7 +109,8 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
       <rb-incident-banner (open)="openIncident()" />
       @switch (surface()) {
         @case ('home') {
-          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" (agent)="show('agent')" />
+          <rb-public-home (visitor)="show('visitor')" (docs)="show('docs')" (cluster)="show('cluster')" (cicd)="show('cicd')" (agent)="show('agent')"
+                          (security)="show('security')" />
         }
         @case ('cluster') {
           <rb-cluster-page (home)="show('home')" />
@@ -178,6 +196,7 @@ type Surface = 'home' | 'cluster' | 'cicd' | 'agent' | 'security' | 'docs' | 'do
     .repo:hover { background: rgba(0, 0, 0, .16); }
     .repo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
     .repo svg { display: block; }
+    .mixed { background: var(--chip-warn-bg); color: var(--chip-warn-fg); cursor: help; }
 
     .pulse {
       width: 7px;
@@ -232,6 +251,17 @@ export class App {
    * down.
    */
   protected readonly repoUrl = 'https://github.com/marwanbukhori/rembayung-queue';
+  protected readonly version = signal<RunningVersion | null>(null);
+
+  constructor() {
+    // Once per page load: a deploy replaces the console, and with it this page.
+    fetch('/api/version').then(r => (r.ok ? r.json() : null)).then(v => this.version.set(v)).catch(() => {});
+  }
+
+  protected versionTitle(v: RunningVersion): string {
+    const lines = v.services.map(s => `${s.name}: ${s.tag ? s.tag.slice(0, 7) : 'unknown'}`);
+    return (v.mixed ? 'Services are on different commits (mid-deploy?)\n' : 'Every service runs this commit\n') + lines.join('\n');
+  }
 
   /** The persistent navigation. Order is the order a first-time reader needs them in. */
   readonly links: { surface: Surface; label: string }[] = [

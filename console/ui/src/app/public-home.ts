@@ -1,4 +1,5 @@
 import { Component, output } from '@angular/core';
+import { PRACTICE_COUNT } from './security-content';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { Reveal } from './reveal';
 
@@ -90,7 +91,12 @@ interface Outward {
             <span class="tile-name">AI Agent &amp; MCP <span class="tag live">● Live</span></span>
             <span class="tile-what">Reads every rush and reports what it found, citing its facts, and runs incidents: it diagnoses a drill and proposes a fix for a person to approve. Connect your own Claude to the same tools over MCP</span>
           </button>
-          <button class="tile" (click)="docs.emit()">
+          <button class="tile" (click)="security.emit()">
+            <span class="tile-name">Security</span>
+            <span class="tile-what">{{ practices }} practices in plain words, four checked live from your browser, and both OWASP Top 10 lists
+              answered, for the web and for the AI</span>
+          </button>
+          <button class="tile full" (click)="docs.emit()">
             <span class="tile-name">Build notes</span>
             <span class="tile-what">How each part was built, and why</span>
           </button>
@@ -215,6 +221,8 @@ interface Outward {
     .tile-what { font-size: 14px; color: var(--ink-soft); }
     .tile.primary .tile-what { color: rgba(255, 255, 255, .9); }
     .tile-go { margin-top: auto; padding-top: 16px; font-size: 22px; font-weight: 700; }
+    /* Six tiles beside the 2x2 rush: the last one takes a row of its own. */
+    .tile.full { grid-column: 1 / -1; }
     @media (max-width: 899px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 899px) { .tile.primary { grid-row: auto; } }
     @media (max-width: 599px) { .tiles { grid-template-columns: minmax(0, 1fr); } .tile.primary { grid-column: auto; } }
@@ -322,6 +330,8 @@ export class PublicHome {
   readonly cluster = output<void>();
   readonly cicd = output<void>();
   readonly agent = output<void>();
+  readonly security = output<void>();
+  protected readonly practices = PRACTICE_COUNT;
 
 
   /** Named because a hiring manager reads the list before reading the code. */
