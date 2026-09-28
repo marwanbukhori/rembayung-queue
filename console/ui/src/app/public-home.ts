@@ -58,6 +58,22 @@ interface Outward {
         </div>
 
 
+        <!--
+          The tour first: three minutes that show the whole thing working, for a
+          reader who will watch before they click. Nothing loads but the poster
+          until it is played, so the page is no heavier for anyone who skips it.
+        -->
+        <div class="band" id="tour">
+          <div class="band-head-row">
+            <div class="band-head eyebrow">Watch the tour</div>
+            <div class="band-aside mono">2:48 · narrated · captioned</div>
+          </div>
+          <video class="tour" controls preload="none" playsinline poster="media/rembayung-tour.jpg"
+                 aria-label="A narrated tour of Rembayung Queue: the problem, the stack, a live rush, CI/CD, the AI agent, MCP and security">
+            <source src="media/rembayung-tour.mp4" type="video/mp4">
+          </video>
+        </div>
+
         <div class="band" id="system" [rbReveal]="0">
           <div class="band-head-row">
             <div class="band-head eyebrow">The system</div>
@@ -132,6 +148,8 @@ interface Outward {
       text-wrap: balance;
     }
     .hero-lede { margin: 0; font-size: 16px; color: var(--ink-soft); max-width: 62ch; text-wrap: pretty; }
+    .tour { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; background: var(--dhl-yellow);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, .12); }
     .hero-points { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; font-size: 15px;
                    color: var(--ink-soft); max-width: 62ch; }
     .hero-points li { padding-left: 14px; border-left: 3px solid var(--dhl-yellow); text-wrap: pretty; }
