@@ -74,11 +74,19 @@ public final class Fallback {
                 pool.add(f);
             } else if (f.label().startsWith("Peak replicas")) {
                 capacity.add(claim(f.label() + ": " + v + ".", f));
-            } else if (f.label().startsWith("Bookings") && !v.endsWith(" 0 not clean")) {
-                errors.add(claim("Bookings: " + v + ".", f));
+            } else if (f.label().equals("Bookings: clean, rejected, not clean")) {
+                String notClean = v.replaceAll(".*?(\\d+) not clean$", "$1");
+                if (!notClean.equals("0") && notClean.matches("\\d+")) {
+                    errors.add(claim(notClean + " bookings did not complete cleanly: a 5xx or a dropped connection.", f));
+                }
             } else if ((f.label().startsWith("Most 5xx") || f.label().startsWith("Pool timeouts")) && !v.equals("0")) {
                 errors.add(claim(f.label() + ": " + v + ".", f));
-            } else if ((f.label().equals("Pod restarts") || f.label().startsWith("Warning events")) && !v.equals("none")) {
+            } else if (f.label().equals("Warnings, summarised")) {
+                errors.add(claim("Kubernetes warnings: " + v + ".", f));
+            } else if (f.label().equals("Warning events in the window") && !v.equals("none")
+                    && find(facts, "Warnings, summarised").isEmpty()) {
+                errors.add(claim(f.label() + ": " + v + ".", f));
+            } else if (f.label().equals("Pod restarts") && !v.equals("none")) {
                 errors.add(claim(f.label() + ": " + v + ".", f));
             }
         }

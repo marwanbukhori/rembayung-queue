@@ -33,10 +33,9 @@ type View = 'reports' | 'incidents' | 'mcp' | 'how';
             @if (live()) { <span class="badge live">● Live</span> } @else { <span class="badge">Waiting for a first run</span> }
           </h1>
           <p class="lede">
-            After every rush, an agent inside the console gathers the facts, asks up to five questions through the
-            console's MCP server, and writes a report whose every number is checked against the facts it cites.
-            During an incident it diagnoses through the same tools and proposes a fix; a person approves it.
-            The same MCP server is open to your own Claude.
+            After every rush, an AI agent looks at what happened and writes a short report, and every number in it
+            is checked against the real data. During a drill it works out what broke and suggests a fix, which a
+            person approves. It looks through MCP, and your own Claude can connect to the same tools.
           </p>
         </div>
       </div>

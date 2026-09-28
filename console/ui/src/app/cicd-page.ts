@@ -29,15 +29,41 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
       <div>
         <h1>CI/CD</h1>
         <p class="lede">
-          Every push to main runs two workflows. <b>ci</b> tests the three services, booking-service
-          against a real Oracle and queue-gate against a real Redis, then builds and pushes one image
-          per service, tagged with the commit. <b>CD</b> starts when ci succeeds: an Ansible playbook deploys that tag to
-          OpenShift, smoke-tests it, and rolls back by itself if anything fails. Below are real
-          runs of each, copied from GitHub, with what every step is for.
+          Every change goes through the same road to production, with no manual steps. <b>CI</b> tests all three services
+          against a real Oracle database and a real Redis, then packages each one as an image named after the commit.
+          <b>CD</b> deploys that image to OpenShift, checks it works, and puts the previous version back by itself if it
+          does not.
         </p>
       </div>
 
+      <!-- Up top, in plain words: what a reader should take away before any log. -->
+      <section>
+        <div class="guards">
+          <button class="card guard" (click)="openRollback()">
+            <span class="guard-name">A failed deploy undoes itself</span>
+            <span class="guard-what">
+              If a new version does not start or fails its check, every service goes back to the version it was running.
+              The third run below is a real one.
+            </span>
+          </button>
+          <a class="card guard" [href]="driftScript" target="_blank" rel="noopener">
+            <span class="guard-name">The cluster matches git</span>
+            <span class="guard-what">
+              A drift check compares what is running with what is committed, so a change nobody applied cannot hide.
+            </span>
+          </a>
+          <button class="card guard" (click)="open.emit('07-continuous-delivery')">
+            <span class="guard-name">The pipeline cannot give itself power</span>
+            <span class="guard-what">
+              The deploy account cannot read passwords or change permissions; those are applied by hand.
+            </span>
+          </button>
+        </div>
+      </section>
+
       <rb-pipeline-diagram />
+
+      <h2 class="guard-head">Real runs, copied from GitHub</h2>
 
       @for (run of runs; track run.runId + '-' + run.attempt; let i = $index) {
         <section class="card run" [class.failed]="run.result !== 'success'">
@@ -52,6 +78,9 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
             </span>
             <span class="chev" aria-hidden="true">{{ runOpen(i) ? '▾' : '▸' }}</span>
           </button>
+          @if (!runOpen(i)) {
+            <p class="closed-hint">{{ run.steps.length }} steps · open to see each one, what it is for, and its real log</p>
+          }
 
           @if (runOpen(i)) {
             @if (run.note) {
@@ -84,30 +113,6 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
       }
 
       <section>
-        <h2 class="guard-head">What it guards against</h2>
-        <div class="guards">
-          <button class="card guard" (click)="openRollback()">
-            <span class="guard-name">Automatic rollback</span>
-            <span class="guard-what">
-              A deploy that does not become ready, or fails its smoke test, restores each service to
-              the tag it was running and fails loudly. The third run above is one.
-            </span>
-          </button>
-          <a class="card guard" [href]="driftScript" target="_blank" rel="noopener">
-            <span class="guard-name">Drift check</span>
-            <span class="guard-what">
-              check-drift.sh renders the manifests from git and diffs them against the cluster, so a
-              change that was committed but never applied is loud instead of invisible.
-            </span>
-          </a>
-          <button class="card guard" (click)="open.emit('07-continuous-delivery')">
-            <span class="guard-name">What CD may not do</span>
-            <span class="guard-what">
-              CD's ServiceAccount cannot read Secrets or change RBAC. Permissions are applied by hand,
-              so the pipeline can never grant itself more access.
-            </span>
-          </button>
-        </div>
         <p class="more">
           The reasoning behind each is in
           <button class="link" (click)="open.emit('06-continuous-integration')">note 06, continuous integration</button>
@@ -146,7 +151,8 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     .lt.gap { color: #8a9; font-style: italic; }
     .explain { margin: 10px 20px 14px 42px; font-size: 14px; color: var(--ink-soft); text-wrap: pretty; }
     .gh { display: inline-block; margin: 12px 20px 16px; font-size: 14px; }
-    .guard-head { font-size: 19px; margin: 8px 0 12px; }
+    .guard-head { font-size: 19px; margin: 8px 0 -8px; }
+    .closed-hint { margin: 0; padding: 0 20px 14px 56px; font-size: 13px; color: var(--muted); }
     .guards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
     .guard { display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; cursor: pointer;
              padding: 16px 18px; color: var(--ink); }
@@ -173,9 +179,8 @@ export class CicdPage {
   protected readonly zone = TIME_ZONE_LABEL;
   protected readonly driftScript =
     'https://github.com/marwanbukhori/rembayung-queue/blob/main/deploy/scripts/check-drift.sh';
-  /** The normal runs start open; the rollback starts closed, so the page reads as the normal path first. */
-  private readonly runsOpen = signal<Set<number>>(
-    new Set(CAPTURED_RUNS.flatMap((run, i) => (run.kind === 'rollback' ? [] : [i]))));
+  /** Every run starts closed: the summary above is the reading, the logs are the evidence behind it. */
+  private readonly runsOpen = signal<Set<number>>(new Set());
   /** Opens on the step a reader most wants: the tests for ci, the deploy for CD. */
   private readonly stepsOpen = signal<Set<string>>(new Set(CAPTURED_RUNS.map((run, i) =>
     `${i}:${run.kind === 'ci' ? 'Test booking-service' : 'Deploy'}`)));

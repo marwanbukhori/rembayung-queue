@@ -7,7 +7,9 @@ import io.fabric8.kubernetes.api.model.Pod;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -269,14 +271,16 @@ public class Baseline {
     private void warnings(RunWindow w, Facts facts) {
         List<String> seen = new ArrayList<>();
         List<String> held = new ArrayList<>();
+        // Reason and service -> {events, objects}: the raw list names every pod, which no reader can take in.
+        Map<String, int[]> summary = new LinkedHashMap<>();
         try {
             for (String app : WATCHED) {
-                collect("Deployment", app, w, seen, held);
+                collect(app, "Deployment", app, w, seen, held, summary);
                 for (var rs : objects.replicaSets(app)) {
-                    collect("ReplicaSet", rs.getMetadata().getName(), w, seen, held);
+                    collect(app, "ReplicaSet", rs.getMetadata().getName(), w, seen, held, summary);
                 }
                 for (Pod pod : objects.pods(app)) {
-                    collect("Pod", pod.getMetadata().getName(), w, seen, held);
+                    collect(app, "Pod", pod.getMetadata().getName(), w, seen, held, summary);
                 }
             }
         } catch (RuntimeException e) {
@@ -284,16 +288,32 @@ public class Baseline {
             return;
         }
         facts.add("Kubernetes", "Warning events in the window", seen.isEmpty() ? "none" : String.join("; ", seen));
+        if (!summary.isEmpty()) {
+            facts.add("Kubernetes", "Warnings, summarised", String.join("; ", summary.entrySet().stream().map(e -> {
+                String[] key = e.getKey().split("\\|", 2);
+                int[] n = e.getValue();
+                return key[0] + ": " + n[0] + (n[0] == 1 ? " event" : " events") + " on " + n[1] + " " + key[1]
+                        + (n[1] == 1 ? " object" : " objects");
+            }).toList()));
+        }
         facts.add("Kubernetes", "Pods waiting for CPU during the run", held.isEmpty() ? "none"
                 : String.join("; ", held.stream().limit(3).toList()));
     }
 
-    private void collect(String kind, String name, RunWindow w, List<String> seen, List<String> held) {
+    private void collect(String app, String kind, String name, RunWindow w, List<String> seen, List<String> held,
+                         Map<String, int[]> summary) {
+        boolean counted = false;
         for (Event e : objects.events(kind, name)) {
             Instant at = at(e);
             if ("Warning".equals(e.getType()) && at != null && !at.isBefore(w.start()) && !at.isAfter(w.end())) {
                 int count = e.getCount() == null ? 1 : e.getCount();
                 seen.add(e.getReason() + (count > 1 ? " ×" + count : "") + " on " + kind + "/" + name);
+                int[] n = summary.computeIfAbsent(e.getReason() + "|" + app, k -> new int[2]);
+                n[0] += count;
+                if (!counted) {
+                    n[1]++;
+                    counted = true;
+                }
                 String message = e.getMessage() == null ? "" : e.getMessage();
                 if (message.contains("exceeded quota") || message.contains("Insufficient cpu")) {
                     String line = kind + "/" + name + ": " + message;

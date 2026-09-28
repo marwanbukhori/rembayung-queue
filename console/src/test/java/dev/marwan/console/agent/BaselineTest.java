@@ -206,6 +206,19 @@ class BaselineTest {
     }
 
     @Test
+    void warningsAreAlsoSummarisedByReasonAndService() {
+        cluster.pods.add(FakeCluster.pod("queue-gate-a", "queue-gate", 0));
+        cluster.pods.add(FakeCluster.pod("queue-gate-b", "queue-gate", 0));
+        cluster.events.put("Pod/queue-gate-a", List.of(new EventBuilder().withType("Warning").withReason("Unhealthy")
+                .withMessage("Readiness probe failed").withCount(5).withLastTimestamp("2026-09-25T13:40:30Z").build()));
+        cluster.events.put("Pod/queue-gate-b", List.of(new EventBuilder().withType("Warning").withReason("Unhealthy")
+                .withMessage("Readiness probe failed").withCount(4).withLastTimestamp("2026-09-25T13:40:31Z").build()));
+        Map<String, String> f = byLabel(baseline().gather(WINDOW));
+        assertThat(f.get("Warnings, summarised")).contains("Unhealthy: 9 events on 2 queue-gate objects")
+                .contains("FailedScheduling: 2 events on 1 booking-service object");
+    }
+
+    @Test
     void podsHeldBackByTheCpuBudgetAreAFact() {
         cluster.events.put("Deployment/queue-gate", List.of(new EventBuilder().withType("Warning")
                 .withReason("FailedCreate").withMessage("pods \"queue-gate-x\" is forbidden: exceeded quota: compute-deploy")

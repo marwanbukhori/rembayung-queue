@@ -24,7 +24,7 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     <div class="panes">
       <aside class="card list" aria-label="Analysed runs">
         <div class="list-head">Runs · {{ zone }}</div>
-        @for (r of runs(); track r.key) {
+        @for (r of listed(); track r.key) {
           <button class="run" [class.on]="r.key === selected()" (click)="select.emit(r.key)"
                   [attr.aria-current]="r.key === selected() ? 'true' : null">
             <span class="run-top">
@@ -42,6 +42,12 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
               {{ r.seats ?? '—' }} seats · oversold {{ r.oversold ?? '—' }}
             </span>
           </button>
+        }
+        @if (runs().length > listed().length) {
+          <p class="older-note">
+            {{ runs().length - listed().length }} earlier {{ runs().length - listed().length === 1 ? 'run' : 'runs' }}, from before
+            reports counted customers, not listed.
+          </p>
         }
       </aside>
       <section class="card report">
@@ -82,6 +88,7 @@ import { TIME_ZONE_LABEL, malaysiaTime } from './time';
     .report { padding: 20px 24px; min-width: 0; }
     .quiet { color: var(--muted); }
     .mono { font-family: var(--mono); }
+    .older-note { margin: 8px 12px 4px; font-size: 12px; color: var(--muted); text-wrap: pretty; }
     @media (max-width: 1099px) {
       .panes { grid-template-columns: minmax(0, 1fr); }
       .list { position: static; max-height: 360px; }
@@ -99,6 +106,8 @@ export class AgentReports {
   readonly select = output<string>();
 
   protected readonly zone = TIME_ZONE_LABEL;
+  /** Runs from before the funnel have no customer counts; a list of dashes told the reader nothing. */
+  protected readonly listed = computed(() => this.runs().filter(r => r.booked != null || r.customers != null));
   protected readonly modelShare = computed(() => {
     const r = this.runs();
     return r.length ? `${r.filter(x => x.source === 'model').length} of ${r.length}` : '—';

@@ -240,6 +240,31 @@ public class AnalystTest {
     }
 
     @Test
+    void theFallbacksErrorsReadAsSentencesNotRawFacts() {
+        Facts f = new Facts();
+        f.add("k6", "Arrived", "200");
+        f.add("k6", "Booked", "30");
+        f.add("k6", "Bookings: clean, rejected, not clean", "30 booked, 170 rejected, 0 not clean");
+        f.add("derived", "Bookings committed per second (peak)", "0.5");
+        f.add("Kubernetes", "Warning events in the window",
+                "Unhealthy ×5 on Pod/queue-gate-a; Unhealthy ×4 on Pod/queue-gate-b");
+        f.add("Kubernetes", "Warnings, summarised", "Unhealthy: 9 events on 2 queue-gate objects");
+        Report r = Fallback.from(f);
+        assertThat(r.errors()).noneMatch(c -> c.text().startsWith("Bookings"));
+        assertThat(r.errors()).noneMatch(c -> c.text().contains("Pod/queue-gate-a"));
+        assertThat(r.errors()).anyMatch(c -> c.text().contains("Unhealthy: 9 events on 2 queue-gate objects"));
+        assertThat(new Validator().problems(r, f)).isEmpty();
+    }
+
+    @Test
+    void bookingsThatDidNotCompleteCleanlyAreSaidInWords() {
+        Facts f = new Facts();
+        f.add("k6", "Bookings: clean, rejected, not clean", "30 booked, 170 rejected, 12 not clean");
+        Report r = Fallback.from(f);
+        assertThat(r.errors()).anyMatch(c -> c.text().equals("12 bookings did not complete cleanly: a 5xx or a dropped connection."));
+    }
+
+    @Test
     void theFallbacksCustomersSectionIsNeverEmptyWhenTheFunnelIsKnown() {
         // Everyone booked: no refusal counts, and no admit rate to report.
         Facts f = new Facts();
@@ -316,11 +341,11 @@ public class AnalystTest {
     @Test
     void theFallbackFilesUncleanBookingsAsCaughtNotAsWentWell() {
         Report r = Fallback.from(baseline);   // F2 says 4 not clean
-        assertThat(r.errors()).anyMatch(c -> c.facts().contains("F2") && c.text().contains("not clean"));
+        assertThat(r.errors()).anyMatch(c -> c.facts().contains("F2") && c.text().contains("did not complete cleanly"));
 
         Facts clean = new Facts();
         clean.add("k6", "Bookings: clean, rejected, not clean", "200 booked, 0 rejected, 0 not clean");
-        assertThat(Fallback.from(clean).errors()).noneMatch(c -> c.text().contains("not clean"));
+        assertThat(Fallback.from(clean).errors()).noneMatch(c -> c.text().contains("cleanly"));
         assertThat(Fallback.from(clean).summary()).anyMatch(c -> c.facts().contains("F1"));
     }
 

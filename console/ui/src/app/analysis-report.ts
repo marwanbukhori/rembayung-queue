@@ -255,9 +255,9 @@ export class AnalysisReport {
       }
     };
     add('Time to seat everyone', 'Time to seat every customer at that rate', 'at the rate bookings committed');
-    add('Commit rate', 'Bookings committed per second (peak)', 'bookings a second, at best', '/s');
-    add('Connections', 'Booking connections available', 'database connections for bookings');
-    add('Pool rounds', 'Rounds of the connection pool to serve every customer', 'rounds to serve every customer');
+    add('Bookings per second', 'Bookings committed per second (peak)', 'the fastest the database confirmed them', '/s');
+    add('Database connections', 'Booking connections available', 'shared by every booking');
+    add('Customers per connection', 'Rounds of the connection pool to serve every customer', 'each connection serves them one after another');
     return out;
   });
 

@@ -2,13 +2,11 @@ import { Component, computed, inject, output } from '@angular/core';
 import { ClusterResources } from './cluster-resources';
 import { ArchitectureDiagram } from './architecture-diagram';
 import { ClusterService } from './cluster.service';
-import { LogScenarios } from './log-scenarios';
-import { ObservabilityPanel } from './observability-panel';
 import { PodPulse } from './pod-pulse';
 
 @Component({
   selector: 'rb-cluster-page',
-  imports: [ArchitectureDiagram, ClusterResources, LogScenarios, ObservabilityPanel, PodPulse],
+  imports: [ArchitectureDiagram, ClusterResources, PodPulse],
   template: `
     <div class="stack-24">
       <div class="crumbs">
@@ -19,8 +17,12 @@ import { PodPulse } from './pod-pulse';
       <div>
         <h1>Cluster resources</h1>
         <p class="lede">
-          Every workload behind the simulation, read live through the Kubernetes API with a
-          ServiceAccount scoped to this namespace and no access to Secrets.
+          Everything this system runs on, read live from the cluster as you look. The console reads it with its own
+          limited account: this namespace only, and no access to passwords.
+        </p>
+        <p class="lede budget">
+          <b>One budget for everything.</b> Every service and every rush share the same 3 CPUs. When a rush asks for
+          more than is left, it waits, and the page says which limit stopped it rather than failing with a generic error.
         </p>
       </div>
       <div class="card">
@@ -39,34 +41,22 @@ import { PodPulse } from './pod-pulse';
       <rb-pod-pulse />
 
       <!--
-        Below the workloads, above the object graph: it is a fact about the
-        things just listed, and the reader has to have seen them first.
+        Splunk and Dynatrace each had a panel here, and a card of saved searches;
+        with both trials over they were three cards saying "Trial ended". One line
+        keeps the history without looking broken.
       -->
-      <rb-observability-panel />
-
-      <!--
-        Directly under the panel that says the pipelines are up, because this is
-        the question that follows it. "Splunk is receiving" is worth nothing on
-        its own - what a reader wants next is what the logs are then good for.
-      -->
-      <rb-log-scenarios />
-
       <p class="note">
-        The objects themselves, live and clickable, are on the simulation page beside the rush.
+        Splunk and Dynatrace were wired in and used while this was built; both trials have ended. Prometheus still
+        watches everything, and its charts are on the simulation page beside the rush, with the live objects.
       </p>
-      <div class="card">
-        <div class="why">Why the budget matters here</div>
-        <p style="margin: 0; font-size: 15px; color: var(--ink-soft); max-width: 70ch; text-wrap: pretty;">
-          Every simulation's load run asks the scheduler for CPU out of the same 3000m. When there is
-          not enough, the Job sits Pending and the console says which limit stopped it and what is
-          holding the budget, rather than reporting a generic failure.
-        </p>
-      </div>
     </div>
   `,
   styles: `
     .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
     .why { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .lede { max-width: 72ch; text-wrap: pretty; }
+    .budget { margin-top: 10px; }
+    .budget b { color: var(--ink); }
   `
 })
 export class ClusterPage {
