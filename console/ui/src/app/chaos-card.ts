@@ -22,7 +22,7 @@ import { LoadService } from './load.service';
       </div>
       <p class="sub">
         Break one thing and watch the SLOs, the incident and the agent respond. Every fault ends by itself.
-        @if (!rushing()) { <span class="hint">Start a rush first: a drill needs traffic to hurt.</span> }
+        @if (!rushing() && !incidents.active()) { <span class="hint">Start a rush first: a drill needs traffic to hurt.</span> }
       </p>
 
       @if (incidents.active(); as a) {
